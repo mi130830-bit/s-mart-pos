@@ -6,12 +6,14 @@ class PosCartList extends StatelessWidget {
   final List<OrderItem> items;
   final Function(int) onEdit;
   final Function(int) onDelete;
+  final Function(int index, double newQty) onUpdateQuantity; // ✅ Added callback
 
   const PosCartList({
     super.key,
     required this.items,
     required this.onEdit,
     required this.onDelete,
+    required this.onUpdateQuantity, // ✅ Added
   });
 
   @override
@@ -24,7 +26,7 @@ class PosCartList extends StatelessWidget {
 
     return Column(
       children: [
-        // Table Header
+        // ... (Header unchanged) ...
         Container(
           decoration: BoxDecoration(
             color: Colors.grey[200],
@@ -40,7 +42,7 @@ class PosCartList extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.bold))),
             Expanded(
                 flex: flexItem,
-                child: Text(' รายการสินค้า', // Add space for padding visual
+                child: Text(' รายการสินค้า',
                     style: TextStyle(fontWeight: FontWeight.bold))),
             Expanded(
                 flex: flexPrice,
@@ -73,8 +75,7 @@ class PosCartList extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             vertical: 8.0, horizontal: 8.0),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment
-                              .start, // Align top for text wrap
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // 1. Sequence
                             SizedBox(
@@ -93,26 +94,71 @@ class PosCartList extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    item.productName,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15),
-                                    softWrap: true, // ✅ Wrap text
-                                  ),
-                                  if (item.comment.isNotEmpty)
-                                    Text(
-                                      '(${item.comment})',
+                                  // ✅ Name + Comment Inline
+                                  Text.rich(
+                                    TextSpan(
+                                      text: item.productName,
                                       style: const TextStyle(
-                                          color: Colors.blueGrey, fontSize: 13),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: Colors.black87),
+                                      children: [
+                                        if (item.comment.isNotEmpty)
+                                          TextSpan(
+                                            text: ' (${item.comment})',
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.normal,
+                                                color: Colors.blueAccent,
+                                                fontSize: 14),
+                                          ),
+                                      ],
                                     ),
-                                  // Quantity x Price (Subtitle style)
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${NumberFormat('#,##0.##').format(item.quantity.toDouble())} x ${NumberFormat('#,##0.00').format(item.price.toDouble())}',
-                                    style: TextStyle(
-                                        fontSize: 13, color: Colors.grey[600]),
-                                  )
+                                    softWrap: true,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  // ✅ Quantity Control Row
+                                  Row(
+                                    children: [
+                                      // Minus Button
+                                      InkWell(
+                                        onTap: () => onUpdateQuantity(
+                                            i, item.quantity.toDouble() - 1),
+                                        borderRadius: BorderRadius.circular(15),
+                                        child: const Icon(
+                                            Icons.remove_circle_outline,
+                                            size: 20,
+                                            color: Colors.red),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Quantity Text
+                                      Text(
+                                        NumberFormat('#,##0.##')
+                                            .format(item.quantity.toDouble()),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Plus Button
+                                      InkWell(
+                                        onTap: () => onUpdateQuantity(
+                                            i, item.quantity.toDouble() + 1),
+                                        borderRadius: BorderRadius.circular(15),
+                                        child: const Icon(
+                                            Icons.add_circle_outline,
+                                            size: 20,
+                                            color: Colors.green),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Price
+                                      Text(
+                                        'x ${NumberFormat('#,##0.00').format(item.price.toDouble())}',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey[600]),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),

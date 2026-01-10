@@ -3,8 +3,11 @@ import 'package:printing/printing.dart';
 import '../../services/firebase_service.dart';
 import '../../services/telegram_service.dart';
 import '../../services/mysql_service.dart';
+import '../../services/settings_service.dart';
 import '../../models/customer.dart';
 import '../../models/order_item.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DeliveryIntegrationService {
   final MySQLService _dbService;
@@ -23,6 +26,37 @@ class DeliveryIntegrationService {
     Uint8List? billPdfData,
     String jobType = 'delivery',
   }) async {
+    // ✅ Check Authentication First
+    // ✅ Check Authentication First (Try Auto-Login if needed)
+    if (FirebaseAuth.instance.currentUser == null) {
+      bool loginSuccess = false;
+      try {
+        final settings = SettingsService();
+        final email = settings.firebaseAuthEmail;
+        final password = settings.firebaseAuthPassword;
+
+        if (email.isNotEmpty && password.isNotEmpty) {
+          debugPrint('☁️ Auto-connecting to S-Link Cloud...');
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          if (FirebaseAuth.instance.currentUser != null) {
+            loginSuccess = true;
+            debugPrint('✅ Auto-connection successful!');
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Auto-login failed: $e');
+        // Fallthrough to throw error below
+      }
+
+      if (!loginSuccess) {
+        throw Exception(
+            'เครื่องนี้ยังไม่ได้เชื่อมต่อระบบ S-Link Cloud (Auth Failed)\nกรุณาไปที่ ตั้งค่า > การเชื่อมต่อ > Firebase แล้วตรวจสอบ Email/Password');
+      }
+    }
+
     try {
       // 1. Sync Points (if linked) - DISABLED as requested
       /*
@@ -113,11 +147,13 @@ class DeliveryIntegrationService {
 
   void _uploadBillImageInBackground(
       String jobId, int orderId, Uint8List pdfData) async {
+    if (pdfData.isEmpty) return; // Prevent crash on empty data
     try {
       await Future.delayed(const Duration(seconds: 2));
       List<String> imageUrls = [];
       try {
-        await for (var page in Printing.raster(pdfData, pages: [0], dpi: 200)) {
+        // Reduced DPI to 72 for lighter upload and faster processing
+        await for (var page in Printing.raster(pdfData, pages: [0], dpi: 72)) {
           final pngBytes = await page.toPng();
           final url = await _firebaseService.uploadBillImage(
               pngBytes, 'order_$orderId');

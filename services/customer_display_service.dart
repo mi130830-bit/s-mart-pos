@@ -210,11 +210,29 @@ class CustomerDisplayService {
     });
   }
 
-  Future<void> showSuccess() async {
+  Future<void> showSuccess({
+    double received = 0.0,
+    double change = 0.0,
+    double total = 0.0,
+    List<OrderItem> items = const [],
+  }) async {
+    final mappedItems = items.map((item) {
+      return {
+        'name': item.productName,
+        'qty': item.quantity.toDouble(),
+        'price': item.price.toDouble(),
+        'total': item.total.toDouble(),
+      };
+    }).toList();
+
     await _writeToFile({
       'state': 'success',
+      'total': total,
+      'received': received,
+      'change': change,
+      'items': mappedItems,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
-    Future.delayed(const Duration(seconds: 3), () => showIdle());
+    // Removed auto-reset to idle
   }
 }

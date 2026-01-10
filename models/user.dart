@@ -26,11 +26,15 @@ class User {
       displayName: json['displayName'] ?? '',
       passwordHash: json['passwordHash'] ?? '',
       role: json['role'] ?? 'CASHIER',
-      isActive: (json['isActive'] == 1 || json['isActive'] == true),
-      canViewCostPrice:
-          (json['canViewCostPrice'] == 1 || json['canViewCostPrice'] == true),
-      canViewProfit:
-          (json['canViewProfit'] == 1 || json['canViewProfit'] == true),
+      isActive: (json['isActive'].toString() == '1' ||
+          json['isActive'] == true ||
+          json['isActive'].toString().toLowerCase() == 'true'),
+      canViewCostPrice: (json['canViewCostPrice'].toString() == '1' ||
+          json['canViewCostPrice'] == true ||
+          json['canViewCostPrice'].toString().toLowerCase() == 'true'),
+      canViewProfit: (json['canViewProfit'].toString() == '1' ||
+          json['canViewProfit'] == true ||
+          json['canViewProfit'].toString().toLowerCase() == 'true'),
     );
   }
 

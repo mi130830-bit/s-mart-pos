@@ -226,6 +226,8 @@ class DeliveryNotePdf {
                         fontSize),
                     _buildLabelValue(
                         "ที่อยู่", customer.address ?? "-", font, fontSize),
+                    _buildLabelValue(
+                        "โทร", customer.phone ?? "-", font, fontSize),
                   ])),
           pw.SizedBox(width: 10), // เว้นระยะห่างระหว่างคอลัมน์ซ้าย-ขวา
           pw.Expanded(
@@ -238,6 +240,11 @@ class DeliveryNotePdf {
                     _buildLabelValue(
                         "วันที่",
                         DateFormat('dd/MM/yyyy').format(DateTime.now()),
+                        font,
+                        fontSize),
+                    _buildLabelValue(
+                        "เวลา",
+                        DateFormat('HH:mm:ss').format(DateTime.now()),
                         font,
                         fontSize),
                   ])),

@@ -13,6 +13,8 @@ import '../suppliers/supplier_list_view.dart';
 import 'package:window_manager/window_manager.dart'; // ✅ For WindowListener
 import '../../services/customer_display_service.dart';
 import '../pos/pos_state_manager.dart';
+import 'package:auto_updater/auto_updater.dart';
+import '../../services/alert_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -62,6 +64,25 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
   }
   */
 
+  Future<void> _checkForUpdates(BuildContext context) async {
+    try {
+      AlertService.show(
+          context: context, message: 'กำลังตรวจสอบเวอร์ชัน...', type: 'info');
+      String feedUrl =
+          'https://raw.githubusercontent.com/mi130830-bit/s-mart-pos/main/appcast.xml';
+      await autoUpdater.setFeedURL(feedUrl);
+      await autoUpdater.checkForUpdates();
+    } catch (e) {
+      debugPrint('Update Error: $e');
+      if (context.mounted) {
+        AlertService.show(
+            context: context,
+            message: 'ไม่สามารถตรวจสอบได้: $e',
+            type: 'error');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
@@ -108,6 +129,9 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
         auth.hasPermission('view_sales_history');
     final bool showProductStock = isSignedIn;
 
+    final bool canAccessSettings =
+        isUserAdmin || auth.hasPermission('access_settings_menu');
+
     // ✅ 1. เรียงลำดับหน้าจอ (Screens) ใหม่ตามคำขอ
     final List<Widget> screens = [
       const PosCheckoutScreen(), // 1. จุดขาย
@@ -116,7 +140,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
       if (showDashboard)
         const DashboardScreen(), // 4. ประวัติการขาย (Dashboard เดิม)
       if (isUserAdmin) const SupplierListView(), // 5. จัดการผู้ขาย
-      if (isUserAdmin)
+      if (canAccessSettings)
         const SettingsScreen(), // 6. ตั้งค่า (Changed to SystemSettingsScreen)
     ];
 
@@ -145,7 +169,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
           icon: Icon(Icons.local_shipping),
           label: Text('จัดการผู้ขาย'),
         ),
-      if (isUserAdmin)
+      if (canAccessSettings)
         const NavigationRailDestination(
           icon: Icon(Icons.settings),
           label: Text('ตั้งค่า'),
@@ -218,6 +242,14 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
             trailing: Column(
               children: [
                 //const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.system_update, color: Colors.blue),
+                  tooltip: 'ตรวจสอบเวอร์ชัน',
+                  onPressed: () => _checkForUpdates(context),
+                ),
+                const Text('Update',
+                    style: TextStyle(fontSize: 10, color: Colors.blue)),
+                const SizedBox(height: 10),
                 IconButton(
                   icon: const Icon(Icons.logout, color: Colors.red),
                   tooltip: 'ออกจากระบบ',

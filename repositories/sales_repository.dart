@@ -48,13 +48,14 @@ class SalesRepository {
       // 1.2 บันทึกรายการสินค้า (Order Items)
       for (var item in items) {
         await _dbService.execute(
-          'INSERT INTO orderitem (orderId, productId, productName, quantity, price, discount, total) VALUES (:oid, :pid, :pname, :qty, :price, :discount, :total)',
+          'INSERT INTO orderitem (orderId, productId, productName, quantity, price, costPrice, discount, total) VALUES (:oid, :pid, :pname, :qty, :price, :cost, :discount, :total)',
           {
             'oid': orderId,
             'pid': item.productId,
             'pname': item.productName,
             'qty': item.quantity,
             'price': item.price,
+            'cost': item.costPrice.toDouble(),
             'discount': item.discount,
             'total': item.total,
           },
@@ -354,18 +355,67 @@ class SalesRepository {
       String groupByFormat = periodType == 'DAILY'
           ? '%Y-%m-%d'
           : (periodType == 'MONTHLY' ? '%Y-%m' : '%Y');
-      final sql = '''
+
+      // 1. Sales Query (From Order Header) - Correct calculation of Sales & Count
+      final sqlSales = '''
+        SELECT DATE_FORMAT(createdAt, '$groupByFormat') as label, 
+               SUM(grandTotal) as totalSales,
+               COUNT(id) as orderCount
+        FROM `order`
+        WHERE createdAt BETWEEN :start AND :end AND status IN ('COMPLETED', 'UNPAID')
+        GROUP BY label ORDER BY label ASC;
+      ''';
+      final salesRes = await _dbService.query(sqlSales,
+          {'start': start.toIso8601String(), 'end': end.toIso8601String()});
+
+      // 2. Cost Query (From Items) - Correct calculation of Cost with Fallback to Current Product Cost
+      final sqlCost = '''
         SELECT DATE_FORMAT(o.createdAt, '$groupByFormat') as label, 
-               SUM(o.grandTotal) as totalSales,
-               SUM(COALESCE(oi.costPrice, 0) * oi.quantity) as totalCost,
-               COUNT(DISTINCT o.id) as orderCount
-        FROM `order` o JOIN orderitem oi ON o.id = oi.orderId
+               SUM(
+                 (CASE WHEN oi.costPrice > 0 THEN oi.costPrice ELSE COALESCE(p.costPrice, 0) END) 
+                 * oi.quantity
+               ) as totalCost
+        FROM `order` o 
+        JOIN orderitem oi ON o.id = oi.orderId
+        LEFT JOIN product p ON oi.productId = p.id
         WHERE o.createdAt BETWEEN :start AND :end AND o.status IN ('COMPLETED', 'UNPAID')
         GROUP BY label ORDER BY label ASC;
       ''';
-      return await _dbService.query(sql,
+      final costRes = await _dbService.query(sqlCost,
           {'start': start.toIso8601String(), 'end': end.toIso8601String()});
+
+      // 3. Merge Data
+      Map<String, Map<String, dynamic>> merged = {};
+
+      for (var row in salesRes) {
+        String label = row['label'].toString();
+        merged[label] = {
+          'label': label,
+          'totalSales': double.tryParse(row['totalSales'].toString()) ?? 0.0,
+          'orderCount': int.tryParse(row['orderCount'].toString()) ?? 0,
+          'totalCost': 0.0,
+        };
+      }
+
+      for (var row in costRes) {
+        String label = row['label'].toString();
+        double cost = double.tryParse(row['totalCost'].toString()) ?? 0.0;
+        if (merged.containsKey(label)) {
+          merged[label]!['totalCost'] = cost;
+        } else {
+          // If there's cost but no sales (unlikely but possible if logic changes), default sales to 0
+          merged[label] = {
+            'label': label,
+            'totalSales': 0.0,
+            'orderCount': 0,
+            'totalCost': cost,
+          };
+        }
+      }
+
+      return merged.values.toList();
     } catch (e) {
+      debugPrint('Error getting sales stats: $e');
       return [];
     }
   }

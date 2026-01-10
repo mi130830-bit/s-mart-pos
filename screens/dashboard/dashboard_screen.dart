@@ -297,11 +297,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _sendToDelivery(int orderId) async {
     try {
-      await context.read<PosStateManager>().sendToDeliveryFromHistory(orderId);
+      await context
+          .read<PosStateManager>()
+          .sendToDeliveryFromHistory(orderId, jobType: 'delivery');
       if (mounted) {
         AlertService.show(
             context: context,
             message: 'ส่งข้อมูลไปฝ่ายจัดส่งเรียบร้อย',
+            type: 'success');
+      }
+    } catch (e) {
+      if (mounted) {
+        AlertService.show(
+            context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+      }
+    }
+  }
+
+  Future<void> _sendToBackShop(int orderId) async {
+    try {
+      await context
+          .read<PosStateManager>()
+          .sendToDeliveryFromHistory(orderId, jobType: 'pickup');
+      if (mounted) {
+        AlertService.show(
+            context: context,
+            message: 'ส่งงาน "รับของหลังร้าน" เรียบร้อย',
             type: 'success');
       }
     } catch (e) {
@@ -838,7 +859,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
+              child: SelectableText(
                 _aiAnalysis,
                 style: const TextStyle(fontSize: 15, height: 1.5),
               ),
@@ -1114,6 +1135,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 color: Colors.orange, size: 20),
                             tooltip: 'ส่งของ',
                             onPressed: () => _sendToDelivery(
+                                int.tryParse(o['id'].toString()) ?? 0),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.store_mall_directory,
+                                color: Colors.deepPurple, size: 20),
+                            tooltip: 'แจ้งรับของหลังร้าน',
+                            onPressed: () => _sendToBackShop(
                                 int.tryParse(o['id'].toString()) ?? 0),
                           ),
                         ],

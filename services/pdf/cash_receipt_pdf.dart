@@ -52,7 +52,7 @@ class CashReceiptPdf {
     // จำนวนรายการต่อหน้า (4-5 กำลังดีสำหรับครึ่ง A4)
     const int itemsPerPage = 7;
 
-    const double fontSizeNormal = 10;
+    const double fontSizeNormal = 11;
     const double fontSizeTitle = 14.0;
 
     final List<OrderItem> safeItems = items.isEmpty ? [] : items;

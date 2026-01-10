@@ -5,6 +5,8 @@ import '../models/product.dart';
 import './activity_repository.dart';
 import '../services/telegram_service.dart';
 
+enum ProductSortOption { recent, nameAsc, stockAsc, stockDesc }
+
 class ProductRepository {
   final MySQLService _dbService = MySQLService();
   final ActivityRepository _activityRepo = ActivityRepository();
@@ -398,7 +400,8 @@ class ProductRepository {
   }
 
   Future<List<Product>> getProductsPaginated(int page, int pageSize,
-      {String? searchTerm}) async {
+      {String? searchTerm,
+      ProductSortOption sortOption = ProductSortOption.recent}) async {
     if (!_dbService.isConnected()) {
       await _dbService.connect();
     }
@@ -416,7 +419,23 @@ class ProductRepository {
         params['term'] = '%$searchTerm%';
       }
 
-      sql += ' ORDER BY id DESC LIMIT :limit OFFSET :offset';
+      String orderBy = 'id DESC';
+      switch (sortOption) {
+        case ProductSortOption.nameAsc:
+          orderBy = 'name ASC';
+          break;
+        case ProductSortOption.stockAsc:
+          orderBy = 'stockQuantity ASC';
+          break;
+        case ProductSortOption.stockDesc:
+          orderBy = 'stockQuantity DESC';
+          break;
+        case ProductSortOption.recent:
+          orderBy = 'id DESC';
+          break;
+      }
+
+      sql += ' ORDER BY $orderBy LIMIT :limit OFFSET :offset';
 
       final results = await _dbService.query(sql, params);
       return results.map((row) => Product.fromJson(row)).toList();

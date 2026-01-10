@@ -126,7 +126,10 @@ class PosStateManager extends ChangeNotifier {
     await _loadHeldBillsFromDB();
     refreshGeneralSettings();
     // Auto-open Customer Display if needed/connected
-    CustomerDisplayService().openDisplay();
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('auto_open_customer_display') ?? false) {
+      CustomerDisplayService().openDisplay();
+    }
     notifyListeners();
   }
 
@@ -393,6 +396,12 @@ class PosStateManager extends ChangeNotifier {
       double? overridePrice,
       String? overrideUnit,
       double? overrideConversionFactor}) async {
+    // Reset suppression when starting new transaction
+    if (_suppressDisplayUpdate) {
+      _suppressDisplayUpdate = false;
+      // Force update to clear Success screen immediately if needed,
+      // but the subsequent notifyListeners/updateCart will handle it.
+    }
     await _cartService.addProduct(
         product: product,
         quantity: Decimal.parse(quantity.toString()),
@@ -420,12 +429,13 @@ class PosStateManager extends ChangeNotifier {
 
   void updateItemDiscount(int index, double discountVal,
       {bool isPercent = false}) {
-    // Needs implementation in CartService
-    // _cartService.updateItemDiscount(...)
+    _cartService.updateItemDiscount(
+        index, Decimal.parse(discountVal.toString()),
+        isPercent: isPercent);
   }
 
   void updateItemComment(int index, String comment) {
-    // Needs implementation in CartService
+    _cartService.updateItemComment(index, comment);
   }
 
   Future<void> clearCart({bool returnStock = false}) async {
@@ -438,7 +448,10 @@ class PosStateManager extends ChangeNotifier {
     // Notifications handled by listener
   }
 
+  bool _suppressDisplayUpdate = false; // Flag to protect Success Screen
+
   void _updateDisplay() {
+    if (_suppressDisplayUpdate) return; // Prevent overwriting Success Screen
     final service = CustomerDisplayService();
     if (service.isOpen) {
       if (cart.isEmpty && _currentCustomer == null) {
@@ -557,13 +570,10 @@ class PosStateManager extends ChangeNotifier {
               p.method.contains('เงินเชื่อ') ||
               p.method.contains('ลงบัญชี'));
 
-          if (received >= grandTotal - 0.01) {
+          if (!isCredit && received >= grandTotal - 0.01) {
             note = '✅ จ่ายเงินแล้ว (Paid)';
-          } else if (isCredit) {
-            note = '📝 ลงบัญชี (Credit)';
           } else {
-            final due = grandTotal - received;
-            note = 'เก็บเงินปลายทาง ${due.toStringAsFixed(2)} บาท';
+            note = '📝 ลงบัญชี/เก็บปลายทาง (COD/Credit)';
           }
 
           if (deliveryType == DeliveryType.pickup) {
@@ -594,10 +604,20 @@ class PosStateManager extends ChangeNotifier {
           .openDrawer()
           .catchError((e) => debugPrint('Drawer Error: $e'));
 
-      // Show Success on Customer Display
-      CustomerDisplayService().showSuccess();
+      // 1. Enable Suppression to prevent Idle screen via listener
+      _suppressDisplayUpdate = true;
 
+      // 2. Clear Cart (listener triggers but _updateDisplay returns early)
       await clearCart(returnStock: false);
+
+      // 3. Show Success Screen (Persist)
+      await CustomerDisplayService().showSuccess(
+        received: received,
+        change: currentChange,
+        total: grandTotal,
+        items: currentItems,
+      );
+
       return orderId;
     } catch (e) {
       debugPrint('Save Order Delegated Error: $e');
@@ -605,15 +625,10 @@ class PosStateManager extends ChangeNotifier {
     }
   }
 
-  Future<void> sendToDeliveryFromHistory(int orderId) async {
+  Future<void> sendToDeliveryFromHistory(int orderId,
+      {String jobType = 'delivery'}) async {
     // Delegate to service
     if (!_dbService.isConnected()) await _dbService.connect();
-
-    // Need to fetch data first? `DeliveryIntegrationService` takes clean args, not ID?
-    // Actually `DeliveryIntegrationService` was designed to check ID...
-    // Re-reading my code for `DeliveryIntegrationService`: it takes `orderId`, `customer`, `items` etc.
-    // So I still need to fetch logic here OR move fetch logic to service.
-    // I'll keep fetch logic here (copied from previous) then call service.
 
     final sqlOrder = '''
         SELECT o.*, c.*, o.id AS orderId, c.id AS customerId
@@ -625,10 +640,21 @@ class PosStateManager extends ChangeNotifier {
     if (orderRes.isEmpty) throw Exception('บิล #$orderId ไม่พบข้อมูล');
 
     final orderData = orderRes.first;
-    if (orderData['customerId'] == null) {
-      throw Exception(
-          'บิล #$orderId ไม่มีข้อมูลลูกค้า (ต้องมีลูกค้าเพื่อส่งของ)');
-    }
+    // ✅ Fix: Allow General Customer (Walk-in)
+    final customer = orderData['customerId'] != null
+        ? Customer.fromJson({
+            ...orderData,
+            'id': orderData['customerId'],
+          })
+        : Customer(
+            id: 0,
+            memberCode: 'GENERAL',
+            currentPoints: 0,
+            firstName: 'ลูกค้า',
+            lastName: 'ทั่วไป (Walk-in)',
+            phone: orderData['phone']?.toString() ?? '',
+            address: orderData['address']?.toString() ?? '',
+          );
 
     final itemsRes = await _dbService.query(
       'SELECT * FROM orderitem WHERE orderId = :id',
@@ -637,16 +663,27 @@ class PosStateManager extends ChangeNotifier {
     final List<OrderItem> items =
         itemsRes.map((row) => OrderItem.fromJson(row)).toList();
 
-    final customer = Customer.fromJson({
-      ...orderData,
-      'id': orderData['customerId'],
-    });
-
     final gTotal = double.tryParse(orderData['grandTotal'].toString()) ?? 0.0;
+    final received =
+        double.tryParse(orderData['received']?.toString() ?? '0') ?? 0.0;
     final String? pm = orderData['paymentMethod']?.toString();
-    String? deliveryNote;
-    if (pm != null && (pm.toUpperCase().contains('CASH') || pm == 'เงินสด')) {
-      deliveryNote = '✅ จ่ายเงินแล้ว (Cash Paid)';
+
+    // ✅ Logic: Note Generation matching saveOrder
+    String deliveryNote = '';
+    final bool isCredit = pm != null &&
+        (pm.toUpperCase().contains('CREDIT') ||
+            pm.contains('เงินเชื่อ') ||
+            pm.contains('ลงบัญชี'));
+
+    if (!isCredit && received >= gTotal - 0.01) {
+      deliveryNote = '✅ จ่ายเงินแล้ว (Paid)';
+    } else {
+      deliveryNote = '📝 ลงบัญชี/เก็บปลายทาง (COD/Credit)';
+    }
+
+    // ✅ Add specific note for Back Shop / Pickup
+    if (jobType == 'customer_pickup' || jobType == 'pickup') {
+      deliveryNote += ' (รับเองที่ร้าน)';
     }
 
     final billPdfData = await ReceiptService().generateDeliveryNoteData(
@@ -656,14 +693,31 @@ class PosStateManager extends ChangeNotifier {
       discount: double.tryParse(orderData['discount']?.toString() ?? '0') ?? 0,
     );
 
+    // ✅ Fix: Clear address for Pickup jobs to prevent showing in Delivery Tab
+    Customer effectiveCustomer = customer;
+    if (jobType == 'pickup' || jobType == 'customer_pickup') {
+      effectiveCustomer = Customer(
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+        currentPoints: customer.currentPoints,
+        memberCode: customer.memberCode,
+        address: '', // Clear Address
+        shippingAddress: '', // Clear Shipping Address
+        firebaseUid: customer.firebaseUid,
+      );
+    }
+
     await _deliveryService.createDeliveryJob(
         orderId: orderId,
-        customer: customer,
+        customer: effectiveCustomer,
         items: items,
         grandTotal: gTotal,
         isManual: true,
         note: deliveryNote,
-        billPdfData: billPdfData);
+        billPdfData: billPdfData,
+        jobType: jobType);
   }
 
   // --- Barcode / Product Scanning Logic ---

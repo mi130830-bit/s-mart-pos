@@ -1,3 +1,4 @@
+import 'dart:io'; // Added for InternetAddress
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:mysql_client/mysql_client.dart';
@@ -65,6 +66,19 @@ class MySQLService {
             databaseName: targetDB,
             secure: false,
           );
+
+          // 🔍 [Added] Hostname Resolution Logging
+          try {
+            final List<InternetAddress> ips =
+                await InternetAddress.lookup(host);
+            if (ips.isNotEmpty) {
+              debugPrint('🔍 [MySql] Resolved "$host" -> ${ips.first.address}');
+            }
+          } catch (e) {
+            debugPrint('⚠️ [MySql] Could not resolve host "$host": $e');
+            // Continue anyway, maybe the driver handles it differently or it's an IP
+          }
+
           await _conn!.connect();
           if (_conn!.connected) {
             debugPrint(
@@ -414,6 +428,30 @@ class MySQLService {
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     ''';
     await execute(sql);
+    await ensureUserPermissionUniqueKey(); // ✅ Ensure key exists for old DBs
+  }
+
+  Future<void> ensureUserPermissionUniqueKey() async {
+    try {
+      // Check if index exists
+      final checkSql = '''
+        SELECT COUNT(1) IndexIsThere FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE table_schema=DATABASE() AND table_name='user_permission' AND index_name='idx_user_perm';
+      ''';
+      final res = await query(checkSql);
+      final count = int.tryParse(res.first['IndexIsThere'].toString()) ?? 0;
+
+      if (count == 0) {
+        debugPrint('🔧 Adding missing UNIQUE KEY to user_permission...');
+        // Might fail if duplicates exist, so we try to clean duplicates first?
+        // Simple strategy: IGNORE duplicates or just try ADD UNIQUE
+        // Better: let it fail if duplicates, but at least we try.
+        await execute(
+            'ALTER IGNORE TABLE user_permission ADD UNIQUE KEY idx_user_perm (userId, permissionKey);');
+      }
+    } catch (e) {
+      debugPrint('⚠️ ensureUserPermissionUniqueKey error: $e');
+    }
   }
 
   Future<void> initSystemSettingsTable() async {

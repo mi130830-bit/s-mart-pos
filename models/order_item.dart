@@ -9,6 +9,7 @@ class OrderItem {
   final Decimal price;
   final Decimal discount;
   final Decimal total;
+  final Decimal costPrice; // ✅ Added Cost Price
 
   final String comment;
   final double
@@ -25,10 +26,12 @@ class OrderItem {
     required this.price,
     Decimal? discount,
     required this.total,
+    Decimal? costPrice, // ✅ Added
     this.comment = '',
     this.conversionFactor = 1.0,
     this.product,
-  }) : discount = discount ?? Decimal.zero;
+  })  : discount = discount ?? Decimal.zero,
+        costPrice = costPrice ?? Decimal.zero; // ✅ Default to 0
 
   // ✅ เพิ่มเมธอด copyWith
   OrderItem copyWith({
@@ -39,6 +42,7 @@ class OrderItem {
     Decimal? price,
     Decimal? discount,
     Decimal? total,
+    Decimal? costPrice, // ✅ Added
     String? comment,
     double? conversionFactor,
     Product? product,
@@ -51,6 +55,7 @@ class OrderItem {
       price: price ?? this.price,
       discount: discount ?? this.discount,
       total: total ?? this.total,
+      costPrice: costPrice ?? this.costPrice, // ✅ Added
       comment: comment ?? this.comment,
       conversionFactor: conversionFactor ?? this.conversionFactor,
       product: product ?? this.product,
@@ -84,6 +89,7 @@ class OrderItem {
       price: parseDecimal(json['price']),
       discount: parseDecimal(json['discount']),
       total: parseDecimal(json['total']),
+      costPrice: parseDecimal(json['costPrice']), // ✅ Added
       comment: json['comment']?.toString() ?? '',
       conversionFactor: parseDouble(json['conversionFactor']) == 0.0
           ? 1.0
@@ -105,6 +111,7 @@ class OrderItem {
       'price': price.toDouble(),
       'discount': discount.toDouble(),
       'total': total.toDouble(),
+      'costPrice': costPrice.toDouble(), // ✅ Added
       'comment': comment,
       'conversionFactor': conversionFactor,
       'product': product?.toJson(),

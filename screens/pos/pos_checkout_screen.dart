@@ -600,7 +600,7 @@ class _PosCheckoutScreenState extends State<PosCheckoutScreen> {
             }
 
             double inputVal = double.tryParse(discountCtrl.text) ?? 0;
-            if (inputVal > 0) {
+            if (inputVal >= 0) {
               if (!_checkPermission('pos_discount', 'ให้ส่วนลด')) return;
 
               double finalDiscount = 0.0;
@@ -803,6 +803,10 @@ class _PosCheckoutScreenState extends State<PosCheckoutScreen> {
                                 }
                                 await posState.removeItem(index);
                               },
+                              onUpdateQuantity: (index, newQty) async {
+                                await posState.updateItemQuantity(
+                                    index, newQty);
+                              },
                             ),
                           ),
                         ],
@@ -839,6 +843,9 @@ class _PosCheckoutScreenState extends State<PosCheckoutScreen> {
                             return;
                           }
                           await posState.removeItem(index);
+                        },
+                        onUpdateQuantity: (index, newQty) async {
+                          await posState.updateItemQuantity(index, newQty);
                         },
                       ),
                     ),
