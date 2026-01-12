@@ -12,8 +12,8 @@
       </description>
       <pubDate>Sat, 10 Jan 2026 13:45:00 +0700</pubDate>
       
-      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.0.6.3/S_MartPOS_Setup_v1.0.6+3.exe"
-                 sparkle:version="1.0.6+3"
+      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.0.6.4/S_MartPOS_Setup_v1.0.6+4.exe"
+                 sparkle:version="1.0.6+4"
                  sparkle:os="windows"
                  type="application/octet-stream" />
     </item>
