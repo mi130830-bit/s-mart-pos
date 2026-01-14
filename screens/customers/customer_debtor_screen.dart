@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:decimal/decimal.dart'; // Added
 import '../../models/customer.dart';
-import '../../models/order_item.dart'; // Added
+import '../../models/debtor_transaction.dart'; // Added
+import '../../models/order_item.dart';
 import '../../repositories/customer_repository.dart';
-import '../../repositories/sales_repository.dart'; // Added
-import '../../repositories/debtor_repository.dart'; // Added
+import '../../repositories/sales_repository.dart';
+import '../../repositories/debtor_repository.dart';
 import 'create_billing_screen.dart'; // Added
 
 class CustomerDebtorScreen extends StatefulWidget {
@@ -18,8 +20,9 @@ class CustomerDebtorScreen extends StatefulWidget {
 
 class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
   final CustomerRepository _repo = CustomerRepository();
-  final SalesRepository _salesRepo = SalesRepository(); // Added
-  List<Map<String, dynamic>> _ledger = [];
+  final SalesRepository _salesRepo = SalesRepository();
+  final DebtorRepository _debtRepo = DebtorRepository(); // Added
+  List<DebtorTransaction> _ledger = []; // Changed to List<DebtorTransaction>
   bool _isLoading = true;
   late Customer _currentCustomer;
 
@@ -128,9 +131,8 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
 
   Future<void> _loadLedger() async {
     setState(() => _isLoading = true);
-    // Load Ledger data from Repository
-    final List<Map<String, dynamic>> data =
-        await _repo.getLedger(_currentCustomer.id);
+    // Load Ledger data from DebtorRepository (Source of Truth)
+    final data = await _debtRepo.getDebtorHistory(_currentCustomer.id);
 
     if (mounted) {
       setState(() {
@@ -168,9 +170,8 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
   double get _selectedTotal {
     double total = 0.0;
     for (var item in _ledger) {
-      if (item['transactionType'] == 'CREDIT_SALE' &&
-          _selectedIds.contains(item['id'])) {
-        total += double.parse(item['amount'].toString());
+      if (item.type == 'CREDIT_SALE' && _selectedIds.contains(item.id)) {
+        total += item.amount.toDouble();
       }
     }
     return total;
@@ -416,8 +417,8 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
                         String note = 'ชำระหนี้';
                         if (_selectedIds.isNotEmpty) {
                           final oids = _ledger
-                              .where((i) => _selectedIds.contains(i['id']))
-                              .map((i) => '#${i['orderId']}')
+                              .where((i) => _selectedIds.contains(i.id))
+                              .map((i) => '#${i.orderId}')
                               .join(', ');
                           note += ' (รายการ: $oids)';
                         }
@@ -427,10 +428,11 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
                         final messenger = ScaffoldMessenger.of(context);
                         final nav = Navigator.of(context);
 
-                        await _repo.addTransaction(
+                        await _debtRepo.transactDebt(
                           customerId: _currentCustomer.id,
-                          type: 'DEBT_PAYMENT',
-                          amount: -payAmount,
+                          transactionType: 'DEBT_PAYMENT',
+                          amountChange: -Decimal.parse(
+                              payAmount.toString()), // Negative for payment
                           note: note,
                         );
 
@@ -594,7 +596,7 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Text(
-            'ลูกค้าเริ่มเปิดบัญชีเมื่อ: ${_ledger.isNotEmpty ? DateFormat('dd/MM/yyyy').format(DateTime.parse(_ledger.last['createdAt'].toString())) : "-"}',
+            'ลูกค้าเริ่มเปิดบัญชีเมื่อ: ${_ledger.isNotEmpty ? DateFormat('dd/MM/yyyy').format(_ledger.last.createdAt) : "-"}',
             style: const TextStyle(color: Colors.grey),
           ),
         ],
@@ -688,10 +690,10 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
                       separatorBuilder: (ctx, i) => const Divider(height: 1),
                       itemBuilder: (ctx, i) {
                         final item = _ledger[i];
-                        final id = int.tryParse(item['id'].toString()) ?? 0;
-                        final type = item['transactionType'];
-                        final amount = double.parse(item['amount'].toString());
-                        final dt = DateTime.parse(item['createdAt'].toString());
+                        final id = item.id;
+                        final type = item.type;
+                        final amount = item.amount.toDouble();
+                        final dt = item.createdAt;
 
                         final isPayment = type == 'DEBT_PAYMENT';
                         final isCreditSale = type == 'CREDIT_SALE';
@@ -716,7 +718,7 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
                                 ),
                           title: Text(isPayment
                               ? 'ชำระหนี้'
-                              : 'ซื้อเชื่อ (บิล #${item['orderId'] ?? "-"})'),
+                              : 'ซื้อเชื่อ (บิล #${item.orderId ?? "-"})'),
                           subtitle: Text(dateFormat.format(dt)),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -739,9 +741,8 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
                               ),
                             ],
                           ),
-                          onTap: (isCreditSale && item['orderId'] != null)
-                              ? () => _showOrderDetail(
-                                  int.parse(item['orderId'].toString()))
+                          onTap: (isCreditSale && item.orderId != null)
+                              ? () => _showOrderDetail(item.orderId!)
                               : null,
                         );
                       },
@@ -751,10 +752,10 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
     );
   }
 
-  Future<void> _handleDeleteTransaction(Map<String, dynamic> item) async {
-    final type = item['transactionType'];
-    final id = int.tryParse(item['id'].toString()) ?? 0;
-    final orderId = int.tryParse(item['orderId']?.toString() ?? '0') ?? 0;
+  Future<void> _handleDeleteTransaction(DebtorTransaction item) async {
+    final type = item.type;
+    final id = item.id;
+    final orderId = item.orderId ?? 0;
 
     if (type == 'DEBT_PAYMENT') {
       final confirm = await showDialog<bool>(

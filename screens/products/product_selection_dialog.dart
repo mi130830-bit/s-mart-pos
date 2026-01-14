@@ -27,16 +27,15 @@ class _ProductSelectionDialogState extends State<ProductSelectionDialog> {
   List<Product>? _cachedProducts;
 
   Future<List<Product>> _search(String query) async {
-    // 1. Load Data if needed
-    if (_cachedProducts == null) {
-      if (widget.products != null) {
-        _cachedProducts = widget.products!;
-      } else if (widget.repo != null) {
-        _cachedProducts = await widget.repo!.getAllProductsLight();
-      } else {
-        _cachedProducts = [];
-      }
+    // 1. Server-side Search (Priority)
+    if (widget.repo != null) {
+      // Return top 50 matches using server-side search
+      return await widget.repo!
+          .getProductsPaginatedLight(1, 50, searchTerm: query);
     }
+
+    // 2. Client-side Search (Fallback if widget.products is provided)
+    _cachedProducts ??= widget.products ?? [];
 
     if (query.isEmpty) return _cachedProducts!;
 

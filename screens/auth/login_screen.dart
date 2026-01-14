@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/auth_provider.dart';
-import '../settings/database_config_screen.dart';
+import '../settings/initial_setup_screen.dart';
 import '../pos/pos_state_manager.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
@@ -42,11 +42,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       // Pass rememberMe flag to login function
-      await auth.login(
+      final success = await auth.login(
         _usernameCtrl.text.trim(),
         _passwordCtrl.text.trim(),
         rememberMe: _rememberMe,
       );
+      if (!success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -80,14 +89,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         const Icon(Icons.store, size: 80, color: Colors.indigo),
                         const SizedBox(height: 20),
-                        Text(
-                          'เข้าสู่ระบบ ${posState.shopName}',
-                          style: const TextStyle(
-                            fontSize: 24,
+                        const Text(
+                          'S_MartPOS', // ✅ Updated Name
+                          style: TextStyle(
+                            fontSize: 32,
                             fontWeight: FontWeight.bold,
                             color: Colors.indigo,
                           ),
                           textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 5), // Added spacing
+                        Text(
+                          'เข้าสู่ระบบ ${posState.shopName}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.indigo,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         const Text(
@@ -149,39 +166,27 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // Emergency DB Settings Access
+                        // ⚙️ Database Setup Button
                         TextButton.icon(
                           onPressed: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const DatabaseConfigScreen(),
+                                builder: (_) => const InitialSetupScreen(),
                               ),
                             );
                           },
                           icon: const Icon(
                             Icons.settings,
                             size: 16,
-                            color: Colors.white,
+                            color: Colors.grey,
                           ),
                           label: const Text(
-                            'ตั้งค่าการเชื่อมต่อ (DB Settings)',
+                            'ตั้งค่าฐานข้อมูล (Database Setup)',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Colors.grey,
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.indigo.withValues(
-                              alpha: 0.1,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
                             ),
                           ),
                         ),

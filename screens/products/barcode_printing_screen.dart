@@ -38,6 +38,11 @@ class _BarcodePrintingScreenState extends State<BarcodePrintingScreen> {
   void initState() {
     super.initState();
     _loadProducts();
+    // ✅ Load state from Service
+    setState(() {
+      _printCounts.addAll(_barcodePrintService.printQueue);
+      _selectedProductsCache.addAll(_barcodePrintService.productCache);
+    });
   }
 
   @override
@@ -92,10 +97,17 @@ class _BarcodePrintingScreenState extends State<BarcodePrintingScreen> {
 
       if (next <= 0) {
         _printCounts.remove(productId);
-        // We don't remove from cache immediately, just in case they add it back
       } else {
         _printCounts[productId] = next;
       }
+      // ✅ Sync with Service
+      _barcodePrintService.updateQueue(
+          productId,
+          next,
+          next > 0
+              ? _filteredProducts.firstWhere((p) => p.id == productId,
+                  orElse: () => _selectedProductsCache[productId]!)
+              : null);
     });
   }
 
@@ -302,6 +314,17 @@ class _BarcodePrintingScreenState extends State<BarcodePrintingScreen> {
           usePrinterSettings: false,
         );
       }
+
+      // ✅ Success Notification
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ ส่งคำสั่งพิมพ์เรียบร้อยแล้ว (Success)'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -426,6 +449,8 @@ class _BarcodePrintingScreenState extends State<BarcodePrintingScreen> {
                           onPressed: () {
                             setState(() {
                               _printCounts.clear();
+                              _barcodePrintService
+                                  .clearQueue(); // ✅ Clear Service
                             });
                           },
                           icon: Icons.delete_sweep,
@@ -541,6 +566,9 @@ class _BarcodePrintingScreenState extends State<BarcodePrintingScreen> {
                                       onPressed: () {
                                         setState(() {
                                           _printCounts.remove(productId);
+                                          _barcodePrintService.updateQueue(
+                                              productId,
+                                              0); // ✅ Remove from Service
                                         });
                                       },
                                     ),

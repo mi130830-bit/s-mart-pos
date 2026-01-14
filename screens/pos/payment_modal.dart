@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:decimal/decimal.dart'; // ✅ Import Decimal
 import '../../models/payment_record.dart';
 import '../../models/delivery_type.dart';
 import '../../models/order_item.dart';
@@ -27,18 +28,16 @@ class _PaymentModalState extends State<PaymentModal> {
   final FocusNode _amountFocusNode = FocusNode();
 
   final List<PaymentRecord> _payments = [];
-  // ✅ FIX Rounding
-  double get _totalPaid =>
-      _round(_payments.fold(0.0, (sum, p) => sum + p.amount));
+
+  // ✅ FIX Rounding using Decimal
+  Decimal get _totalPaid => _payments.fold(
+      Decimal.zero, (sum, p) => sum + Decimal.parse(p.amount.toString()));
 
   PaymentType _selectedPaymentType = PaymentType.cash;
-  double _receivedAmount = 0.0;
+  Decimal _receivedAmount = Decimal.zero; // ✅ Use Decimal
   DeliveryType _deliveryType = DeliveryType.none;
   bool _isLoading = false;
-  bool _shouldPrint = true; // ✅ Default Add
-
-  // ✅ Helper for Precision
-  double _round(double val) => (val * 100).round() / 100.0;
+  bool _shouldPrint = true;
 
   @override
   void initState() {
@@ -68,50 +67,61 @@ class _PaymentModalState extends State<PaymentModal> {
     if (_selectedPaymentType == PaymentType.credit) return;
 
     final posState = Provider.of<PosStateManager>(context, listen: false);
-    final total = posState.grandTotal;
-    final remaining = _round((total - _totalPaid).clamp(0.0, double.infinity));
+    final Decimal total = Decimal.parse(posState.grandTotal.toString());
+    final Decimal paid = _totalPaid;
+    final Decimal remaining = (total - paid)
+        .clamp(Decimal.zero, Decimal.parse('999999999')); // Clamp max safe
 
-    if (remaining > 0) {
+    if (remaining > Decimal.zero) {
       setState(() {
         _receivedAmount = remaining;
-        _amountCtrl.text = remaining.toStringAsFixed(2);
+        _amountCtrl.text = remaining.toStringAsFixed(
+            2); // Decimal has toStringAsFixed? No, toDouble -> string
+        // Decimal toStringAsFixed needs typical double handling or implementation
+        // Decimal works usually with toString
+        _amountCtrl.text = remaining.toDouble().toStringAsFixed(2);
+
         _amountCtrl.selection =
             TextSelection(baseOffset: 0, extentOffset: _amountCtrl.text.length);
       });
     } else {
       setState(() {
-        _receivedAmount = 0;
+        _receivedAmount = Decimal.zero;
         _amountCtrl.text = '';
       });
     }
-    _updateDisplayToCustomer(); // ✅ Update Display
+    _updateDisplayToCustomer();
   }
 
   void _removePayment(int index) {
     setState(() {
       _payments.removeAt(index);
       _fillRemainingAmount();
-      _updateDisplayToCustomer(); // ✅ Update Display
+      _updateDisplayToCustomer();
     });
   }
 
   Future<void> _processFinish() async {
     final posState = Provider.of<PosStateManager>(context, listen: false);
-    final grandTotal = posState.grandTotal;
+    final double grandTotalDouble = posState.grandTotal;
+    final Decimal grandTotal = Decimal.parse(grandTotalDouble.toString());
 
-    // ✅ Snapshot Data for Receipt (Capture BEFORE saveOrder/clearCart)
+    // ✅ Snapshot Data
     final snapshotItems = List<OrderItem>.from(posState.cart);
     final snapshotCustomer = posState.currentCustomer;
     final snapshotDiscount = posState.discountAmount;
-    final snapshotTotal =
-        posState.grandTotal + snapshotDiscount; // Pre-discount total
+    final snapshotTotal = posState.grandTotal + snapshotDiscount;
 
-    double currentInput = _receivedAmount;
-    double totalPaidSoFar = _round(_totalPaid + currentInput);
-    double remaining =
-        _round((grandTotal - totalPaidSoFar).clamp(0.0, double.infinity));
+    Decimal currentInput = _receivedAmount;
+    Decimal totalPaidSoFar = _totalPaid + currentInput;
+    Decimal remaining = (grandTotal - totalPaidSoFar);
 
-    if (remaining > 0.01) {
+    // Precision check: if remaining is very small negative/positive, treat as 0 logic if needed,
+    // but Decimal handles 0.00 exactly.
+    // If remaining < 0, it means change.
+
+    // Logic: If remaining > 0, ask to owe.
+    if (remaining > Decimal.parse('0.01')) {
       if (posState.currentCustomer == null ||
           posState.currentCustomer!.id == 0) {
         _showError('ลูกค้าทั่วไปไม่สามารถค้างจ่ายได้ (กรุณาเลือกสมาชิก)');
@@ -122,13 +132,10 @@ class _PaymentModalState extends State<PaymentModal> {
     if (_deliveryType != DeliveryType.none) {
       if (posState.currentCustomer == null ||
           posState.currentCustomer?.id == 0) {
-        // Strict Check for Delivery
         if (_deliveryType == DeliveryType.delivery) {
           _showError('การจัดส่ง (Delivery) ต้องระบุลูกค้าสมาชิกเท่านั้น');
           return;
         }
-
-        // WARN: General Customer (Pickup Only)
         bool? confirmGeneral = await ConfirmDialog.show(
           context,
           title: '⚠️ ไม่ได้เลือกสมาชิก',
@@ -138,19 +145,18 @@ class _PaymentModalState extends State<PaymentModal> {
           confirmText: 'ดำเนินการต่อ',
           cancelText: 'ยกเลิก',
         );
-
         if (!mounted) return;
         if (confirmGeneral != true) return;
       }
     }
 
-    if (remaining > 0.01) {
+    if (remaining > Decimal.parse('0.01')) {
       bool? confirmDebt = await ConfirmDialog.show(
         context,
         title: '⚠️ ยอดเงินไม่ครบ',
         content:
-            'รับเงินมา: ${NumberFormat('#,##0.00').format(totalPaidSoFar)}\n'
-            'ขาดอีก: ${NumberFormat('#,##0.00').format(remaining)}\n\n'
+            'รับเงินมา: ${NumberFormat('#,##0.00').format(totalPaidSoFar.toDouble())}\n'
+            'ขาดอีก: ${NumberFormat('#,##0.00').format(remaining.toDouble())}\n\n'
             'ต้องการบันทึกส่วนที่เหลือเป็น "หนี้ค้างจ่าย" ใช่หรือไม่?',
         confirmText: 'ใช่, บันทึกเป็นหนี้',
         cancelText: 'ไม่, กลับไปแก้ไข',
@@ -159,41 +165,42 @@ class _PaymentModalState extends State<PaymentModal> {
 
       if (confirmDebt != true) return;
 
-      if (currentInput > 0) {
+      if (currentInput > Decimal.zero) {
         _payments.add(PaymentRecord(
-            method: _selectedPaymentType.name, amount: currentInput));
+            method: _selectedPaymentType.name,
+            amount: currentInput.toDouble()));
       }
-      _payments.add(
-          PaymentRecord(method: PaymentType.credit.name, amount: remaining));
+      _payments.add(PaymentRecord(
+          method: PaymentType.credit.name, amount: remaining.toDouble()));
 
       _amountCtrl.clear();
-      _receivedAmount = 0;
+      _receivedAmount = Decimal.zero;
     } else {
-      if (currentInput > 0) {
+      if (currentInput > Decimal.zero) {
         _payments.add(PaymentRecord(
           method: _selectedPaymentType.name,
-          amount: currentInput,
+          amount: currentInput.toDouble(),
         ));
         _amountCtrl.clear();
-        _receivedAmount = 0;
+        _receivedAmount = Decimal.zero;
       }
     }
 
-    // Final calculations for Change/Received
-    double totalReceived = _payments.fold(0.0, (sum, p) => sum + p.amount);
-    double change =
-        _round((totalReceived - grandTotal).clamp(0.0, double.infinity));
+    // Final calculations
+    Decimal totalReceived = _payments.fold(
+        Decimal.zero, (sum, p) => sum + Decimal.parse(p.amount.toString()));
+    Decimal change = Decimal.zero;
+    if (totalReceived > grandTotal) {
+      change = totalReceived - grandTotal;
+    }
 
     setState(() => _isLoading = true);
     try {
-      // 1. Save Order (Returns ID)
       final orderId = await posState.saveOrder(
         payments: _payments,
         deliveryType: _deliveryType,
       );
 
-      // 2. Print Receipt using SNAPSHOT data (Safe & Accurate)
-      // ✅ Check local toggle first
       if (_shouldPrint) {
         await _printReceipt(
           orderId: orderId,
@@ -201,12 +208,11 @@ class _PaymentModalState extends State<PaymentModal> {
           customer: snapshotCustomer,
           total: snapshotTotal,
           discount: snapshotDiscount,
-          grandTotal: grandTotal,
-          received: totalReceived,
-          change: change,
+          grandTotal: grandTotalDouble,
+          received: totalReceived.toDouble(),
+          change: change.toDouble(),
           payments: _payments,
-          cashierName: posState.currentUser?.displayName ??
-              'Staff', // ✅ Pass Cashier Name
+          cashierName: posState.currentUser?.displayName ?? 'Staff',
         );
       }
 
@@ -229,7 +235,7 @@ class _PaymentModalState extends State<PaymentModal> {
     required double received,
     required double change,
     required List<PaymentRecord> payments,
-    String? cashierName, // ✅ Receive Cashier Name
+    String? cashierName,
   }) async {
     try {
       bool hasCash = payments.any((p) =>
@@ -246,7 +252,6 @@ class _PaymentModalState extends State<PaymentModal> {
               p.method == 'Credit');
 
       if (isCreditOnly && customer != null) {
-        // ✅ Auto-print Delivery Note for Credit Sales
         await _receiptService.printDeliveryNote(
           orderId: orderId,
           items: items,
@@ -254,7 +259,6 @@ class _PaymentModalState extends State<PaymentModal> {
           discount: discount,
         );
       } else {
-        // ✅ Standard Receipt for Cash/Mixed
         await _receiptService.printReceipt(
           orderId: orderId,
           items: items,
@@ -265,7 +269,7 @@ class _PaymentModalState extends State<PaymentModal> {
           change: change,
           payments: payments,
           customer: customer,
-          cashierName: cashierName, // ✅ Pass to Service
+          cashierName: cashierName,
         );
       }
     } catch (e) {
@@ -273,7 +277,7 @@ class _PaymentModalState extends State<PaymentModal> {
     }
   }
 
-  Widget _buildInfoColumn(String label, double val, Color color,
+  Widget _buildInfoColumn(String label, Decimal val, Color color,
       {double fontSize = 28}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -282,7 +286,7 @@ class _PaymentModalState extends State<PaymentModal> {
         Text(label,
             style: const TextStyle(fontSize: 14, color: Colors.black54)),
         Text(
-          '฿${NumberFormat('#,##0.00').format(val)}',
+          '฿${NumberFormat('#,##0.00').format(val.toDouble())}',
           style: TextStyle(
               fontSize: fontSize, fontWeight: FontWeight.bold, color: color),
         ),
@@ -309,20 +313,24 @@ class _PaymentModalState extends State<PaymentModal> {
 
   @override
   Widget build(BuildContext context) {
-    // ... UI Code remains largely similar but uses _round() on calculations ...
-    // Focusing on Logic fix. UI parts below are standard.
     final posState = context.watch<PosStateManager>();
-    final grandTotal = posState.grandTotal;
+    final Decimal grandTotal = Decimal.parse(posState.grandTotal.toString());
 
-    final totalPaidInList = _totalPaid;
-    final currentlyTyping = _receivedAmount;
-    final totalCaptured = _round(totalPaidInList + currentlyTyping);
+    final Decimal totalPaidInList = _totalPaid;
+    final Decimal currentlyTyping = _receivedAmount;
+    final Decimal totalCaptured = totalPaidInList + currentlyTyping;
 
-    final remaining =
-        _round((grandTotal - totalCaptured).clamp(0.0, double.infinity));
-    final change =
-        _round((totalCaptured - grandTotal).clamp(0.0, double.infinity));
-    final isFullyPaid = totalCaptured >= grandTotal - 0.01; // Tolerance
+    Decimal remaining = Decimal.zero;
+    Decimal change = Decimal.zero;
+
+    if (totalCaptured < grandTotal) {
+      remaining = grandTotal - totalCaptured;
+    } else {
+      change = totalCaptured - grandTotal;
+    }
+
+    // Tolerance check for "Fully Paid"
+    final bool isFullyPaid = remaining <= Decimal.parse('0.01');
 
     return Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -331,10 +339,9 @@ class _PaymentModalState extends State<PaymentModal> {
               const SingleActivator(LogicalKeyboardKey.escape): () {
                 Navigator.pop(context);
               },
-              // ✅ F12: Finish without Printing
               const SingleActivator(LogicalKeyboardKey.f12): () {
                 if (!_isLoading) {
-                  setState(() => _shouldPrint = false); // Visual feedback
+                  setState(() => _shouldPrint = false);
                   _processFinish();
                 }
               },
@@ -347,7 +354,6 @@ class _PaymentModalState extends State<PaymentModal> {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    // ... Header ...
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -359,8 +365,6 @@ class _PaymentModalState extends State<PaymentModal> {
                               onPressed: () => Navigator.pop(context))
                         ]),
                     const Divider(),
-
-                    // ... Summary Box ...
                     Container(
                       padding: const EdgeInsets.symmetric(
                           vertical: 20, horizontal: 24),
@@ -393,11 +397,7 @@ class _PaymentModalState extends State<PaymentModal> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // ... Input & Buttons (Same as original) ...
-                    // Only displaying Input logic to show controller usage
                     Column(
                       children: [
                         const Text("ใส่จำนวนเงินที่รับมา",
@@ -453,9 +453,13 @@ class _PaymentModalState extends State<PaymentModal> {
                                 onSubmitted: (_) => _processFinish(),
                                 onChanged: (val) {
                                   setState(() {
-                                    _receivedAmount =
-                                        double.tryParse(val) ?? 0.0;
-                                    _updateDisplayToCustomer(); // ✅ Update Display
+                                    if (val.isEmpty) {
+                                      _receivedAmount = Decimal.zero;
+                                    } else {
+                                      _receivedAmount =
+                                          Decimal.tryParse(val) ?? Decimal.zero;
+                                    }
+                                    _updateDisplayToCustomer();
                                   });
                                 },
                               ),
@@ -464,10 +468,7 @@ class _PaymentModalState extends State<PaymentModal> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 24),
-
-                    // ... Segments & List ...
                     SegmentedButton<PaymentType>(
                       segments: PaymentType.values
                           .map((p) => ButtonSegment(
@@ -480,20 +481,17 @@ class _PaymentModalState extends State<PaymentModal> {
                         setState(() {
                           _selectedPaymentType = val.first;
                           if (_selectedPaymentType == PaymentType.credit) {
-                            _receivedAmount = 0;
+                            _receivedAmount = Decimal.zero;
                             _amountCtrl.clear();
                             FocusScope.of(context).unfocus();
                           } else {
                             _amountFocusNode.requestFocus();
                           }
-                          _updateDisplayToCustomer(); // ✅ Update Display
+                          _updateDisplayToCustomer();
                         });
                       },
                     ),
-
                     const SizedBox(height: 24),
-
-                    // List of Payments (Hidden detail, same as original)
                     if (_payments.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -515,14 +513,10 @@ class _PaymentModalState extends State<PaymentModal> {
                           },
                         ),
                       ),
-
                     const Spacer(),
                     const Divider(),
-
-                    // Bottom Buttons
                     Row(
                       children: [
-                        // ... Delivery Type ...
                         Expanded(
                             child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -555,7 +549,6 @@ class _PaymentModalState extends State<PaymentModal> {
                           ],
                         )),
                         const SizedBox(width: 10),
-                        // ✅ Print Toggle Checkbox
                         Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -602,35 +595,29 @@ class _PaymentModalState extends State<PaymentModal> {
             )));
   }
 
-  // ✅ Helper to Sync Data to Customer Display
-  // ✅ Helper to Sync Data to Customer Display
   void _updateDisplayToCustomer() {
     final posState = Provider.of<PosStateManager>(context, listen: false);
-    final currentInput = _receivedAmount; // ยอดที่กำลังกรอก
-    final totalPaidInList = _totalPaid; // ยอดที่จ่ายไปแล้ว (รายการก่อนหน้า)
-    final totalCaptured = _round(totalPaidInList + currentInput);
+    final Decimal currentInput = _receivedAmount;
+    final Decimal totalPaidInList = _totalPaid;
+    final Decimal totalCaptured = totalPaidInList + currentInput;
 
-    final change = _round(
-        (totalCaptured - posState.grandTotal).clamp(0.0, double.infinity));
+    final Decimal grandTotal = Decimal.parse(posState.grandTotal.toString());
+    Decimal change = Decimal.zero;
+    if (totalCaptured > grandTotal) {
+      change = totalCaptured - grandTotal;
+    }
 
     if (_selectedPaymentType == PaymentType.qr) {
-      // ถ้าเลือก QR ให้ส่ง State Payment (Show QR)
-      // ใช้ currentInput หรือ ยอดขาด (remaining) เป็นยอด QR
-      double qrAmount = currentInput;
+      double qrAmount = currentInput.toDouble();
       if (qrAmount <= 0) {
-        // ถ้าไม่ได้กรอก ให้คำนวณจากยอดคงเหลือ
-        final remaining = _round((posState.grandTotal - totalPaidInList)
-            .clamp(0.0, double.infinity));
-        qrAmount = remaining;
+        if (totalCaptured < grandTotal) {
+          qrAmount = (grandTotal - totalPaidInList).toDouble();
+        }
       }
-
-      // เรียก showPaymentQr (ซึ่งจะไปเขียนไฟล์ state: payment)
       posState.showPaymentQr(qrAmount);
-      // หมายเหตุ: showPaymentQr ใน PosState ปัจจุบันยัง hardcode received/change
-      // แต่เป้าหมายหลักคือให้ QR ขึ้นก่อน เรื่องตัวเลข received ค่อยว่ากัน
     } else {
-      // ถ้าโหมดอื่น ให้ส่ง State Active ปกติ
-      posState.updateCustomerDisplay(received: totalCaptured, change: change);
+      posState.updateCustomerDisplay(
+          received: totalCaptured.toDouble(), change: change.toDouble());
     }
   }
 }

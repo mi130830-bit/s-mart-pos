@@ -103,8 +103,13 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
     }
   }
 
+  bool _isSaving = false;
+
   Future<void> _save() async {
+    if (_isSaving) return; // Prevent double click
     if (_formKey.currentState!.validate()) {
+      setState(() => _isSaving = true);
+
       final newCustomer = Customer(
         id: widget.customer?.id ?? 0,
         memberCode: _memberCodeCtrl.text.isEmpty
@@ -131,12 +136,15 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
       );
 
       try {
-        final success = await widget.repo.saveCustomer(newCustomer);
+        final savedId = await widget.repo.saveCustomer(newCustomer);
         if (!mounted) return;
 
-        if (success) {
-          Navigator.of(context).pop(true);
+        if (savedId > 0) {
+          // Update ID if it was 0
+          final resultCustomer = newCustomer.copyWith(id: savedId);
+          Navigator.of(context).pop(resultCustomer);
         } else {
+          setState(() => _isSaving = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('เกิดข้อผิดพลาดในการบันทึก'),
@@ -146,6 +154,7 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
         }
       } catch (e) {
         if (!mounted) return;
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
@@ -198,12 +207,16 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
                   label: 'รหัสสมาชิก (เว้นว่างเพื่อสร้างอัตโนมัติ)',
                 ),
                 const SizedBox(height: 10),
-                // Tier Dropdown (Keep as is or wrap if we had CustomDropdown, but standard is fine for now)
+                // Tier Dropdown
                 if (_tiers.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: DropdownButtonFormField<int>(
-                      initialValue: _selectedTierId,
+                      key: ValueKey(
+                          _selectedTierId), // Force rebuild when ID changes
+                      initialValue: _tiers.any((t) => t.id == _selectedTierId)
+                          ? _selectedTierId
+                          : null,
                       items: [
                         const DropdownMenuItem<int>(
                           value: null,
@@ -357,13 +370,15 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
         CustomButton(
           label: 'ยกเลิก',
           type: ButtonType.secondary,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
         ),
         CustomButton(
-          label: 'บันทึกข้อมูล',
-          onPressed: _save,
+          label: _isSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล',
+          onPressed: _isSaving ? null : _save,
           backgroundColor: Colors.indigo,
           foregroundColor: Colors.white,
+          // If enabled, show loading indicator if CustomButton supports it.
+          // Assuming simpler approach: just change label and disable.
         ),
       ],
     );

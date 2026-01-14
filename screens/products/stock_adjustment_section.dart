@@ -4,6 +4,8 @@ import '../../repositories/product_repository.dart';
 import '../../repositories/stock_repository.dart';
 import '../../services/telegram_service.dart';
 import '../../services/alert_service.dart';
+import '../../services/settings_service.dart';
+import '../../widgets/dialogs/admin_auth_dialog.dart';
 
 // Import ไฟล์เพื่อนบ้านโดยตรง
 import 'stock_ledger_views.dart';
@@ -289,6 +291,24 @@ class _CheckStockPageState extends State<_CheckStockPage> {
   }
 
   Future<void> _saveAllAdjustments() async {
+    debugPrint('DEBUG: _saveAllAdjustments called'); // Console Log
+
+    // DEBUG: Force show dialog to check if button works
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('DEBUG'),
+        content: Text(
+            'Items: ${_pendingItems.length}\nRequireAuth: ${SettingsService().requireAdminForStockAdjust}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('OK'))
+        ],
+      ),
+    );
+
+    if (!mounted) return; // Fix async gap
+
     if (_pendingItems.isEmpty) {
       return;
     }
@@ -307,6 +327,14 @@ class _CheckStockPageState extends State<_CheckStockPage> {
       });
       return;
     }
+
+    // ✅ Security Check
+    if (SettingsService().requireAdminForStockAdjust) {
+      final authorized = await AdminAuthDialog.show(context);
+      if (!authorized) return;
+    }
+
+    if (!mounted) return;
 
     int successCount = 0;
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:intl/intl.dart';
 import '../../services/alert_service.dart';
 import '../../models/product.dart';
@@ -9,7 +10,7 @@ import '../../repositories/stock_repository.dart';
 import '../../repositories/supplier_repository.dart';
 import '../../repositories/unit_repository.dart';
 
-import 'product_selection_dialog.dart';
+import 'product_multi_selection_dialog.dart';
 import 'widgets/supplier_search_dialog.dart';
 import 'product_list_view.dart'; // For ProductFormDialog
 import '../../widgets/common/custom_text_field.dart';
@@ -22,14 +23,31 @@ class StockInItem {
   double costPrice;
   int vatType;
 
+  final TextEditingController qtyCtrl;
+  final TextEditingController costCtrl;
+
   StockInItem({
     required this.product,
     required this.quantity,
     required this.costPrice,
     this.vatType = 0,
-  });
+  })  : qtyCtrl = TextEditingController(
+            text: quantity > 0
+                ? quantity
+                    .toString()
+                    .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "")
+                : ""),
+        costCtrl = TextEditingController(
+            text: costPrice
+                .toStringAsFixed(4)
+                .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), ""));
 
   double get total => quantity * costPrice;
+
+  void dispose() {
+    qtyCtrl.dispose();
+    costCtrl.dispose();
+  }
 }
 
 class StockInSection extends StatefulWidget {
@@ -290,6 +308,15 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     _loadInitialData();
   }
 
+  @override
+  void dispose() {
+    _docNoCtrl.dispose();
+    for (var item in _stockInItems) {
+      item.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _loadInitialData() async {
     final s = await _supplierRepo.getAllSuppliers();
     final u = await _unitRepo.getAllUnits();
@@ -348,34 +375,37 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   }
 
   Future<void> _addProductToStockIn() async {
-    // final products = await _productRepo.getAllProducts(); // Optimized: Load inside dialog
     if (!mounted) return;
 
-    final Product? picked = await showDialog<Product>(
+    // Use Multi Selection Dialog
+    final List<Product>? pickedList = await showDialog<List<Product>>(
       context: context,
-      builder: (context) => ProductSelectionDialog(repo: _productRepo),
+      builder: (context) => ProductMultiSelectionDialog(
+        initialSelectedIds: [], // No pre-selection for new add
+        repo: _productRepo,
+      ),
     );
 
-    if (picked != null) {
-      final existingIndex = _stockInItems.indexWhere(
-        (i) => i.product.id == picked.id,
-      );
-      if (existingIndex >= 0) {
-        setState(() {
-          _stockInItems[existingIndex].quantity += 1;
-        });
-      } else {
-        setState(() {
-          _stockInItems.add(
-            StockInItem(
-              product: picked,
-              quantity: 1,
-              costPrice: picked.costPrice,
-              vatType: picked.vatType,
-            ),
+    if (pickedList != null && pickedList.isNotEmpty) {
+      setState(() {
+        for (var picked in pickedList) {
+          final existingIndex = _stockInItems.indexWhere(
+            (i) => i.product.id == picked.id,
           );
-        });
-      }
+          if (existingIndex >= 0) {
+            _stockInItems[existingIndex].quantity += 1;
+          } else {
+            _stockInItems.add(
+              StockInItem(
+                product: picked,
+                quantity: 1,
+                costPrice: picked.costPrice,
+                vatType: picked.vatType,
+              ),
+            );
+          }
+        }
+      });
     }
   }
 
@@ -397,6 +427,41 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
           ),
         );
       });
+    }
+  }
+
+  // ✅ New Method: Edit Product Details from Stock In Screen
+  Future<void> _editProductDetail(StockInItem item) async {
+    final Product? updatedProduct = await showDialog<Product>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          ProductFormDialog(repo: _productRepo, product: item.product),
+    );
+
+    if (updatedProduct != null && mounted) {
+      setState(() {
+        // Find all items with this product ID and update them
+        // (In case added multiple times, though usually unique here)
+        for (var i = 0; i < _stockInItems.length; i++) {
+          if (_stockInItems[i].product.id == updatedProduct.id) {
+            // Re-create item with new product data but keep qty/cost
+            // Actually simplest is to just update the 'product' field if it was mutable,
+            // but it is final. So replace the StockInItem.
+            final oldItem = _stockInItems[i];
+            _stockInItems[i] = StockInItem(
+              product: updatedProduct,
+              quantity: oldItem.quantity,
+              costPrice: oldItem
+                  .costPrice, // Keep trip cost or update? Usually keep trip cost.
+              vatType: updatedProduct.vatType,
+            );
+          }
+        }
+      });
+      // Tip: Cost Price in Master Data might have changed too,
+      // but here we usually preserve the "Transaction Cost" entered by user.
+      // If user WANTS to update cost to match new master, they can re-type.
     }
   }
 
@@ -468,7 +533,12 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                 ),
                 CustomButton(
                   onPressed: () {
-                    setState(() => item.costPrice = calculateCostPerUnit());
+                    setState(() {
+                      item.costPrice = calculateCostPerUnit();
+                      item.costCtrl.text = item.costPrice
+                          .toStringAsFixed(4)
+                          .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
+                    });
                     Navigator.pop(context);
                   },
                   label: 'ยืนยัน',
@@ -494,14 +564,60 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
       return;
     }
 
-    // Confirmation
+    // ✅ 2. Partial Receive Logic Switch
+    if (widget.existingPoId != null &&
+        _poStatus == 'ORDERED' &&
+        targetStatus == 'RECEIVED') {
+      // Ask User: Full or Partial
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('ยืนยันการรับสินค้า'),
+          content: const Text('เลือกรูปแบบการรับสินค้า:\n\n'
+              '• รับทั้งหมด (Full Receive): รับสินค้าครบทุกรายการตามใบสั่งซื้อ\n'
+              '• รับบางส่วน (Partial Receive): เลือกรับเฉพาะรายการที่มาถึง (รายการที่เหลือจะค้างอยู่ใน PO เดิม)'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'CANCEL'),
+              child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
+            ),
+            OutlinedButton(
+              onPressed: () => Navigator.pop(context, 'PARTIAL'),
+              child: const Text('รับบางส่วน (Partial)'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, 'FULL'),
+              child: const Text('รับทั้งหมด (Full)'),
+            ),
+          ],
+        ),
+      );
+
+      if (choice == 'CANCEL' || choice == null) return;
+      if (choice == 'PARTIAL') {
+        await _handlePartialReceive();
+        return;
+      }
+      // If FULL, continue to normal flow below...
+    }
+
+    if (!mounted) return;
+
+    // Confirmation (Normal Flow)
+    final bool isEditingReceived =
+        widget.existingPoId != null && _poStatus == 'RECEIVED';
+
     final bool? confirm = await ConfirmDialog.show(
       context,
       title: targetStatus == 'RECEIVED'
-          ? 'ยืนยันการรับเข้าสินค้า?'
+          ? (isEditingReceived
+              ? 'ยืนยันการแก้ไขข้อมูลรับเข้า?'
+              : 'ยืนยันการรับเข้าสินค้า (Full)?')
           : 'บันทึกใบสั่งซื้อ?',
       content: targetStatus == 'RECEIVED'
-          ? 'สินค้าจะถูกเพิ่มเข้าสต็อกทันทีและราคาทุนจะถูกอัปเดต'
+          ? (isEditingReceived
+              ? 'ระบบจะทำการหักลบยอดเดิมออกทั้งหมด และบันทึกยอดใหม่เข้าไปแทน\n(สต็อกจะถูกปรับให้ตรงกับยอดใหม่)'
+              : 'สินค้าจะถูกเพิ่มเข้าสต็อกทันทีและราคาทุนจะถูกอัปเดต')
           : 'บันทึกเป็นใบสั่งซื้อ (ยังไม่เข้าสต็อก)',
       confirmText: 'ยืนยัน',
       cancelText: 'ยกเลิก',
@@ -528,16 +644,13 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               })
           .toList();
 
-      // String note = ''; // Unused variable removed
-
       if (widget.existingPoId != null) {
-        // Handle Existing PO: Update & Receive (or Update only)
         await _stockRepo.updatePurchaseOrder(
           poId: widget.existingPoId!,
           totalAmount: _totalCost,
           items: itemsMap,
           documentNo: _docNoCtrl.text,
-          status: targetStatus, // 'ORDERED' or 'RECEIVED'
+          status: targetStatus,
         );
       } else {
         await _stockRepo.createPurchaseOrder(
@@ -545,30 +658,74 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
           totalAmount: _totalCost,
           items: itemsMap,
           documentNo: _docNoCtrl.text,
-          status: targetStatus, // DRAFT, ORDERED, RECEIVED
         );
       }
 
       if (mounted) {
-        Navigator.pop(context); // Close loading
-        Navigator.pop(context, true); // Close screen & refresh
-
-        AlertService.show(
-          context: context,
-          message: targetStatus == 'RECEIVED'
-              ? 'รับเข้าสินค้าเรียบร้อย'
-              : 'บันทึกใบสั่งซื้อเรียบร้อย',
-          type: 'success',
+        Navigator.pop(context); // Close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'บันทึก ${targetStatus == 'ORDERED' ? 'ใบสั่งซื้อ' : 'รับสินค้า'} เรียบร้อยแล้ว'),
+            backgroundColor: Colors.green,
+          ),
         );
+        Navigator.pop(context, true); // Return success
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pop(context); // Remove loading
         AlertService.show(
           context: context,
           message: 'Error: $e',
           type: 'error',
         );
+      }
+    }
+  }
+
+  // ✅ UI สำหรับเลือกรับบางรายการ (Partial Receive)
+  Future<void> _handlePartialReceive() async {
+    // 1. Show Selection Dialog
+    final List<Map<String, dynamic>>? selectedItems =
+        await showDialog<List<Map<String, dynamic>>>(
+      context: context,
+      builder: (context) => _PartialReceiveDialog(items: _stockInItems),
+    );
+
+    if (selectedItems == null || selectedItems.isEmpty) return;
+
+    // 2. Validate
+    if (!mounted) return;
+
+    // 3. Process
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await _stockRepo.receivePartialPurchaseOrder(
+        originalPoId: widget.existingPoId!,
+        receivedItems: selectedItems,
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Close Loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('✅ รับสินค้าบางส่วนเรียบร้อยแล้ว (Created New Receipt)'),
+              backgroundColor: Colors.green),
+        );
+        Navigator.pop(context, true); // Close Page
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close Loading
+        AlertService.show(
+            context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
       }
     }
   }
@@ -592,7 +749,9 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
-              if (_poStatus == 'NEW' || _poStatus == 'DRAFT') ...[
+              if (_poStatus == 'NEW' ||
+                  _poStatus == 'DRAFT' ||
+                  _poStatus == 'RECEIVED') ...[
                 CustomButton(
                   onPressed: _createNewProduct,
                   icon: Icons.add_box,
@@ -706,13 +865,41 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(item.product.name,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16)),
-                                Text(item.product.barcode ?? '-',
-                                    style: const TextStyle(
-                                        fontSize: 13, color: Colors.grey)),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        item.product.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    // ✏️ Edit Product Button
+                                    InkWell(
+                                      onTap: () => _editProductDetail(item),
+                                      child: const Icon(Icons.edit_note,
+                                          color: Colors.blue, size: 20),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    Text(item.product.barcode ?? '-',
+                                        style: const TextStyle(
+                                            fontSize: 13, color: Colors.grey)),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '| ขาย: ${NumberFormat('#,##0.00').format(item.product.retailPrice)}',
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -722,7 +909,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 4),
                               child: CustomTextField(
-                                initialValue: item.quantity.toString(),
+                                controller: item.qtyCtrl,
                                 keyboardType:
                                     const TextInputType.numberWithOptions(
                                         decimal: true),
@@ -731,6 +918,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                                     fontWeight: FontWeight.bold),
                                 onChanged: (val) => setState(() =>
                                     item.quantity = double.tryParse(val) ?? 0),
+                                selectAllOnFocus: true,
                               ),
                             ),
                           ),
@@ -744,19 +932,18 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                               children: [
                                 Expanded(
                                   child: CustomTextField(
-                                    key: ValueKey(item.costPrice),
-                                    initialValue: item.costPrice
-                                        .toStringAsFixed(4)
-                                        .replaceAll(
-                                            RegExp(r"([.]*0+)(?!.*\d)"), ""),
+                                    controller: item.costCtrl,
                                     keyboardType:
                                         const TextInputType.numberWithOptions(
                                             decimal: true),
                                     textAlign: TextAlign.right,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold),
-                                    onChanged: (val) => setState(() => item
-                                        .costPrice = double.tryParse(val) ?? 0),
+                                    onChanged: (val) {
+                                      setState(() => item.costPrice =
+                                          double.tryParse(val) ?? 0);
+                                    },
+                                    selectAllOnFocus: true,
                                   ),
                                 ),
                                 IconButton(
@@ -781,8 +968,12 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                             width: 50,
                             child: IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () =>
-                                  setState(() => _stockInItems.removeAt(index)),
+                              onPressed: () {
+                                setState(() {
+                                  _stockInItems[index].dispose();
+                                  _stockInItems.removeAt(index);
+                                });
+                              },
                             ),
                           ),
                         ],
@@ -897,7 +1088,9 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                             ? null
                             : () => _processAction('RECEIVED'),
                         icon: Icons.archive,
-                        label: 'รับสินค้าเข้าสต็อก (Receive Now)',
+                        label: (_poStatus == 'RECEIVED')
+                            ? 'บันทึกการแก้ไข (Update)'
+                            : 'รับสินค้าเข้าสต็อก (Receive Now)',
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
                       ),
@@ -1089,6 +1282,139 @@ class _PurchaseOrderHistoryTableState extends State<PurchaseOrderHistoryTable> {
               );
             },
           ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Partial Receive Dialog
+// ---------------------------------------------------------------------------
+class _PartialReceiveDialog extends StatefulWidget {
+  final List<StockInItem> items;
+  const _PartialReceiveDialog({required this.items});
+
+  @override
+  State<_PartialReceiveDialog> createState() => _PartialReceiveDialogState();
+}
+
+class _PartialReceiveDialogState extends State<_PartialReceiveDialog> {
+  final Map<int, bool> _selected = {};
+  final Map<int, TextEditingController> _qtyControllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    for (var item in widget.items) {
+      // Default unchecked
+      _selected[item.product.id] = false;
+      // Default qty = ordered qty
+      _qtyControllers[item.product.id] = TextEditingController(
+          text: item.quantity
+              .toString()
+              .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), ""));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (var c in _qtyControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('เลือกรายการที่รับแล้ว (Partial Receive)'),
+      content: SizedBox(
+        width: 500,
+        height: 400,
+        child: Column(
+          children: [
+            const Text('เลือกสินค้าและระบุจำนวนที่รับจริง:',
+                style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.separated(
+                itemCount: widget.items.length,
+                separatorBuilder: (_, __) => const Divider(),
+                itemBuilder: (context, index) {
+                  final item = widget.items[index];
+                  final isChecked = _selected[item.product.id] ?? false;
+
+                  return ListTile(
+                    leading: Checkbox(
+                      value: isChecked,
+                      onChanged: (val) {
+                        setState(() {
+                          _selected[item.product.id] = val ?? false;
+                        });
+                      },
+                    ),
+                    title: Text(item.product.name),
+                    subtitle: Text('สั่งซื้อ: ${item.quantity}'),
+                    trailing: SizedBox(
+                      width: 80,
+                      child: TextField(
+                        controller: _qtyControllers[item.product.id],
+                        enabled: isChecked,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(),
+                            labelText: 'รับจริง'),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        CustomButton(
+          onPressed: () => Navigator.pop(context),
+          label: 'ยกเลิก',
+          type: ButtonType.secondary,
+        ),
+        CustomButton(
+          onPressed: () {
+            // Collect Data
+            final List<Map<String, dynamic>> result = [];
+            for (var item in widget.items) {
+              if (_selected[item.product.id] == true) {
+                final qtyStr = _qtyControllers[item.product.id]?.text ?? '0';
+                final qty = double.tryParse(qtyStr) ?? 0;
+                if (qty > 0) {
+                  result.add({
+                    'productId': item.product.id,
+                    'productName': item.product.name,
+                    'quantity': qty,
+                    'costPrice': item.costPrice,
+                  });
+                }
+              }
+            }
+
+            if (result.isEmpty) {
+              AlertService.show(
+                  context: context,
+                  message: 'กรุณาเลือกอย่างน้อย 1 รายการ',
+                  type: 'warning');
+              return;
+            }
+
+            Navigator.pop(context, result);
+          },
+          label: 'ตกลง (Receive)',
+          backgroundColor: Colors.indigo,
+          foregroundColor: Colors.white,
         ),
       ],
     );

@@ -193,8 +193,8 @@ class _CustomerImportScreenState extends State<CustomerImportScreen> {
           totalSpending: spending,
         );
 
-        final success = await _customerRepo.saveCustomer(newCustomer);
-        if (success) {
+        final savedId = await _customerRepo.saveCustomer(newCustomer);
+        if (savedId > 0) {
           _successCount++;
         } else {
           _failCount++;

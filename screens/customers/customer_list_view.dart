@@ -90,12 +90,12 @@ class _CustomerListViewState extends State<CustomerListView> {
   }
 
   Future<void> _showCustomerDialog([Customer? customer]) async {
-    final result = await showDialog<bool>(
+    final result = await showDialog(
       context: context,
       builder: (context) => CustomerFormDialog(repo: _repo, customer: customer),
     );
 
-    if (result == true) {
+    if (result != null) {
       _loadData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

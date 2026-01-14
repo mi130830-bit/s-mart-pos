@@ -10,6 +10,7 @@ import '../products/product_management_screen.dart';
 import '../customers/customer_management_screen.dart';
 import '../settings/settings_screen.dart';
 import '../suppliers/supplier_list_view.dart';
+
 import 'package:window_manager/window_manager.dart'; // ✅ For WindowListener
 import '../../services/customer_display_service.dart';
 import '../pos/pos_state_manager.dart';
@@ -139,6 +140,7 @@ class _MainScreenState extends State<MainScreen> with WindowListener {
       const CustomerManagementScreen(), // 3. ลูกค้า
       if (showDashboard)
         const DashboardScreen(), // 4. ประวัติการขาย (Dashboard เดิม)
+
       if (isUserAdmin) const SupplierListView(), // 5. จัดการผู้ขาย
       if (canAccessSettings)
         const SettingsScreen(), // 6. ตั้งค่า (Changed to SystemSettingsScreen)

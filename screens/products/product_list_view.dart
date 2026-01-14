@@ -28,6 +28,8 @@ import '../../widgets/common/confirm_dialog.dart';
 import 'master_data_management_screen.dart'; // Added
 import '../../repositories/product_type_repository.dart'; // Added
 import '../../models/product_type.dart'; // Added
+import '../../services/settings_service.dart';
+import '../../widgets/dialogs/admin_auth_dialog.dart';
 
 // Enum สำหรับ VAT Type
 enum VatType {
@@ -68,6 +70,7 @@ class _ProductListSectionState extends State<ProductListSection> {
   int _currentPage = 1;
   final int _pageSize = 15;
   int _totalItems = 0;
+  ProductSortOption _currentSort = ProductSortOption.recent;
 
   @override
   void initState() {
@@ -86,6 +89,7 @@ class _ProductListSectionState extends State<ProductListSection> {
         _currentPage,
         _pageSize,
         searchTerm: searchTerm.isEmpty ? null : searchTerm,
+        sortOption: _currentSort,
       );
       var total = await _productRepo.getProductCount(
         searchTerm: searchTerm.isEmpty ? null : searchTerm,
@@ -101,22 +105,12 @@ class _ProductListSectionState extends State<ProductListSection> {
             _currentPage,
             _pageSize,
             searchTerm: fixedTerm,
+            sortOption: _currentSort,
           );
           // If found with fixed term, use it
           if (fixedProducts.isNotEmpty) {
             products = fixedProducts;
             total = await _productRepo.getProductCount(searchTerm: fixedTerm);
-
-            // Optional: Show snackbar
-            if (mounted) {
-              // ScaffoldMessenger.of(context).showSnackBar(
-              //   SnackBar(
-              //     content: Text('ค้นหาด้วยรหัส: $fixedTerm (แปลงจากภาษาไทย)'),
-              //     duration: const Duration(seconds: 2),
-              //     backgroundColor: Colors.teal,
-              //   ),
-              // );
-            }
           }
         }
       }
@@ -176,20 +170,9 @@ class _ProductListSectionState extends State<ProductListSection> {
       if (!mounted) return;
 
       if (success) {
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(
-        //     content: Text('ลบสินค้าเรียบร้อย'),
-        //     backgroundColor: Colors.green,
-        //   ),
-        // );
         _refreshProducts();
       } else {
-        // ScaffoldMessenger.of(context).showSnackBar(
-        //   const SnackBar(
-        //     content: Text('เกิดข้อผิดพลาดในการลบ'),
-        //     backgroundColor: Colors.red,
-        //   ),
-        // );
+        // Error handling
       }
     }
   }
@@ -205,12 +188,6 @@ class _ProductListSectionState extends State<ProductListSection> {
     if (result != null) {
       _refreshProducts();
       if (!mounted) return;
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   const SnackBar(
-      //     content: Text('บันทึกข้อมูลสำเร็จ'),
-      //     backgroundColor: Colors.green,
-      //   ),
-      // );
     }
   }
 
@@ -240,6 +217,39 @@ class _ProductListSectionState extends State<ProductListSection> {
                     onChanged: _onSearchChanged,
                     autofocus: true,
                   ),
+                ),
+                const SizedBox(width: 8),
+                // Sort Button
+                PopupMenuButton<ProductSortOption>(
+                  icon: const Icon(Icons.sort),
+                  tooltip: 'เรียงลำดับ',
+                  initialValue: _currentSort,
+                  onSelected: (ProductSortOption result) {
+                    setState(() {
+                      _currentSort = result;
+                      _currentPage = 1; // Reset to page 1
+                    });
+                    _loadData();
+                  },
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<ProductSortOption>>[
+                    const PopupMenuItem<ProductSortOption>(
+                      value: ProductSortOption.recent,
+                      child: Text('ล่าสุด (Default)'),
+                    ),
+                    const PopupMenuItem<ProductSortOption>(
+                      value: ProductSortOption.nameAsc,
+                      child: Text('ชื่อ (ก-ฮ)'),
+                    ),
+                    const PopupMenuItem<ProductSortOption>(
+                      value: ProductSortOption.stockAsc,
+                      child: Text('สต็อก (น้อย -> มาก)'),
+                    ),
+                    const PopupMenuItem<ProductSortOption>(
+                      value: ProductSortOption.stockDesc,
+                      child: Text('สต็อก (มาก -> น้อย)'),
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 8),
                 if (Provider.of<AuthProvider>(context)
@@ -324,8 +334,35 @@ class _ProductListSectionState extends State<ProductListSection> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Barcode: ${p.barcode ?? "-"} | ขาย: ${p.retailPrice}',
+                                Row(
+                                  children: [
+                                    const Text('Barcode: '),
+                                    SelectableText(
+                                        p.barcode ?? "-"), // Allow selection
+                                    if (p.barcode != null &&
+                                        p.barcode!.isNotEmpty)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(left: 4.0),
+                                        child: InkWell(
+                                          onTap: () {
+                                            Clipboard.setData(ClipboardData(
+                                                text: p.barcode!));
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content: Text(
+                                                      'คัดลอกบาร์โค้ดแล้ว'),
+                                                  duration:
+                                                      Duration(seconds: 1)),
+                                            );
+                                          },
+                                          child: const Icon(Icons.copy,
+                                              size: 16, color: Colors.blueGrey),
+                                        ),
+                                      ),
+                                    Text(' | ขาย: ${p.retailPrice}'),
+                                  ],
                                 ),
                                 if (isLowStock)
                                   Text(
@@ -442,6 +479,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   late TextEditingController _aliasCtrl;
   final TextEditingController _supplierNameCtrl = TextEditingController();
   final TextEditingController _unitNameCtrl = TextEditingController(); // Added
+  final TextEditingController _typeNameCtrl =
+      TextEditingController(); // Product Type Search
 
   late TextEditingController _costCtrl;
   late TextEditingController _retailPriceCtrl;
@@ -593,6 +632,17 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
           // If list is empty, we have a problem. But let's keep 0 and hope items reload?
           // Or handle empty list in build.
           _selectedTypeId = 0;
+        }
+      }
+
+      // Update Type Name Controller
+      if (_selectedTypeId != null) {
+        final existingType =
+            _productTypes.where((t) => t.id == _selectedTypeId).toList();
+        if (existingType.isNotEmpty) {
+          _typeNameCtrl.text = existingType.first.name;
+        } else {
+          _typeNameCtrl.clear();
         }
       }
 
@@ -752,6 +802,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
     _reorderPointCtrl.dispose();
     _pointsCtrl.dispose();
     _supplierNameCtrl.dispose();
+    _unitNameCtrl.dispose();
+    _typeNameCtrl.dispose();
     super.dispose();
   }
 
@@ -780,6 +832,18 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
             .padLeft(8, '0');
       }
 
+      final newStock = double.tryParse(_stockCtrl.text) ?? 0.0;
+      final oldStock = widget.product?.stockQuantity ?? 0.0;
+
+      // ✅ Security Check: If stock changed
+      if (newStock != oldStock &&
+          SettingsService().requireAdminForStockAdjust) {
+        debugPrint(
+            'Stock changed from $oldStock to $newStock. Requesting Admin Auth.');
+        final authorized = await AdminAuthDialog.show(context);
+        if (!authorized) return;
+      }
+
       final newProduct = Product(
         id: widget.product?.id ?? 0,
         name: _nameCtrl.text,
@@ -792,7 +856,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
         memberRetailPrice: double.tryParse(_memberRetailPriceCtrl.text),
         memberWholesalePrice: double.tryParse(_memberWholesalePriceCtrl.text),
         vatType: _selectedVat.value,
-        stockQuantity: double.tryParse(_stockCtrl.text) ?? 0.0,
+        stockQuantity: newStock,
         trackStock: _trackStock,
         allowPriceEdit: false,
         reorderPoint: double.tryParse(_reorderPointCtrl.text),
@@ -1002,7 +1066,11 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           CustomButton(
-                            onPressed: () => Navigator.of(context).pop(null),
+                            onPressed: () => Future.delayed(Duration.zero, () {
+                              if (context.mounted) {
+                                Navigator.of(context).pop(null);
+                              }
+                            }),
                             label: 'ยกเลิก',
                             type: ButtonType.secondary,
                           ),
@@ -1119,31 +1187,84 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                   const SizedBox(height: 12),
                   // Product Type Dropdown
                   // Product Type Dropdown
+                  // Product Type Searchable Dropdown
                   Row(
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<int>(
-                          decoration: const InputDecoration(
-                            labelText: 'ประเภทสินค้า *',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                          ),
-                          key: ValueKey(_selectedTypeId),
-                          initialValue: _selectedTypeId,
-                          items: _productTypes.map((t) {
-                            return DropdownMenuItem<int>(
-                              value: t.id,
-                              child: Text(t.name +
-                                  (t.isWeighing ? ' (ชั่งน้ำหนัก)' : '')),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            setState(() => _selectedTypeId = val);
-                          },
-                          validator: (val) =>
-                              val == null ? 'กรุณาเลือกประเภท' : null,
-                        ),
+                        child: LayoutBuilder(builder: (context, constraints) {
+                          return Autocomplete<ProductType>(
+                            key: ValueKey(
+                                _selectedTypeId), // Rebuild if ID changes
+                            initialValue:
+                                TextEditingValue(text: _typeNameCtrl.text),
+                            optionsBuilder:
+                                (TextEditingValue textEditingValue) {
+                              if (textEditingValue.text.isEmpty) {
+                                return _productTypes;
+                              }
+                              return _productTypes.where((ProductType option) {
+                                return option.name.toLowerCase().contains(
+                                    textEditingValue.text.toLowerCase());
+                              });
+                            },
+                            displayStringForOption: (ProductType option) =>
+                                option.name +
+                                (option.isWeighing ? ' (ชั่งน้ำหนัก)' : ''),
+                            onSelected: (ProductType selection) {
+                              setState(() {
+                                _selectedTypeId = selection.id;
+                                _typeNameCtrl.text = selection.name;
+                              });
+                            },
+                            fieldViewBuilder: (context, textEditingController,
+                                focusNode, onFieldSubmitted) {
+                              return CustomTextField(
+                                controller: textEditingController,
+                                focusNode: focusNode,
+                                label: 'ประเภทสินค้า *',
+                                suffixIcon: const Icon(Icons.arrow_drop_down),
+                                onChanged: (val) {
+                                  // Reset ID if user types something custom (though we force selection usually)
+                                  // For Type, usually strict selection.
+                                  // If val is empty, reset ID?
+                                },
+                                validator: (val) => _selectedTypeId == null
+                                    ? 'กรุณาเลือกประเภท'
+                                    : null,
+                              );
+                            },
+                            optionsViewBuilder: (context, onSelected, options) {
+                              return Align(
+                                alignment: Alignment.topLeft,
+                                child: Material(
+                                  elevation: 4.0,
+                                  child: SizedBox(
+                                    width: constraints.maxWidth,
+                                    height: 300,
+                                    child: ListView.builder(
+                                      padding: EdgeInsets.zero,
+                                      itemCount: options.length,
+                                      itemBuilder:
+                                          (BuildContext context, int index) {
+                                        final ProductType option =
+                                            options.elementAt(index);
+                                        return ListTile(
+                                          title: Text(option.name +
+                                              (option.isWeighing
+                                                  ? ' (ชั่งน้ำหนัก)'
+                                                  : '')),
+                                          onTap: () {
+                                            onSelected(option);
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }),
                       ),
                       const SizedBox(width: 8),
                       IconButton(

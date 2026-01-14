@@ -22,7 +22,7 @@ import 'pos_state_manager.dart';
 import 'pos_control_bar.dart';
 import 'pos_cart_list.dart';
 import 'pos_payment_panel.dart';
-import '../../utils/thai_helper.dart';
+import '../../utils/barcode_utils.dart';
 // import '../../services/alert_service.dart';
 import '../customers/customer_search_dialog.dart';
 import '../../widgets/common/custom_text_field.dart';
@@ -159,7 +159,7 @@ class _PosCheckoutScreenState extends State<PosCheckoutScreen> {
     final text = _barcodeCtrl.text;
     if (text.isEmpty) return;
 
-    final normalized = ThaiHelper.normalizeBarcode(text);
+    final normalized = BarcodeUtils.fixThaiInput(text);
     if (normalized != text) {
       _barcodeCtrl.text = normalized;
       _barcodeCtrl.selection = TextSelection.fromPosition(

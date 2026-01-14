@@ -28,7 +28,8 @@ import '../../services/sales/cart_service.dart';
 import '../../services/integration/delivery_integration_service.dart';
 
 import '../../repositories/product_repository.dart';
-import '../../utils/thai_helper.dart';
+// import '../../utils/thai_helper.dart';
+import '../../utils/barcode_utils.dart'; // Added
 import '../../repositories/product_type_repository.dart'; // Added
 
 export '../../services/sales/price_calculation_service.dart' show VatType;
@@ -96,6 +97,7 @@ class PosStateManager extends ChangeNotifier {
   String _shopName = 'S-Link POS';
   String get shopName => _shopName;
   bool _allowNegativeStock = true;
+  String _roundingMode = 'none';
 
   PosStateManager() {
     _cartService = CartService(_dbService, _priceCalcService);
@@ -113,8 +115,19 @@ class PosStateManager extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    await _custRepo.initMemberTierTable();
-    _tiers = await _custRepo.getAllTiers();
+    // ✅ Check for DB Config before trying to connect
+    if (!await _dbService.hasConfig()) {
+      debugPrint('⚠️ [PosState] No Database Config found. Skipping DB Init.');
+      return;
+    }
+
+    try {
+      await _custRepo.initMemberTierTable();
+      _tiers = await _custRepo.getAllTiers();
+    } catch (e) {
+      debugPrint('❌ [PosState] Init Error: $e');
+      // Continue safely?
+    }
 
     // Load Weighing Type IDs logic
     _weighingTypeIds = await _typeRepo.getWeighingTypeIds();
@@ -145,7 +158,11 @@ class PosStateManager extends ChangeNotifier {
 
     _shopName = settings.shopName;
     _allowNegativeStock = settings.allowNegativeStock;
+    _allowNegativeStock = settings.allowNegativeStock;
     _cartService.setAllowNegativeStock(_allowNegativeStock);
+
+    // Rounding
+    _roundingMode = settings.roundingMode;
     notifyListeners();
   }
 
@@ -246,7 +263,36 @@ class PosStateManager extends ChangeNotifier {
     }
   }
 
-  Future<void> recallBill(int index) async {
+  /// Checks stock availability for a held bill.
+  /// Returns a list of warnings if stock is insufficient.
+  Future<List<String>> checkHeldBillStock(int index) async {
+    if (index < 0 || index >= _heldBills.length) return [];
+    final heldBill = _heldBills[index];
+    final warnings = <String>[];
+
+    try {
+      for (var item in heldBill.items) {
+        // Fetch fresh product data
+        final p = await _productRepo.getProductById(item.productId);
+        if (p != null) {
+          // Check if stock is sufficient
+          // We assume quantity is double based on usage
+          if (p.stockQuantity < item.quantity.toDouble()) {
+            warnings.add(
+                '- ${p.name}\n  (ต้องการ: ${item.quantity.toStringAsFixed(0)}, มี: ${p.stockQuantity.toStringAsFixed(0)})');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking stock for held bill: $e');
+    }
+
+    return warnings;
+  }
+
+  /// Recalls the bill (removes from held_bills and puts into cart)
+  /// Should be called after checkHeldBillStock returns empty or user confirms.
+  Future<void> recallHeldBill(int index) async {
     if (index < 0 || index >= _heldBills.length) return;
     final heldBill = _heldBills[index];
 
@@ -316,6 +362,7 @@ class PosStateManager extends ChangeNotifier {
         vatType: _vatType,
         customer: _currentCustomer,
         tier: currentTier,
+        roundingMode: _roundingMode,
       );
 
   double get vatAmount => _calcResult.vatAmount.toDouble();
@@ -727,7 +774,7 @@ class PosStateManager extends ChangeNotifier {
       return ScanResult(status: ScanStatus.error, message: 'Barcode is empty');
     }
 
-    final normalized = ThaiHelper.normalizeBarcode(barcode.trim());
+    final normalized = BarcodeUtils.fixThaiInput(barcode.trim());
 
     // 1. Search Logic
     try {

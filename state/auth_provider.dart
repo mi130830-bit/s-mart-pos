@@ -4,12 +4,13 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../models/user.dart';
 import '../repositories/user_repository.dart';
 import '../services/firebase_service.dart';
-// import '../services/mysql_service.dart';
+import '../services/mysql_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _currentUser;
   bool _isLoading = false;
   bool _isCheckingAuth = true; // ✅ เช็คสถานะเริ่มต้น (Splash Screen)
+  bool _isSetupRequired = false; // ✅ ต้องตั้งค่าไหม
 
   final UserRepository _userRepo = UserRepository();
 
@@ -20,6 +21,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
   bool get isCheckingAuth => _isCheckingAuth; // ✅ Getter สำหรับ main.dart
+  bool get isSetupRequired => _isSetupRequired; // ✅ Getter สำหรับ main.dart
   bool get canViewCost => isAdmin || (_currentUser?.canViewCostPrice ?? false);
   bool get canViewProfit => isAdmin || (_currentUser?.canViewProfit ?? false);
   bool get isAdmin => _currentUser?.role == 'ADMIN';
@@ -31,6 +33,27 @@ class AuthProvider extends ChangeNotifier {
   Future<void> tryAutoLogin() async {
     _isCheckingAuth = true;
     notifyListeners();
+
+    try {
+      // 1. Check if DB Config exists
+      final hasConfig = await MySQLService().hasConfig();
+      if (!hasConfig) {
+        debugPrint(
+            '⚠️ [Auth] No Database Config found. Redirecting to Setup...');
+        _isSetupRequired = true;
+        _isCheckingAuth = false;
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [Auth] Error checking config: $e');
+      // If error (e.g. secure storage fail), force setup?
+      // Better allow retry or show setup.
+      _isSetupRequired = true;
+      _isCheckingAuth = false;
+      notifyListeners();
+      return;
+    }
 
     // ❌ Disable Auto Login (Bypass) - Always show Login Screen
     // We only simulate a delay or check DB conection if needed

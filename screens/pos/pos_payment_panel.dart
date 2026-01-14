@@ -357,9 +357,59 @@ class PosPaymentPanel extends StatelessWidget {
                 title: Text(bill.customer?.firstName ?? "ลูกค้าทั่วไป"),
                 subtitle: Text(
                     '${bill.items.length} รายการ - ฿${NumberFormat('#,##0.00').format(bill.total)}'),
-                onTap: () {
-                  posState.recallBill(i);
-                  Navigator.pop(ctx);
+                onTap: () async {
+                  final warnings = await posState.checkHeldBillStock(i);
+                  if (warnings.isEmpty) {
+                    // No issues, recall immediately
+                    await posState.recallHeldBill(i);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  } else {
+                    // Show warning
+                    if (!ctx.mounted) return;
+                    showDialog(
+                      context: ctx,
+                      builder: (context) => AlertDialog(
+                        title: const Row(
+                          children: [
+                            Icon(Icons.warning, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Text('สินค้าไม่เพียงพอ (Insufficient Stock)'),
+                          ],
+                        ),
+                        content: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                  'รายการต่อไปนี้มีสินค้าในคลังไม่พอจ่าย:'),
+                              const SizedBox(height: 8),
+                              ...warnings.map((w) => Text(w,
+                                  style: const TextStyle(color: Colors.red))),
+                              const SizedBox(height: 16),
+                              const Text('คุณต้องการดึงบิลคืนมาหรือไม่?'),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('ยกเลิก'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange),
+                            onPressed: () async {
+                              Navigator.pop(context); // Close warning
+                              await posState.recallHeldBill(i); // Force recall
+                              if (ctx.mounted) Navigator.pop(ctx); // Close list
+                            },
+                            child: const Text('ทำต่อ (Proceed Anyway)'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                 },
               );
             },
@@ -372,13 +422,12 @@ class PosPaymentPanel extends StatelessWidget {
   void _showQuickAddCustomerDialog(
       BuildContext context, PosStateManager posState) async {
     final repo = CustomerRepository();
-    final result = await showDialog<bool>(
+    final result = await showDialog<Customer>(
       context: context,
       builder: (ctx) => CustomerFormDialog(repo: repo),
     );
-    if (result == true) {
-      final all = await repo.getAllCustomers();
-      if (all.isNotEmpty) posState.selectCustomer(all.first);
+    if (result != null) {
+      posState.selectCustomer(result);
     }
   }
 }
