@@ -14,6 +14,7 @@ import 'screens/pos/pos_state_manager.dart';
 import 'services/mysql_service.dart';
 import 'services/system/backup_scheduler.dart';
 import 'screens/dashboard/main_screen.dart';
+// import 'screens/settings/initial_setup_screen.dart'; // ❌ Removed unused import
 import 'screens/auth/login_screen.dart';
 import 'screens/customer_display/customer_display_screen.dart';
 import 'services/telegram_scheduler.dart';
@@ -142,7 +143,7 @@ class _PosAppState extends State<PosApp> {
   Future<void> _setupWindow() async {
     const windowOptions = WindowOptions(
       size: Size(1300, 900),
-      title: 'S.Mart POS',
+      title: 'S_MartPOS', // ✅ Updated Title
     );
     try {
       await windowManager.waitUntilReadyToShow(windowOptions, () async {

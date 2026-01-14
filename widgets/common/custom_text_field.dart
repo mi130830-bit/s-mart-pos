@@ -26,6 +26,7 @@ class CustomTextField extends StatefulWidget {
   final TextAlign textAlign;
 
   final bool selectAllOnFocus;
+  final bool? enabled;
 
   const CustomTextField({
     super.key,
@@ -52,6 +53,7 @@ class CustomTextField extends StatefulWidget {
     this.style,
     this.textAlign = TextAlign.start,
     this.selectAllOnFocus = false,
+    this.enabled,
   });
 
   @override
@@ -139,6 +141,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
       textAlign: widget.textAlign,
       style: widget.style ?? Theme.of(context).textTheme.bodyMedium,
       validator: widget.validator,
+      enabled: widget.enabled,
       decoration: InputDecoration(
         labelText: widget.label,
         hintText: widget.hint,
