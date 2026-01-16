@@ -7,12 +7,11 @@
     <item>
       <title>Version 1.0.7+1</title>
       <description>
-        - ปรับปรุงระบบอัปเดตอัตโนมัติ
-        - แก้ไขบั๊กต่างๆ
+        - แก้ไขบั๊กแก้ไขราคาหน้าขายไม่ได้
       </description>
       <pubDate>Sat, 10 Jan 2026 13:45:00 +0700</pubDate>
       
-      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.0.7%2B1/S_MartPOS_Setup_v1.0.7+1.exe"
+      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.0.7%2B1/S_MartPOS_Setup_v1.0.7+2.exe"
                  sparkle:version="1.0.7+1"
                  sparkle:os="windows"
                  type="application/octet-stream" />
