@@ -5,13 +5,13 @@
     <description>Most recent updates for S_Mart POS</description>
     <language>th</language>
     <item>
-      <title>Version 1.2.6</title>
+      <title>Version 1.2.8</title>
       <description>
         - ปรับปรุงการเพิ่มลูกค้าให้ถูกค้อง
       </description>
       <pubDate>Sat, 10 Jan 2026 13:45:00 +0700</pubDate>
       
-      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.2.0/S_MartPOS_Setup_v1.2.6.exe"
+      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.2.0/S_MartPOS_Setup_v1.2.8.exe"
                  sparkle:version="1.2.6"
                  sparkle:os="windows"
                  type="application/octet-stream" />
