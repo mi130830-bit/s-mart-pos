@@ -5,13 +5,13 @@
     <description>Most recent updates for S_Mart POS</description>
     <language>th</language>
     <item>
-      <title>Version 1.3.4</title>
+      <title>Version 1.3.5</title>
       <description>
-        - ปรับปรุง backend
+        - ปรับปรุงการส่งข้อความ line oa
       </description>
       <pubDate>Sat, 10 Jan 2026 13:45:00 +0700</pubDate>
       
-      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.3.0%2B/S_MartPOS_Setup_v1.3.4.exe"
+      <enclosure url="https://github.com/mi130830-bit/s-mart-pos/releases/download/v1.3.0%2B/S_MartPOS_Setup_v1.3.5.exe"
                  sparkle:version="1.3.4"
                  sparkle:os="windows"
                  type="application/octet-stream" />
