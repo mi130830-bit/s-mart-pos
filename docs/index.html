@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คู่มือการใช้งานระบบ POS Desktop</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">
+                <i data-lucide="layout-dashboard"></i>
+                <span>POS Docs</span>
+            </div>
+            <ul>
+                <li><a href="#usage">การใช้งาน</a></li>
+                <li><a href="#database">ฐานข้อมูล</a></li>
+                <li><a href="#troubleshoot">แก้ปัญหา</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="hero">
+            <div class="hero-content">
+                <h1>คู่มือการใช้งานระบบ <span class="gradient-text">POS Desktop</span></h1>
+                <p>ยินดีต้อนรับสู่ศูนย์รวมข้อมูลการใช้งาน และการตั้งค่าระบบอย่างมืออาชีพ</p>
+                <div class="hero-btns">
+                    <a href="#usage" class="btn btn-primary">เริ่มต้นใช้งาน</a>
+                    <a href="#database" class="btn btn-secondary">ตั้งค่า DB</a>
+                </div>
+            </div>
+            <div class="hero-bg-anim"></div>
+        </section>
+
+        <section id="usage" class="container">
+            <h2 class="section-title">การใช้งานเบื้องต้น</h2>
+            <div class="card-grid">
+                <div class="card">
+                    <i data-lucide="user-plus"></i>
+                    <h3>จัดการผู้ใช้งาน</h3>
+                    <p>การเพิ่ม/ลบ พนักงาน และการตั้งค่าสิทธิ์การใช้งานแบบละเอียด (Granular Permissions)</p>
+                </div>
+                <div class="card">
+                    <i data-lucide="shopping-cart"></i>
+                    <h3>ระบบการขาย (POS)</h3>
+                    <p>ขั้นตอนการเปิดบิล การสแกนบาร์โค้ด และการรับชำระเงินผ่านช่องทางต่างๆ</p>
+                </div>
+                <div class="card">
+                    <i data-lucide="package"></i>
+                    <h3>คลังสินค้า</h3>
+                    <p>การจัดการสต็อกสินค้า การนำเข้าข้อมูลผ่าน Excel และการปรับปรุงจำนวนสินค้า</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="database" class="container">
+            <h2 class="section-title">การเชื่อมต่อฐานข้อมูล</h2>
+            <div class="glass-panel">
+                <div class="db-modes">
+                    <div class="mode-item">
+                        <span class="badge blue">Standalone</span>
+                        <p>ใช้งานเครื่องเดียว ดึงข้อมูลจากฐานข้อมูลในเครื่องตัวเอง (127.0.0.1)</p>
+                    </div>
+                    <div class="mode-item">
+                        <span class="badge orange">Client</span>
+                        <p>ใช้งานหลายเครื่อง ดึงข้อมูลจากเครื่องแม่ (Master Server) ผ่าน IP Network</p>
+                    </div>
+                    <div class="mode-item">
+                        <span class="badge purple">Trial</span>
+                        <p>โหมดทดลองใช้งาน ใช้ฐานข้อมูลแยกต่างหากเพื่อการทดสอบ</p>
+                    </div>
+                </div>
+                <div class="db-tip">
+                    <strong>คำแนะนำ:</strong> ใช้ปุ่ม "Test Connection" ในหน้าตั้งค่าก่อนกดบันทึกเสมอ
+                </div>
+            </div>
+        </section>
+
+        <section id="troubleshoot" class="container">
+            <h2 class="section-title">การแก้ปัญหาเบื้องต้น</h2>
+            <div class="accordion">
+                <div class="accordion-item">
+                    <div class="accordion-header">
+                        <span>เชื่อมต่อฐานข้อมูลไม่ได้?</span>
+                        <i data-lucide="chevron-down"></i>
+                    </div>
+                    <div class="accordion-content">
+                        <p>1. ตรวจสอบว่าเปิด Laragon หรือ MySQL Service หรือยัง?</p>
+                        <p>2. ตรวจสอบ IP และ Port ว่าถูกต้องตามที่ตั้งค่าไว้ในหน้า DB Config หรือไม่</p>
+                        <p>3. ตรวจสอบ Firewall ว่าไม่ได้บล็อกการสื่อสารของ Port 3306</p>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <div class="accordion-header">
+                        <span>ต้องการล้างข้อมูลยอดขายเก่าเพื่อประหยัดพื้นที่?</span>
+                        <i data-lucide="chevron-down"></i>
+                    </div>
+                    <div class="accordion-content">
+                        <p>ไปที่เมนู <strong>ตั้งค่า > พื้นที่อันตราย</strong> เลือก "ลบข้อมูลเก่าตามช่วงเวลา" และเลือกวันที่ต้องการ</p>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <div class="accordion-header">
+                        <span>ลืมรหัสผ่าน Admin?</span>
+                        <i data-lucide="chevron-down"></i>
+                    </div>
+                    <div class="accordion-content">
+                        <p>สามารถกดปุ่ม "Factory Reset" ในหน้าตั้งค่าระบบ (คำเตือน: ข้อมูลทั้งหมดจะหายไป) หรือติดต่อผู้พัฒนา</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 POS Desktop Project. All documentation rights reserved.</p>
+    </footer>
+
+    <script src="main.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

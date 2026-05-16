@@ -1,0 +1,115 @@
+name: pos_desktop
+
+description: "Hybrid POS (S_MartPOS) for Desktop/Windows."
+
+publish_to: 'none'
+
+version: 1.5.9
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  provider: ^6.1.1
+  cupertino_icons: ^1.0.8
+  file_picker: ^10.3.7
+  csv: ^7.2.0
+  excel: ^4.0.6
+  image_picker: ^1.2.1
+  firebase_core: ^4.3.0
+  cloud_firestore: ^6.1.0
+  firebase_auth: ^6.1.0
+  mysql_client_plus: ^0.1.2
+  window_manager: ^0.5.1
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  intl: ^0.20.2
+  shared_preferences: ^2.5.4
+  desktop_multi_window: ^0.3.0
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.1.4
+  fl_chart: ^1.1.1
+  path_provider: ^2.1.5
+  open_file: ^3.3.2
+  googleapis: ^16.0.0
+  googleapis_auth: ^2.0.0
+  url_launcher: ^6.2.1
+  archive: ^3.4.9
+  uuid: ^4.5.2
+  http: ^1.6.0
+  screen_retriever: ^0.2.0
+  firebase_storage: ^13.0.5
+  flutter_local_notifications: ^21.0.0
+  decimal: ^3.2.4
+  auto_updater: ^1.0.0
+  flutter_secure_storage: ^10.0.0
+  dbcrypt: ^2.0.0
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+  pasteboard: ^0.5.0
+  string_similarity: ^2.1.1
+  win32: ^5.15.0
+  ffi: ^2.2.0
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.2
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.13
+
+flutter_launcher_icons:
+
+  windows:
+    generate: true
+    icon_size: 256 # Recommend high quality
+  image_path: "assets/images/logo.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo.png
+    - assets/fonts/sarabun/
+    - assets/fonts/kanit/
+    - assets/fonts/mali/
+    - assets/fonts/itim/
+  fonts:
+    - family: Sarabun
+      fonts:
+        - asset: assets/fonts/sarabun/Sarabun-Regular.ttf
+        - asset: assets/fonts/sarabun/Sarabun-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/sarabun/Sarabun-Italic.ttf
+          style: italic
+        - asset: assets/fonts/sarabun/Sarabun-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Kanit
+      fonts:
+        - asset: assets/fonts/kanit/Kanit-Regular.ttf
+        - asset: assets/fonts/kanit/Kanit-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/kanit/Kanit-Italic.ttf
+          style: italic
+        - asset: assets/fonts/kanit/Kanit-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Mali
+      fonts:
+        - asset: assets/fonts/mali/Mali-Regular.ttf
+        - asset: assets/fonts/mali/Mali-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/mali/Mali-Italic.ttf
+          style: italic
+        - asset: assets/fonts/mali/Mali-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: Itim
+      fonts:
+        - asset: assets/fonts/itim/Itim-Regular.ttf

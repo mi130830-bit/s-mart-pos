@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SMart Rewards</title>
+
+    <!-- Google Fonts: Outfit & Noto Sans Thai -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- LIFF SDK -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+    <!-- SweetAlert2 for premium popup dialogs -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="dark-theme">
+
+
+    <div class="app-container">
+        <!-- Header Profile Section -->
+        <header class="profile-header glass">
+            <div class="profile-info">
+                <div class="avatar-container">
+                    <img id="profile-img" src="https://via.placeholder.com/150/333333/FFFFFF?text=User" alt="Profile">
+                    <div class="online-indicator"></div>
+                </div>
+                <div class="user-details">
+                    <h2 id="profile-name">กำลังโหลดข้อมูล...</h2>
+                    <p class="greeting">ยินดีต้อนรับสู่ SMart Rewards</p>
+                </div>
+            </div>
+
+            <!-- Points Display -->
+            <div class="points-card">
+                <div class="points-label">คริสตัลคงเหลือ</div>
+                <div class="points-value-container">
+                    <span class="crystal-icon">💎</span>
+                    <span id="user-points" class="points-value">--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            <!-- Tab Bar -->
+            <div id="tab-bar" class="tab-bar hidden">
+                <button id="tab-catalog" class="tab-btn active">🎁 แค็ตตาล็อก</button>
+                <button id="tab-coupons" class="tab-btn">🎟️ คูปองของฉัน</button>
+                <button id="tab-history" class="tab-btn">📋 ประวัติ</button>
+            </div>
+
+            <!-- Section Title (for catalog) -->
+            <div class="section-title">
+                <h3>รางวัลสุดพิเศษ <span class="badge">อัปเดตใหม่</span></h3>
+                <p>แลกรับของรางวัลมากมายด้วยคริสตัลของคุณ</p>
+            </div>
+
+            <!-- Loader -->
+            <div id="loading-spinner" class="loader-container">
+                <div class="spinner"></div>
+                <p>กำลังโหลดของรางวัล...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div id="error-message" class="error-container hidden">
+                <div class="error-icon">⚠️</div>
+                <p id="error-text">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>
+                <button id="retry-btn" class="btn btn-outline">ลองใหม่อีกครั้ง</button>
+            </div>
+
+            <!-- Rewards Grid -->
+            <div id="rewards-grid" class="rewards-grid hidden">
+                <!-- Items will be injected here via JS -->
+            </div>
+
+            <!-- Registration / Linking Form -->
+            <div id="registration-form" class="registration-container hidden">
+                <div class="registration-card glass">
+                    <div class="reg-icon">🤝</div>
+                    <h3>เชื่อมต่อสมาชิก</h3>
+                    <p>กรุณากรอกข้อมูลเพื่อเชื่อมต่อแต้มของคุณ หรือสมัครสมาชิกใหม่เพื่อเริ่มสะสมแต้ม</p>
+
+                    <div class="form-group">
+                        <label for="reg-phone">เบอร์โทรศัพท์</label>
+                        <input type="tel" id="reg-phone" placeholder="เช่น 0812345678" maxlength="10">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reg-name">ชื่อผู้ใช้งาน</label>
+                        <input type="text" id="reg-name" placeholder="ชื่อเล่น หรือ ชื่อจริง">
+                    </div>
+
+                    <button id="submit-reg-btn" class="btn btn-primary btn-full">
+                        เริ่มใช้งานระบบรางวัล
+                    </button>
+
+                    <p class="reg-note">* หากคุณเคยให้เบอร์ไว้ที่ร้าน ระบบจะดึงแต้มเดิมมาให้ทันที</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Background Decoration Overlay -->
+    <div class="bg-decoration shape-1"></div>
+    <div class="bg-decoration shape-2"></div>
+    <div class="bg-decoration shape-3"></div>
+    <div class="bg-decoration shape-4"></div>
+
+    <!-- Main Logic -->
+    <script src="app_v2.js"></script>
+</body>
+
+</html>

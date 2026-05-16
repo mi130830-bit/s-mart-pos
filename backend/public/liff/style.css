@@ -1,0 +1,731 @@
+:root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --accent-color: #3b82f6;
+    --accent-color-hover: #2563eb;
+    --gold-color: #f59e0b;
+    --gold-gradient: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    --blue-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --danger: #ef4444;
+    --success: #10b981;
+    --border-radius: 20px;
+    --font-heading: 'Outfit', sans-serif;
+    --font-body: 'Noto Sans Thai', sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Background Decorations */
+.bg-decoration {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: -1;
+    opacity: 0.5;
+}
+
+.shape-1 {
+    width: 300px;
+    height: 300px;
+    background: #3b82f6;
+    top: -100px;
+    left: -100px;
+}
+
+.shape-2 {
+    width: 400px;
+    height: 400px;
+    background: #8b5cf6;
+    bottom: -150px;
+    right: -100px;
+    opacity: 0.3;
+}
+
+.shape-3 {
+    width: 250px;
+    height: 250px;
+    background: #f59e0b;
+    top: 40%;
+    left: 20%;
+    opacity: 0.15;
+}
+
+.shape-4 {
+    width: 350px;
+    height: 350px;
+    background: #3aedcc;
+    bottom: 20%;
+    right: 30%;
+    opacity: 0.1;
+}
+
+/* Glassmorphism Utility */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.app-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-top: 60px; /* Space for notice */
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Notice Banner */
+.notice-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    gap: 12px;
+    border-radius: 0 0 16px 16px;
+    border-top: none;
+    background: rgba(245, 158, 11, 0.15);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.notice-icon {
+    font-size: 1.2rem;
+}
+
+.notice-text {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+}
+
+.notice-text span {
+    color: var(--text-secondary);
+}
+
+.notice-text strong {
+    color: var(--gold-color);
+    font-family: var(--font-heading);
+    font-size: 14px;
+    letter-spacing: 0.5px;
+}
+
+/* Header Section */
+.profile-header {
+    border-radius: var(--border-radius);
+    padding: 24px;
+    margin-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle gradient highlight inside header */
+.profile-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--gold-gradient);
+}
+
+.profile-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.avatar-container {
+    position: relative;
+}
+
+#profile-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--text-secondary);
+    background-color: var(--bg-secondary);
+}
+
+.online-indicator {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 14px;
+    height: 14px;
+    background-color: var(--success);
+    border: 2px solid var(--bg-secondary);
+    border-radius: 50%;
+}
+
+.user-details h2 {
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.greeting {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.points-card {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 16px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.points-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.points-value-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.crystal-icon {
+    font-size: 24px;
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));
+    animation: float 3s ease-in-out infinite;
+}
+
+.points-value {
+    font-family: var(--font-heading);
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--gold-color);
+    letter-spacing: 1px;
+}
+
+/* Typography & Layout */
+.section-title {
+    margin-bottom: 24px;
+}
+
+.section-title h3 {
+    font-family: var(--font-heading);
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-family: var(--font-body);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.section-title p {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Rewards Grid */
+.rewards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 20px;
+    padding-bottom: 40px;
+}
+
+/* Reward Card */
+.reward-card {
+    display: flex;
+    flex-direction: column;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+}
+
+.reward-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.reward-image-wrapper {
+    position: relative;
+    width: 100%;
+    height: 180px;
+    background-color: rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.reward-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.reward-card:hover .reward-image {
+    transform: scale(1.05);
+}
+
+.stock-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #e2e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.reward-details {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+.reward-name {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.reward-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.5;
+    flex-grow: 1;
+}
+
+.reward-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+}
+
+.reward-cost {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.reward-cost .crystal-icon {
+    font-size: 18px;
+    animation: none;
+}
+
+.reward-cost span {
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gold-color);
+}
+
+.btn-redeem {
+    background: var(--gold-gradient);
+    color: #78350f;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 12px;
+    font-family: var(--font-heading);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-redeem:active {
+    transform: scale(0.95);
+}
+
+.btn-primary {
+    background: var(--blue-gradient);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+}
+
+.btn-full {
+    width: 100%;
+    padding: 14px;
+    border-radius: 16px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.btn-disabled {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+/* Spinner and Loaders */
+.loader-container, .error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 0;
+    gap: 16px;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.error-icon {
+    font-size: 40px;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--accent-color);
+    color: var(--accent-color);
+    padding: 8px 24px;
+    border-radius: 20px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s;
+}
+
+.btn-outline:hover {
+    background: var(--accent-color);
+    color: white;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Keyframes */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes float {
+    0% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-5px) rotate(5deg); }
+    100% { transform: translateY(0px) rotate(0deg); }
+}
+
+/* Registration Form styles */
+.registration-container {
+    width: 100%;
+    padding: 10px 0;
+}
+
+.registration-card {
+    padding: 30px 24px;
+    border-radius: 24px;
+    text-align: center;
+}
+
+.reg-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.registration-card h3 {
+    font-family: var(--font-heading);
+    font-size: 24px;
+    margin-bottom: 12px;
+}
+
+.registration-card p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+.form-group {
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding-left: 4px;
+}
+
+.form-group input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 14px 16px;
+    color: white;
+    font-size: 16px;
+    font-family: var(--font-body);
+    transition: all 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.reg-note {
+    margin-top: 20px !important;
+    font-size: 12px !important;
+    color: var(--gold-color) !important;
+    font-style: italic;
+}
+
+/* Responsive constraints */
+@media (max-width: 480px) {
+    .rewards-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Phase 2: Tab Bar ─────────────────────────────────── */
+.tab-bar {
+    display: flex;
+    background: rgba(0,0,0,0.25);
+    border-radius: 16px;
+    padding: 5px;
+    gap: 4px;
+    margin-bottom: 20px;
+    border: 1px solid var(--glass-border);
+}
+
+.tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 10px 8px;
+    border-radius: 12px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.tab-btn.active {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+    font-weight: 700;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    border: 1px solid var(--glass-border);
+}
+
+/* ── Phase 2: Coupon Badge (on catalog card) ─────────── */
+.coupon-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+}
+
+/* ── Phase 2: Coupon Card ─────────────────────────────── */
+.coupon-card {
+    border-radius: 20px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: transform 0.3s ease;
+}
+
+.coupon-card:hover { transform: translateY(-4px); }
+
+.coupon-inactive { opacity: 0.6; }
+
+.coupon-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 18px 14px;
+    background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(239,68,68,0.1));
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.coupon-icon { font-size: 32px; }
+
+.coupon-name {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.coupon-discount {
+    font-family: var(--font-heading);
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--gold-color);
+}
+
+.coupon-status-badge {
+    margin-left: auto;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.status-active { background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid rgba(16,185,129,0.4); }
+.status-used   { background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.4); }
+.status-expired{ background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); }
+
+.coupon-qr-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 12px;
+}
+
+.coupon-qr {
+    border-radius: 12px;
+    border: 4px solid white;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.coupon-code-text {
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--gold-color);
+    background: rgba(0,0,0,0.3);
+    padding: 8px 20px;
+    border-radius: 10px;
+    border: 1px dashed rgba(245,158,11,0.4);
+}
+
+.coupon-footer {
+    padding: 10px 18px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ── Phase 2: History Items ───────────────────────────── */
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    margin-bottom: 10px;
+}
+
+.history-icon { font-size: 28px; }
+
+.history-info { flex: 1; }
+
+.history-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.history-date { font-size: 12px; color: var(--text-muted); }
+
+.history-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.history-points { font-size: 14px; font-weight: 700; color: var(--gold-color); }
+
+.history-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.badge-done    { background: rgba(16,185,129,0.2); color: #10b981; }
+.badge-pending { background: rgba(245,158,11,0.2); color: #f59e0b; }
+.badge-expired { background: rgba(239,68,68,0.2); color: #ef4444; }
+
+/* ── Loading Inline ───────────────────────────────────── */
+.loading-inline {
+    display: flex;
+    justify-content: center;
+    padding: 40px;
+}
+
+.spinner-sm {
+    width: 24px;
+    height: 24px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}

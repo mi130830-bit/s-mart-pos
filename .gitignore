@@ -1,0 +1,80 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# --- Custom App Ignores ---
+# Environment variables
+.env
+.env.*
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+pos_data.db
+
+# Executables and Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+cloudflared.exe
+vc_redist.x64.exe
+
+# Zip / PDF test files
+*.zip
+*.pdf
+
+# Installers and build outputs
+Output_Installer/
+windows/flutter/ephemeral/
+
+# Temp/scratch directories
+scratch/
+test.txt
+trigger_dump.txt
+tunnel_list*.txt
+drawer_log.txt
+
+# Keys / Secrets
+*.key
+*.pem
+*.p12

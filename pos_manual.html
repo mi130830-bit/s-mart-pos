@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S-Link POS - คู่มือการใช้งานระบบ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #0f172a;
+            --bg-nav: #1e293b;
+            --bg-content: #1e293b;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --border: #334155;
+            --card-bg: #27354b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Sarabun', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        nav {
+            width: 280px;
+            background-color: var(--bg-nav);
+            border-right: 1px solid var(--border);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+        }
+
+        nav h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            color: var(--primary);
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        nav ul {
+            list-style: none;
+        }
+
+        nav li {
+            margin-bottom: 0.5rem;
+        }
+
+        nav a {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        nav a:hover,
+        nav a.active {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: var(--primary);
+        }
+
+        /* Main Content */
+        main {
+            margin-left: 280px;
+            padding: 3rem 4rem;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        header {
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 2rem;
+        }
+
+        header h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        section {
+            margin-bottom: 4rem;
+            scroll-margin-top: 2rem;
+        }
+
+        h3 {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--text-main);
+            border-left: 4px solid var(--primary);
+            padding-left: 1rem;
+        }
+
+        h4 {
+            font-size: 1.3rem;
+            margin: 1.5rem 0 1rem;
+            color: #cbd5e1;
+        }
+
+        p {
+            line-height: 1.7;
+            color: #cbd5e1;
+            margin-bottom: 1rem;
+        }
+
+        ul,
+        ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: #cbd5e1;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+        }
+
+        /* Cards and Features */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--primary);
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .card h5 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-main);
+        }
+
+        .card p {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 0;
+        }
+
+        /* Steps */
+        .step {
+            background-color: rgba(30, 41, 59, 0.5);
+            border-left: 2px solid var(--border);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .step strong {
+            color: var(--primary);
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Tables for settings */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background-color: var(--card-bg);
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: var(--primary);
+        }
+
+        /* Utility */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .badge-desktop {
+            background: #0ea5e9;
+            color: white;
+        }
+
+        .badge-mobile {
+            background: #10b981;
+            color: white;
+        }
+
+        code {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            color: #fca5a5;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <h1>S-LINK POS</h1>
+        <ul>
+            <li><a href="#intro" class="active">ภาพรวมระบบ (Overview)</a></li>
+            <li><a href="#setup">การตั้งค่าเริ่มต้น (Setup)</a></li>
+            <li><a href="#pos">ระบบขายหน้าร้าน (POS)</a></li>
+            <li><a href="#stock">จัดการสต็อก (Inventory)</a></li>
+            <li><a href="#customers">ลูกค้าและลูกหนี้ (CRM)</a></li>
+            <li><a href="#mobile">Mobile App (S-Link)</a></li>
+            <li><a href="#troubleshoot">แก้ปัญหาเบื้องต้น</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <header id="intro">
+            <h2>คู่มือการใช้งานระบบ POS & S-Link</h2>
+            <p>ระบบบริหารจัดการหน้าร้านแบบ Hybrid (Offline/Online) พร้อมระบบจัดการงานขนส่ง</p>
+        </header>
+
+        <section id="system-overview">
+            <h3>1. ภาพรวมระบบ</h3>
+            <p>ระบบ S-Link POS ถูกออกแบบมาเพื่อให้ร้านค้าสามารถดำเนินงานขายได้รวดเร็วแม้ไม่มีอินเทอร์เน็ต (Local MySQL)
+                และเชื่อมต่อข้อมูลลูกค้าและงานขนส่งผ่าน Cloud (Firebase) เพื่อให้ทีมส่งของทำงานได้ทันที</p>
+
+            <div class="feature-grid">
+                <div class="card">
+                    <span class="card-icon">🖥️</span>
+                    <h5>POS Desktop</h5>
+                    <p>โปรแกรมหลักบน Windows สำหรับแคชเชียร์ พิมพ์บิล จัดการสต็อก และดูรายงาน</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">📱</span>
+                    <h5>S-Link Mobile</h5>
+                    <p>แอปพลิเคชันบนมือถือสำหรับดูสต็อก ยิงบาร์โค้ด และจัดการงานส่งของ (Delivery Job)</p>
+                </div>
+                <div class="card">
+                    <span class="card-icon">🖨️</span>
+                    <h5>Hybrid Printing</h5>
+                    <p>รองรับทั้งเครื่องพิมพ์สลิปความร้อน (80mm) และเครื่องพิมพ์เอกสาร (A4/A5 Dot Matrix)</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="setup">
+            <h3>2. การตั้งค่าเริ่มต้น (Initial Setup)</h3>
+            <p>เมื่อติดตั้งโปรแกรมครั้งแรก ต้องทำการตั้งค่าเพื่อให้ระบบเชื่อมต่อกับฐานข้อมูลและอุปกรณ์ต่อพ่วงได้ถูกต้อง
+                ไปที่เมนู <strong>Settings (ตั้งค่า)</strong></p>
+
+            <h4>2.1 การตั้งค่าฐานข้อมูล (Database Config)</h4>
+            <div class="step">
+                <strong>Local Database (MySQL)</strong>
+                ระบุ Host (เช่น <code>127.0.0.1</code> หรือ IP ของเครื่อง Server), Port (3306), Username และ Password
+            </div>
+            <div class="step">
+                <strong>Cloud Database (Firestore)</strong>
+                ระบบจะเชื่อมต่ออัตโนมัติหากมีไฟล์ Configuration (google-services.json) อยู่ในโฟลเดอร์ที่กำหนด
+            </div>
+
+            <h4>2.2 ตั้งค่าข้อมูลร้าน (Shop Info)</h4>
+            <div class="step">
+                กรอกชื่อร้าน, ที่อยู่, เบอร์โทร และ เลขประจำตัวผู้เสียภาษี
+                ข้อมูลเหล่านี้จะปรากฏบนหัวใบเสร็จและใบกำกับภาษี
+            </div>
+
+            <h4>2.3 ตั้งค่าเครื่องพิมพ์ (Printer Settings) <span class="badge badge-desktop">Update</span></h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ประเภทการพิมพ์</th>
+                        <th>รายละเอียด</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Short Receipt (POS Slip)</strong></td>
+                        <td>สำหรับสลิปย่อ 80mm/58mm (Thermal) ใช้สำหรับลูกค้าทั่วไป</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cash Bill (บิลเงินสด Full)</strong></td>
+                        <td>สำหรับบิลเงินสดเต็มรูปแบบ A4/A5 (Dot Matrix/Inkjet) ตั้งค่าแยกจากสลิปได้</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Delivery Note</strong></td>
+                        <td>ใบส่งของ (A4/A5) สำหรับงานขนส่ง</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Label/Barcode</strong></td>
+                        <td>สำหรับพิมพ์สติ๊กเกอร์บาร์โค้ด</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4>2.4 จอแสดงผลลูกค้า (Customer Display)</h4>
+            <p>หากเครื่อง POS มี 2 หน้าจอ ให้เปิดฟังก์ชัน <strong>Enable Second Screen</strong> ระบบจะแสดงราคารวมและ QR
+                Code พร้อมเพย์ที่หน้าจอที่ 2 ให้ลูกค้าเห็นอัตโนมัติ</p>
+        </section>
+
+        <section id="pos">
+            <h3>3. ระบบขายหน้าร้าน (POS)</h3>
+            <p>หน้าจอหลักสำหรับการขาย ออกแบบมาให้ทำงานเร็วด้วยคีย์ลัดและการยิงบาร์โค้ด</p>
+
+            <div class="feature-grid">
+                <div class="card">
+                    <h5>🛍️ ขั้นตอนการขาย</h5>
+                    <ol>
+                        <li>ยิงบาร์โค้ดสินค้า หรือพิมพ์ค้นหาชื่อ</li>
+                        <li>ระบุจำนวน (ถ้ามากกว่า 1)</li>
+                        <li>กด <strong>Checkout (F1)</strong></li>
+                    </ol>
+                </div>
+                <div class="card">
+                    <h5>💳 การชำระเงิน</h5>
+                    <ul>
+                        <li><strong>Cash:</strong> ใส่ยอดเงินรับ ระบบคำนวณเงินทอน</li>
+                        <li><strong>Transfer:</strong> จอจะแสดง QR Code รับเงิน</li>
+                        <li><strong>Credit:</strong> บันทึกเป็นลูกหนี้ (ต้องเลือกลูกค้าก่อน)</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h5>🔄 การพิมพ์ซ้ำ (Reprint)</h5>
+                    <p>ในหน้า Dashboard สามารถกด Reprint และเลือกรูปแบบได้หลากลาย:</p>
+                    <ul>
+                        <li>สลิป 80mm / 58mm</li>
+                        <li>บิลเงินสด A4 / A5</li>
+                        <li>ใบส่งของ A4 / A5</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="stock">
+            <h3>4. การจัดการสต็อก (Inventory)</h3>
+
+            <h4>จัดการข้อมูลหลัก (Master Data) <span class="badge badge-desktop">New</span></h4>
+            <ul>
+                <li><strong>Product Types:</strong> กำหนดประเภทสินค้าแยกย่อย (เช่น ฮาร์ดแวร์, เคมีภัณฑ์)
+                    พร้อมตั้งค่าว่าเป็นสินค้าชั่งน้ำหนักหรือไม่</li>
+                <li><strong>Units:</strong> จัดการหน่วยนับสินค้า (ชิ้น, กล่อง, kg, เมตร)</li>
+            </ul>
+
+            <h4>เมนูสินค้า (Products)</h4>
+            <p>ใช้สำหรับเพิ่มสินค้าใหม่ แก้ไขราคา หรือพิมพ์บาร์โค้ด</p>
+            <ul>
+                <li><strong>Add New:</strong> เพิ่มสินค้า ใส่ชื่อ, บาร์โค้ด, ราคาทุน, ราคาขาย</li>
+                <li><strong>Barcode Designer:</b> ออกแบบและพิมพ์สติ๊กเกอร์บาร์โค้ด เลือกขนาดกระดาษได้</li>
+            </ul>
+
+            <h4>ประวัติสินค้าและการสั่งซื้อ (Product History) <span class="badge badge-desktop">New</span></h4>
+            <p>เมื่อกดดูรายละเอียดสินค้า จะมี Tab ข้อมูลเพิ่มเติม:</p>
+            <ul>
+                <li><strong>ประวัติเคลื่อนไหว (Movement):</strong> ดูรายการ เข้า/ออก ของสต็อก</li>
+                <li><strong>ข้อมูลสั่งซื้อ (Restock Info):</strong> ดูประวัติการซื้อย้อนหลัง ระบบจะไฮไลท์ <span
+                        style="color:#10b981; font-weight:bold;">ราคาดีที่สุด (Best Price)</span> ให้ทราบทันที
+                    เพื่อช่วยตัดสินใจสั่งของเข้า</li>
+            </ul>
+
+            <h4>การปรับสต็อก</h4>
+            <ul>
+                <li><strong>Stock In/Out:</strong> รับสินค้าเข้าหรือเบิกออกเพื่อใช้งาน</li>
+                <li><strong>Stock Check:</strong> ตรวจนับสต็อกจริงเปรียบเทียบกับในระบบ</li>
+            </ul>
+        </section>
+
+        <section id="customers">
+            <h3>5. ลูกค้าและลูกหนี้ (CRM & Debtor)</h3>
+
+            <h4>การจัดการลูกค้า</h4>
+            <p>บันทึกชื่อ, เบอร์โทร, ที่อยู่ และพิกัด GPS (สำหรับจัดส่ง)</p>
+
+            <h4>ระบบลูกหนี้ (Credit/Debtor) <span class="badge badge-desktop">Desktop</span></h4>
+            <p>เมื่อมีการขายเชื่อ (Credit Sale):</p>
+            <div class="step">
+                <strong>1. บันทึกขายเชื่อ:</strong> ในหน้า POS เลือกชำระเงินแบบ "Credit" ระบบจะบังคับให้เลือกลูกค้า
+            </div>
+            <div class="step">
+                <strong>2. ติดตามหนี้ (Debtor List):</strong> ดูรายการที่ยังค้างชำระ ยอดรวมหนี้สิน และประวัติการผ่อนชำระ
+            </div>
+            <div class="step">
+                <strong>3. รับชำระหนี้:</strong> สามารถรับชำระบางส่วน หรือปิดยอดทั้งหมดได้
+            </div>
+        </section>
+
+        <section id="mobile">
+            <h3>6. S-Link Mobile App</h3>
+            <p>แอปพลิเคชันสำหรับพนักงานหน้าร้านและคนขับรถส่งของ</p>
+
+            <div class="feature-grid">
+                <div class="card">
+                    <h5>🚚 Jobs & Delivery</h5>
+                    <p>ดูรายการส่งของของวันนี้ นำทางด้วย Google Maps และปิดงานเมื่อส่งเสร็จ</p>
+                </div>
+                <div class="card">
+                    <h5>🛒 Mini POS</h5>
+                    <p>เปิดบิลขายแบบง่ายๆ จากมือถือ (เชื่อมต่อ Local MySQL)</p>
+                </div>
+                <div class="card">
+                    <h5>🔍 Stock Check</h5>
+                    <p>เดินเช็คสต็อกที่ชั้นวางได้ทันที โดยยิงบาร์โค้ดผ่านกล้องมือถือ</p>
+                </div>
+                <div class="card">
+                    <h5>⚠️ Alerts</h5>
+                    <p>แจ้งเตือนสินค้าใกล้หมด (Shortage) หรือสินค้าที่ต้องเติม</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="troubleshoot">
+            <h3>7. การแก้ปัญหาเบื้องต้น</h3>
+            <ul>
+                <li><strong>เชื่อมต่อ Database ไม่ได้:</strong> ตรวจสอบว่าเครื่อง Server เปิดอยู่ และสาย LAN
+                    เชื่อมต่อปกติ หรือตรวจสอบ IP Address ในหน้า Settings</li>
+                <li><strong>พิมพ์ไม่ออก:</strong> ตรวจสอบสาย USB เครื่องพิมพ์ หรือดูว่าDriver เครื่องพิมพ์สถานะเป็น
+                    "Ready" หรือไม่</li>
+                <li><strong>ภาษาต่างดาวบนสลิป:</strong> ตรวจสอบการตั้งค่า Codepage ใน Printer Settings (ควรเป็น
+                    Thai/Vietnamese หรือ UTF-8)</li>
+            </ul>
+        </section>
+
+        <footer>
+            <p>&copy; 2024 S-Link System. All rights reserved.</p>
+        </footer>
+    </main>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('nav a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+                this.classList.add('active');
+
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
