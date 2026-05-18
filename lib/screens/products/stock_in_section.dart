@@ -12,7 +12,7 @@ import '../../repositories/unit_repository.dart';
 
 import 'product_multi_selection_dialog.dart';
 import 'widgets/supplier_search_dialog.dart';
-import 'product_list_view.dart'; // For ProductFormDialog
+import 'dialogs/product_form/product_form_dialog.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
 import '../../widgets/common/confirm_dialog.dart';

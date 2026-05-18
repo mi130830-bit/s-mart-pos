@@ -7,14 +7,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../notification_service.dart';
+import '../settings_service.dart';
 
 class GoogleDriveService {
   // Google Drive Credentials
   // Actual values are stored in MySQL: system_settings table
   // Keys: 'gdrive_client_id' and 'gdrive_client_secret'
   // Run: scratch/insert_gdrive_secrets.dart to seed them into your local DB
-  static const _clientId = 'YOUR_GOOGLE_CLIENT_ID';
-  static const _clientSecret = 'YOUR_GOOGLE_CLIENT_SECRET';
+  String get _clientId => SettingsService().gdriveClientId;
+  String get _clientSecret => SettingsService().gdriveClientSecret;
 
   static const _scopes = [drive.DriveApi.driveFileScope];
   static const _storage = FlutterSecureStorage();
@@ -45,6 +46,10 @@ class GoogleDriveService {
 
     // New Login Flow
     try {
+      if (_clientId.isEmpty || _clientSecret.isEmpty) {
+        debugPrint('❌ Google Drive Auth Error: Client ID or Secret is missing from database.');
+        return false;
+      }
       final id = ClientId(_clientId, _clientSecret);
       _client = await clientViaUserConsent(id, _scopes, (url) {
         _launchURL(url);

@@ -273,6 +273,13 @@ class SettingsService {
   String get geminiApiKey => getString('gemini_api_key') ?? '';
   set geminiApiKey(String value) => set('gemini_api_key', value);
 
+  // --- Google Drive Settings ---
+  String get gdriveClientId => getString('gdrive_client_id') ?? '';
+  set gdriveClientId(String value) => set('gdrive_client_id', value);
+
+  String get gdriveClientSecret => getString('gdrive_client_secret') ?? '';
+  set gdriveClientSecret(String value) => set('gdrive_client_secret', value);
+
   // --- Line OA Settings ---
   String get lineChannelAccessToken =>
       getString('line_channel_access_token') ?? '';

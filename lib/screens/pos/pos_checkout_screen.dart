@@ -8,7 +8,7 @@ import '../../models/product.dart';
 import '../../models/customer.dart';
 import '../../repositories/product_repository.dart';
 import '../../state/auth_provider.dart';
-import '../products/product_list_view.dart';
+import '../products/dialogs/product_form/product_form_dialog.dart';
 import '../products/widgets/product_search_dialog_for_select.dart';
 import '../products/widgets/quick_menu_dialog.dart';
 import '../../models/order_item.dart';
@@ -33,6 +33,8 @@ import 'dialogs/pos_stock_insufficient_dialog.dart';
 import 'dialogs/pos_not_found_dialog.dart';
 import 'dialogs/pos_edit_item_dialog.dart';
 import 'dialogs/pos_front_store_checklist_dialog.dart';
+import 'layouts/pos_desktop_layout.dart';
+import 'layouts/pos_tablet_layout.dart';
 
 class PosCheckoutScreen extends StatefulWidget {
   const PosCheckoutScreen({super.key});
@@ -464,59 +466,40 @@ class _PosCheckoutScreenState extends State<PosCheckoutScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth > 900;
+
+                  final controlBar = PosControlBar(
+                    barcodeCtrl: _barcodeCtrl,
+                    qtyCtrl: _qtyCtrl,
+                    barcodeFocusNode: _barcodeFocusNode,
+                    onScan: (val) => val.isEmpty
+                        ? _openPaymentModal()
+                        : _handleBarcodeSubmit(val, posState),
+                    onSearch: () => _showSearchDialog(posState),
+                    onQtyTap: () => PosQuantityDialog.show(context,
+                        onConfirm: _applyQuantity),
+                  );
+                  final cartList = _buildCartList(posState);
+                  const shortcutBar = PosShortcutBar();
+                  final paymentPanel = PosPaymentPanel(
+                    onPaymentSuccess: _resetTransaction,
+                    onClear: _resetTransaction,
+                  );
+
                   if (isWide) {
-                    return Row(children: [
-                      Expanded(
-                        flex: 3,
-                        child: Column(children: [
-                          PosControlBar(
-                            barcodeCtrl: _barcodeCtrl,
-                            qtyCtrl: _qtyCtrl,
-                            barcodeFocusNode: _barcodeFocusNode,
-                            onScan: (val) => val.isEmpty
-                                ? _openPaymentModal()
-                                : _handleBarcodeSubmit(val, posState),
-                            onSearch: () => _showSearchDialog(posState),
-                            onQtyTap: () => PosQuantityDialog.show(context,
-                                onConfirm: _applyQuantity),
-                          ),
-                          Expanded(child: _buildCartList(posState)),
-                          const PosShortcutBar(),
-                        ]),
-                      ),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        flex: 1,
-                        child: PosPaymentPanel(
-                          onPaymentSuccess: _resetTransaction,
-                          onClear: _resetTransaction,
-                        ),
-                      ),
-                    ]);
+                    return PosDesktopLayout(
+                      controlBar: controlBar,
+                      cartList: cartList,
+                      shortcutBar: shortcutBar,
+                      paymentPanel: paymentPanel,
+                    );
                   } else {
-                    return Column(children: [
-                      PosControlBar(
-                        barcodeCtrl: _barcodeCtrl,
-                        qtyCtrl: _qtyCtrl,
-                        barcodeFocusNode: _barcodeFocusNode,
-                        onScan: (val) => val.isEmpty
-                            ? _openPaymentModal()
-                            : _handleBarcodeSubmit(val, posState),
-                        onSearch: () => _showSearchDialog(posState),
-                        onQtyTap: () => PosQuantityDialog.show(context,
-                            onConfirm: _applyQuantity),
-                      ),
-                      Expanded(child: _buildCartList(posState)),
-                      const PosShortcutBar(),
-                      const Divider(height: 1),
-                      SizedBox(
-                        height: constraints.maxHeight * 0.45,
-                        child: PosPaymentPanel(
-                          onPaymentSuccess: _resetTransaction,
-                          onClear: _resetTransaction,
-                        ),
-                      ),
-                    ]);
+                    return PosTabletLayout(
+                      controlBar: controlBar,
+                      cartList: cartList,
+                      shortcutBar: shortcutBar,
+                      paymentPanel: paymentPanel,
+                      maxHeight: constraints.maxHeight,
+                    );
                   }
                 },
               ),

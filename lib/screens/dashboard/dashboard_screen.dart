@@ -34,8 +34,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with TickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen> {
   // ── Repositories / Services ──────────────────────────────────────────────────
   final SalesRepository _salesRepo = SalesRepository();
   final DebtorRepository _debtRepo = DebtorRepository();
@@ -43,7 +42,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   final AiService _aiService = AiService();
 
   // ── State ────────────────────────────────────────────────────────────────────
-  late TabController _tabController;
   bool _isLoading = true;
   DateTime _selectedDate = DateTime.now();
 
@@ -84,13 +82,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -546,40 +542,35 @@ class _DashboardScreenState extends State<DashboardScreen>
       tabViews.add(const BestSellingScreen(isEmbedded: true));
     }
 
-    // Sync TabController length
-    if (_tabController.length != tabs.length) {
-      _tabController.dispose();
-      _tabController =
-          TabController(length: tabs.length, vsync: this, initialIndex: 0);
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text('ภาพรวมธุรกิจและประวัติการขาย',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: tabs,
-          labelColor: Colors.indigo,
-          indicatorColor: Colors.indigo,
-          unselectedLabelColor: Colors.grey,
-        ),
-        actions: [
-          const SyncStatusWidget(),
-          IconButton(
-            icon: const Icon(Icons.local_shipping_outlined, color: Colors.orange),
-            tooltip: 'ดาวน์โหลดรายงานการจัดส่ง (Excel)',
-            onPressed: () => _exportDeliveryHistory(context),
+    return DefaultTabController(
+      length: tabs.length,
+      child: Scaffold(
+        backgroundColor: Colors.grey.shade50,
+        appBar: AppBar(
+          title: const Text('ภาพรวมธุรกิจและประวัติการขาย',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          bottom: TabBar(
+            isScrollable: true,
+            tabs: tabs,
+            labelColor: Colors.indigo,
+            indicatorColor: Colors.indigo,
+            unselectedLabelColor: Colors.grey,
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
-          const SizedBox(width: 10),
-        ],
+          actions: [
+            const SyncStatusWidget(),
+            IconButton(
+              icon: const Icon(Icons.local_shipping_outlined, color: Colors.orange),
+              tooltip: 'ดาวน์โหลดรายงานการจัดส่ง (Excel)',
+              onPressed: () => _exportDeliveryHistory(context),
+            ),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+            const SizedBox(width: 10),
+          ],
+        ),
+        body: TabBarView(children: tabViews),
       ),
-      body: TabBarView(controller: _tabController, children: tabViews),
     );
   }
 }
