@@ -10,7 +10,9 @@ import '../notification_service.dart';
 
 class GoogleDriveService {
   // Google Drive Credentials
-  // Configured on: 2026-01-13
+  // Actual values are stored in MySQL: system_settings table
+  // Keys: 'gdrive_client_id' and 'gdrive_client_secret'
+  // Run: scratch/insert_gdrive_secrets.dart to seed them into your local DB
   static const _clientId = 'YOUR_GOOGLE_CLIENT_ID';
   static const _clientSecret = 'YOUR_GOOGLE_CLIENT_SECRET';
 
