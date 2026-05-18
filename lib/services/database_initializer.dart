@@ -261,16 +261,6 @@ class DatabaseInitializer {
         await CustomerRepository().cleanOldDeletedCustomers();
       });
 
-      // ✅ [AUTO-FIX] Insert Google Drive Secrets
-      await _safeInit('Google Drive Secrets', () async {
-        await _db.execute('''
-          INSERT INTO system_settings (setting_key, setting_value) VALUES 
-          ('gdrive_client_id', '950214694370-0b88lnplqdb7fg7u8bq964clhqnu49oa.apps.googleusercontent.com'),
-          ('gdrive_client_secret', 'YOUR_CLIENT_SECRET_HERE')
-          ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-        ''');
-      });
-
       debugPrint('✅ [DatabaseInitializer]: Initialization complete.');
     } catch (e) {
       debugPrint(

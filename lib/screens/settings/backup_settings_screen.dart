@@ -6,6 +6,7 @@ import 'dart:io';
 import '../../services/backup/google_drive_service.dart';
 import '../../services/system/backup_service.dart';
 import '../../services/alert_service.dart';
+import '../../services/settings_service.dart';
 import '../../widgets/common/confirm_dialog.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
@@ -63,6 +64,12 @@ class _BackupTabState extends State<BackupTab> {
   final _driveService = GoogleDriveService();
   final _backupService = BackupService();
 
+  // Google Credentials controllers
+  final _clientIdCtrl = TextEditingController();
+  final _clientSecretCtrl = TextEditingController();
+  bool _showSecret = false;
+  bool _savingCreds = false;
+
   String _interval = 'NONE';
   String _destination = 'LOCAL';
   bool _isLoading = false;
@@ -72,6 +79,16 @@ class _BackupTabState extends State<BackupTab> {
   void initState() {
     super.initState();
     _loadSettings();
+    // Load existing credentials from MySQL (via SettingsService)
+    _clientIdCtrl.text = SettingsService().gdriveClientId;
+    _clientSecretCtrl.text = SettingsService().gdriveClientSecret;
+  }
+
+  @override
+  void dispose() {
+    _clientIdCtrl.dispose();
+    _clientSecretCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -339,6 +356,78 @@ class _BackupTabState extends State<BackupTab> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // ── Google Drive Credentials ──────────────────────────────────────────
+        const Text('ข้อมูลประจำตัว Google OAuth',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 6),
+        Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.vpn_key, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Google OAuth Credentials',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'ตั้งค่าครั้งเดียว — ค่าถูกเก็บในฐานข้อมูลเครื่องนี้ ไม่ได้อยู่ในโค้ด',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                CustomTextField(
+                  controller: _clientIdCtrl,
+                  label: 'Client ID',
+                  prefixIcon: Icons.badge_outlined,
+                ),
+                const SizedBox(height: 10),
+                CustomTextField(
+                  controller: _clientSecretCtrl,
+                  label: 'Client Secret',
+                  prefixIcon: Icons.lock_outline,
+                  obscureText: !_showSecret,
+                  suffixIcon: IconButton(
+                    icon: Icon(_showSecret ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _showSecret = !_showSecret),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: CustomButton(
+                    isLoading: _savingCreds,
+                    onPressed: _savingCreds
+                        ? null
+                        : () {
+                            setState(() => _savingCreds = true);
+                            SettingsService().gdriveClientId =
+                                _clientIdCtrl.text.trim();
+                            SettingsService().gdriveClientSecret =
+                                _clientSecretCtrl.text.trim();
+                            setState(() => _savingCreds = false);
+                            AlertService.show(
+                              context: context,
+                              message: 'บันทึก Credentials เรียบร้อยแล้ว',
+                              type: 'success',
+                            );
+                          },
+                    label: 'บันทึก Credentials',
+                    icon: Icons.save,
+                    type: ButtonType.secondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        // ── Google Drive Connection ───────────────────────────────────────────
         Card(
           elevation: 2,
           child: Padding(
