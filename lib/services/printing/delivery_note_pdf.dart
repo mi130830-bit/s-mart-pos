@@ -50,7 +50,8 @@ class DeliveryNotePdf {
     final int itemsPerPage = isA4 ? 20 : (isContinuous ? 6 : 8);
     final double globalFontSize = isA4 ? 12.0 : 9.5;
     final double headerFontSize = isA4 ? 12.0 : 9.0;
-    final double titleFontSize = isA4 ? 16.0 : 11.0;
+    final double titleFontSize = isA4 ? 16.0 : 13.0;
+    final double shopNameFontSize = isA4 ? 18.0 : 14.5;
     final double cellPaddingVertical = isA4 ? 4.0 : 2.0;
 
     final int totalPages =
@@ -74,7 +75,9 @@ class DeliveryNotePdf {
             children: [
               _buildHeader(
                   shopInfo, logo, orderId, font, fontBold, documentTitleEn,
-                  titleFontSize: titleFontSize, headerFontSize: headerFontSize),
+                  titleFontSize: titleFontSize,
+                  shopNameFontSize: shopNameFontSize,
+                  headerFontSize: headerFontSize),
               pw.SizedBox(height: isA4 ? 10 : 4),
               _buildCustomerInfo(customer, font, fontBold,
                   useShippingAddress: useShippingAddress,
@@ -115,7 +118,9 @@ class DeliveryNotePdf {
 
   static pw.Widget _buildHeader(ShopInfo shopInfo, pw.ImageProvider? logo,
       int orderId, pw.Font font, pw.Font fontBold, String title,
-      {required double titleFontSize, required double headerFontSize}) {
+      {required double titleFontSize,
+      required double shopNameFontSize,
+      required double headerFontSize}) {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -133,7 +138,7 @@ class DeliveryNotePdf {
                     shopInfo.name.trim().startsWith('ร้าน')
                         ? shopInfo.name.trim()
                         : 'ร้าน ${shopInfo.name.trim()}',
-                    style: pw.TextStyle(font: fontBold, fontSize: titleFontSize)),
+                    style: pw.TextStyle(font: fontBold, fontSize: shopNameFontSize)),
                 if (!shopInfo.address.contains('จำหน่ายวัสดุก่อสร้าง') &&
                     !shopInfo.address.contains('อุปกรณ์ไฟฟ้า'))
                   pw.Text('จำหน่ายวัสดุก่อสร้าง อุปกรณ์ไฟฟ้าและประปา',
