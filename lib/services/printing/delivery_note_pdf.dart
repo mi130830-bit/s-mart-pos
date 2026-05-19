@@ -41,12 +41,16 @@ class DeliveryNotePdf {
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
     );
 
-    // Styling configuration based on Page format size (A4 vs A5/Continuous)
-    final bool isA4 = pageFormat.height > 600;
-    final int itemsPerPage = isA4 ? 20 : 6;
-    final double globalFontSize = isA4 ? 12.0 : 10.0;
-    final double headerFontSize = isA4 ? 12.0 : 10.0;
-    final double titleFontSize = isA4 ? 16.0 : 14.0;
+    // Determine paper type by size (in points: 1mm = ~2.835pt)
+    // A4 height ≈ 841pt, A5 height ≈ 595pt, Continuous ≈ 396pt (5.5in)
+    final bool isA4 = pageFormat.height > 700;
+    final bool isContinuous = pageFormat.height < 430; // 5.5in = ~396pt
+    // else: A5 standard
+
+    final int itemsPerPage = isA4 ? 20 : (isContinuous ? 6 : 8);
+    final double globalFontSize = isA4 ? 12.0 : 9.5;
+    final double headerFontSize = isA4 ? 12.0 : 9.0;
+    final double titleFontSize = isA4 ? 16.0 : 11.0;
     final double cellPaddingVertical = isA4 ? 4.0 : 2.0;
 
     final int totalPages =
@@ -71,12 +75,12 @@ class DeliveryNotePdf {
               _buildHeader(
                   shopInfo, logo, orderId, font, fontBold, documentTitleEn,
                   titleFontSize: titleFontSize, headerFontSize: headerFontSize),
-              pw.SizedBox(height: isA4 ? 10 : 5),
+              pw.SizedBox(height: isA4 ? 10 : 4),
               _buildCustomerInfo(customer, font, fontBold,
                   useShippingAddress: useShippingAddress,
                   fontSize: globalFontSize,
-                  labelWidth: isA4 ? 50 : 40),
-              pw.SizedBox(height: isA4 ? 10 : 5),
+                  labelWidth: isA4 ? 50 : 38),
+              pw.SizedBox(height: isA4 ? 10 : (isContinuous ? 3 : 4)),
               pw.Expanded(
                 child: _buildTable(chunkItems, start + 1, moneyFmt, font,
                     fontBold, itemsPerPage,
@@ -91,7 +95,7 @@ class DeliveryNotePdf {
                   totalPages: totalPages,
                   remark: remark,
                   fontSize: globalFontSize,
-                  footerSpacing: isA4 ? 60 : 30),
+                  footerSpacing: isA4 ? 60 : (isContinuous ? 5 : 15)),
             ],
           );
 
@@ -179,27 +183,33 @@ class DeliveryNotePdf {
                 width: labelWidth,
                 child: pw.Text('ลูกค้า: ',
                     style: pw.TextStyle(font: fontBold, fontSize: fontSize))),
-            pw.Text(customer?.name ?? '-',
-                style: pw.TextStyle(font: font, fontSize: fontSize)),
+            pw.Expanded(
+              child: pw.Text(customer?.name ?? '-',
+                  style: pw.TextStyle(font: font, fontSize: fontSize)),
+            ),
           ]),
-          pw.Row(children: [
+          pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.SizedBox(
                 width: labelWidth,
                 child: pw.Text('ที่อยู่: ',
                     style: pw.TextStyle(font: fontBold, fontSize: fontSize))),
-            pw.Text(
-                useShippingAddress
-                    ? (customer?.shippingAddress ?? customer?.address ?? '-')
-                    : (customer?.address ?? '-'),
-                style: pw.TextStyle(font: font, fontSize: fontSize)),
+            pw.Expanded(
+              child: pw.Text(
+                  useShippingAddress
+                      ? (customer?.shippingAddress ?? customer?.address ?? '-')
+                      : (customer?.address ?? '-'),
+                  style: pw.TextStyle(font: font, fontSize: fontSize)),
+            ),
           ]),
           pw.Row(children: [
             pw.SizedBox(
                 width: labelWidth,
                 child: pw.Text('โทร: ',
                     style: pw.TextStyle(font: fontBold, fontSize: fontSize))),
-            pw.Text(customer?.phone ?? '-',
-                style: pw.TextStyle(font: font, fontSize: fontSize)),
+            pw.Expanded(
+              child: pw.Text(customer?.phone ?? '-',
+                  style: pw.TextStyle(font: font, fontSize: fontSize)),
+            ),
           ]),
         ]);
   }

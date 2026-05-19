@@ -42,6 +42,9 @@ class CashReceiptHandler {
 
       final shopInfo = await PrintDataHelper.getShopInfo();
       final shopLogoBytes = await PrintDataHelper.getShopLogoBytes();
+      final printer = printerOverride ??
+          await PrintSettingsHelper.getPrinterBySettingKey(
+              useCashBillSettings ? PrintSettingsHelper.keyCashBillPrinter : PrintSettingsHelper.keyCashPrinter);
       final isThermal = pageFormat.width < 270;
       Uint8List bytes;
 
@@ -62,6 +65,18 @@ class CashReceiptHandler {
           shopLogoBytes: shopLogoBytes,
         );
       } else {
+        final isContinuous = pageFormat.width > 200 * PdfPageFormat.mm;
+        final finalPageFormat = isContinuous
+            ? PdfPageFormat(
+                9.0 * PdfPageFormat.inch,
+                5.5 * PdfPageFormat.inch,
+                marginLeft: 0.5 * PdfPageFormat.cm,
+                marginRight: 2.50 * PdfPageFormat.cm,
+                marginTop: 0.8 * PdfPageFormat.cm,
+                marginBottom: 0.8 * PdfPageFormat.cm,
+              )
+            : pageFormat;
+
         final isA4 = pageFormat == PdfPageFormat.a4;
         bytes = await DeliveryNotePdf.generate(
           orderId: orderId,
@@ -70,18 +85,23 @@ class CashReceiptHandler {
           discount: discount,
           shopInfo: shopInfo,
           remark: remark,
-          pageFormat: pageFormat,
+          pageFormat: finalPageFormat,
           documentTitleTh: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
           documentTitleEn: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
           signatureLabel: 'ผู้รับเงิน',
           useShippingAddress: false,
           shopLogoBytes: shopLogoBytes,
         );
-      }
 
-      final printer = printerOverride ??
-          await PrintSettingsHelper.getPrinterBySettingKey(
-              useCashBillSettings ? PrintSettingsHelper.keyCashBillPrinter : PrintSettingsHelper.keyCashPrinter);
+        await PrintCoreService.printDocument(
+          bytes: bytes,
+          docName: 'Receipt_$orderId',
+          format: finalPageFormat,
+          printer: printer,
+          isPreview: isPreview,
+        );
+        return;
+      }
 
       await PrintCoreService.printDocument(
         bytes: bytes,
@@ -183,6 +203,18 @@ class CashReceiptHandler {
           shopLogoBytes: shopLogoBytes,
         );
       } else {
+        final isContinuous = format.width > 200 * PdfPageFormat.mm;
+        final finalPageFormat = isContinuous
+            ? PdfPageFormat(
+                9.0 * PdfPageFormat.inch,
+                5.5 * PdfPageFormat.inch,
+                marginLeft: 0.5 * PdfPageFormat.cm,
+                marginRight: 2.50 * PdfPageFormat.cm,
+                marginTop: 0.8 * PdfPageFormat.cm,
+                marginBottom: 0.8 * PdfPageFormat.cm,
+              )
+            : format;
+
         final isA4 = format == PdfPageFormat.a4;
         bytes = await DeliveryNotePdf.generate(
           orderId: transactionId,
@@ -190,13 +222,22 @@ class CashReceiptHandler {
           customer: validCustomer,
           discount: 0,
           shopInfo: shopInfo,
-          pageFormat: format,
+          pageFormat: finalPageFormat,
           documentTitleTh: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
           documentTitleEn: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
           signatureLabel: 'ผู้รับเงิน',
           useShippingAddress: false,
           shopLogoBytes: shopLogoBytes,
         );
+
+        await PrintCoreService.printDocument(
+          bytes: bytes,
+          docName: 'DebtReceipt_$transactionId',
+          format: finalPageFormat,
+          printer: printer,
+          isPreview: false,
+        );
+        return;
       }
 
       await PrintCoreService.printDocument(
@@ -253,6 +294,18 @@ class CashReceiptHandler {
           shopLogoBytes: shopLogoBytes,
         );
       } else {
+        final isContinuous = format.width > 200 * PdfPageFormat.mm;
+        final finalPageFormat = isContinuous
+            ? PdfPageFormat(
+                9.0 * PdfPageFormat.inch,
+                5.5 * PdfPageFormat.inch,
+                marginLeft: 0.5 * PdfPageFormat.cm,
+                marginRight: 2.50 * PdfPageFormat.cm,
+                marginTop: 0.8 * PdfPageFormat.cm,
+                marginBottom: 0.8 * PdfPageFormat.cm,
+              )
+            : format;
+
         final isA4 = format == PdfPageFormat.a4;
         bytes = await DeliveryNotePdf.generate(
           orderId: orderId,
@@ -260,13 +313,22 @@ class CashReceiptHandler {
           customer: validCustomer,
           discount: discount,
           shopInfo: shopInfo,
-          pageFormat: format,
+          pageFormat: finalPageFormat,
           documentTitleTh: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
           documentTitleEn: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
           signatureLabel: 'ผู้รับเงิน',
           useShippingAddress: false,
           shopLogoBytes: shopLogoBytes,
         );
+
+        await PrintCoreService.printDocument(
+          bytes: bytes,
+          docName: 'Bill_$orderId',
+          format: finalPageFormat,
+          printer: printer,
+          isPreview: false,
+        );
+        return;
       }
 
       await PrintCoreService.printDocument(
@@ -342,6 +404,18 @@ class CashReceiptHandler {
         currentPoints: 0,
       );
 
+      final isContinuous = format.width > 200 * PdfPageFormat.mm;
+      final finalPageFormat = isContinuous
+          ? PdfPageFormat(
+              9.0 * PdfPageFormat.inch,
+              5.5 * PdfPageFormat.inch,
+              marginLeft: 0.5 * PdfPageFormat.cm,
+              marginRight: 2.50 * PdfPageFormat.cm,
+              marginTop: 0.8 * PdfPageFormat.cm,
+              marginBottom: 0.8 * PdfPageFormat.cm,
+            )
+          : format;
+
       final isA4 = format == PdfPageFormat.a4;
       final shopLogoBytes = await PrintDataHelper.getShopLogoBytes();
       return DeliveryNotePdf.generate(
@@ -350,7 +424,7 @@ class CashReceiptHandler {
         customer: customer,
         discount: 0,
         shopInfo: shopInfo,
-        pageFormat: format,
+        pageFormat: finalPageFormat,
         showRuler: true,
         documentTitleTh: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
         documentTitleEn: isA4 ? 'บิลเงินสด' : 'ใบเสร็จรับเงิน',
@@ -386,11 +460,23 @@ class CashReceiptHandler {
       format = await PrintSettingsHelper.getCashPageFormat();
     }
 
+    final isContinuous = format.width > 200 * PdfPageFormat.mm;
+    final finalPageFormat = isContinuous
+        ? PdfPageFormat(
+            9.0 * PdfPageFormat.inch,
+            5.5 * PdfPageFormat.inch,
+            marginLeft: 0.5 * PdfPageFormat.cm,
+            marginRight: 2.50 * PdfPageFormat.cm,
+            marginTop: 0.8 * PdfPageFormat.cm,
+            marginBottom: 0.8 * PdfPageFormat.cm,
+          )
+        : format;
+
     await PrintCoreService.printDocument(
         bytes: bytes,
         printer: printer,
         docName: 'Test_Receipt',
-        format: format,
+        format: finalPageFormat,
         isPreview: isPreview);
   }
 }
