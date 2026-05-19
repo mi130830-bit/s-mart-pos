@@ -66,3 +66,53 @@
 ### 🚀 Upcoming: UI Integration
 - [ ] เพิ่มปุ่ม "สรุปน้ำมันรายเดือน" ในหน้า Dashboard/Reports ของ POS Desktop
 - [ ] เพิ่มระบบ Sync อัตโนมัติสำหรับราคาน้ำมัน (Optional)
+
+---
+
+## 📦 Monolithic Codebase Decomposition Plan (500+ Lines)
+แผนพัฒนาปรับปรุงโครงสร้างโค้ดสำหรับไฟล์ที่มีขนาดใหญ่เกิน 500 บรรทัด (ไม่รวมไฟล์ Generated `.g.dart`) เพื่อแยก Domain/UI Section และเพิ่มความง่ายในการรักษาความปลอดภัยและการทำงานในระยะยาว:
+
+### 📂 1. Domain Repositories (Data & Logic Layers)
+*   [ ] `lib/repositories/stock_repository.dart` (~1,291 lines) - **เร่งด่วนที่สุด** (ควรแยกออกเป็น `StockReceiveRepository`, `StockHistoryRepository`, `StockAdjustmentRepository`)
+*   [ ] `lib/repositories/sales_repository.dart` (~1,123 lines) - **เร่งด่วน** (ควรแยกส่วนพิมพ์บิล, สรุปยอดกะ, บันทึกการขาย หรือย้ายเข้า Services)
+*   [ ] `lib/repositories/product_repository.dart` (~938 lines) - (ควรแยกการ Sync ข้อมูล, การจัดการคลัง, ข้อมูลสินค้าหลัก)
+*   [ ] `lib/repositories/debtor_repository.dart` (~782 lines) - (ควรแยกการจัดการชำระหนี้, ประวัติ Ledger หนี้)
+*   [ ] `lib/repositories/customer_repository.dart` (~720 lines) - (ควรแยกฟังก์ชันสมาชิก/แต้มสะสม ออกจากข้อมูลที่อยู่ลูกค้า)
+
+### 🖥️ 2. Large UI Screens & Dialogs (Presentation Layer)
+*   [ ] `lib/screens/products/stock_in/pages/stock_in_create_page.dart` (~1,132 lines) - **เร่งด่วน** (ควรดึง Widget ตารางและฟอร์มสร้างใบสั่งซื้อไปเป็น Sub-widgets)
+*   [ ] `lib/screens/customers/debtor_list_screen.dart` (~964 lines) - (ควรแยก Tab ชำระหนี้ และ Tab แสดงรายการลูกหนี้)
+*   [ ] `lib/screens/reports/delivery_dashboard_screen.dart` (~940 lines) - (แยก Widget แผนที่ Google Maps, สรุปคนขับ และกราฟรายงาน)
+*   [ ] `lib/screens/products/widgets/quick_menu_dialog.dart` (~848 lines) - (แยกเมนูทางลัดปุ่มลัดออกเป็น Module)
+*   [ ] `lib/screens/products/stock_ledger_views.dart` (~813 lines) - (แยกส่วนตารางประวัติสินค้า และตัวกรอง Filter)
+*   [ ] `lib/screens/reports/delivery_report_screen.dart` (~806 lines)
+*   [ ] `lib/screens/settings/backup_settings_screen.dart` (~763 lines)
+*   [ ] `lib/screens/users/user_management_screen.dart` (~745 lines)
+*   [ ] `lib/screens/settings/connection_settings_screen.dart` (~714 lines)
+*   [ ] `lib/screens/promotions/reward_management_screen.dart` (~709 lines)
+*   [ ] `lib/screens/products/stock_return_section.dart` (~697 lines)
+*   [ ] `lib/screens/products/barcode_printing_screen.dart` (~695 lines)
+*   [ ] `lib/screens/settings/fuel_management_screen.dart` (~670 lines)
+*   [ ] `lib/screens/promotions/promotion_list_screen.dart` (~649 lines)
+*   [ ] `lib/screens/pos/pos_payment_panel.dart` (~639 lines)
+*   [ ] `lib/screens/products/stock_adjustment_section.dart` (~631 lines)
+*   [ ] `lib/screens/products/dialogs/product_form/layouts/product_form_left_column.dart` (~615 lines)
+*   [ ] `lib/screens/products/product_import_screen.dart` (~604 lines)
+*   [ ] `lib/screens/settings/barcode_designer_screen.dart` (~601 lines)
+*   [ ] `lib/screens/pos/payment_modal/controllers/payment_modal_controller.dart` (~590 lines)
+*   [ ] `lib/screens/products/master_data_management_screen.dart` (~590 lines)
+*   [ ] `lib/screens/settings/barcode_print_setup_screen.dart` (~586 lines)
+*   [ ] `lib/screens/dashboard/dashboard_screen.dart` (~576 lines)
+*   [ ] `lib/screens/pos/pos_checkout_screen.dart` (~575 lines)
+*   [ ] `lib/screens/customers/customer_form_dialog.dart` (~567 lines)
+*   [ ] `lib/screens/customers/create_billing_screen.dart` (~564 lines)
+*   [ ] `lib/screens/products/stock_in/tabs/purchase_order_history_tab.dart` (~560 lines)
+*   [ ] `lib/screens/customer_display/customer_display_screen.dart` (~527 lines)
+*   [ ] `lib/screens/pos/pos_cart_list.dart` (~527 lines)
+*   [ ] `lib/screens/settings/initial_setup_screen.dart` (~502 lines)
+
+### ⚙️ 3. Core Services & Integrations
+*   [ ] `lib/services/firebase_service.dart` (~1,022 lines) - **เร่งด่วน** (แยก Logic การเชื่อมต่อ Realtime Firestore และฟังก์ชันอัปเดต Token)
+*   [ ] `lib/services/mysql_service.dart` (~845 lines) - (ควรแยก SQL Queries และ Connection pooling ออกจากกัน)
+*   [ ] `lib/services/integration/delivery_integration_service.dart` (~657 lines) - (ควรแยกส่วน Cloud Functions และ Firestore sync)
+*   [ ] `lib/services/firestore_rest_service.dart` (~623 lines)
