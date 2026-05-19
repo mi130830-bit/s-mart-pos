@@ -163,7 +163,7 @@ class StockRepository {
                 : (type == 'CART_OUT' ? 'USAGE' : type),
             'Linked from Product #$pId',
             oId,
-            visited: visited,
+            visited: Set.from(visited), // ✅ Copy per branch — ป้องกัน false-positive cycle detection
             maxDepth: maxDepth - 1,
           );
         }
