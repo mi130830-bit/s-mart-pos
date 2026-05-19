@@ -129,10 +129,15 @@ class DeliveryNotePdf {
           child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('ร้าน ${shopInfo.name}',
+                pw.Text(
+                    shopInfo.name.trim().startsWith('ร้าน')
+                        ? shopInfo.name.trim()
+                        : 'ร้าน ${shopInfo.name.trim()}',
                     style: pw.TextStyle(font: fontBold, fontSize: titleFontSize)),
-                pw.Text('จำหน่ายวัสดุก่อสร้าง อุปกรณ์ไฟฟ้าและประปา',
-                    style: pw.TextStyle(font: font, fontSize: headerFontSize)),
+                if (!shopInfo.address.contains('จำหน่ายวัสดุก่อสร้าง') &&
+                    !shopInfo.address.contains('อุปกรณ์ไฟฟ้า'))
+                  pw.Text('จำหน่ายวัสดุก่อสร้าง อุปกรณ์ไฟฟ้าและประปา',
+                      style: pw.TextStyle(font: font, fontSize: headerFontSize)),
                 pw.Text(shopInfo.address,
                     style: pw.TextStyle(font: font, fontSize: headerFontSize)),
                 pw.Text('โทร: ${shopInfo.phone}',
