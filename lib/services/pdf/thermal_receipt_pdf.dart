@@ -23,11 +23,12 @@ class ThermalReceiptPdf {
     required PdfPageFormat pageFormat,
     required ShopInfo shopInfo,
     String? cashierName, // ✅ รับข้อมูลพนักงานเก็บเงิน
+    Uint8List? shopLogoBytes,
   }) async {
     // 1. เตรียม Font และ Logo
     final font = await PdfHelper.getFontRegular();
     final fontBold = await PdfHelper.getFontBold();
-    final logo = await PdfHelper.getLogo();
+    final logo = shopLogoBytes != null ? pw.MemoryImage(shopLogoBytes) : null;
     final moneyFmt = NumberFormat('#,##0.00');
 
     // 2. ตรวจสอบขนาดกระดาษ

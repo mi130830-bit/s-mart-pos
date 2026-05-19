@@ -4,7 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pos_desktop/models/customer.dart';
 import 'package:pos_desktop/models/order_item.dart';
 import 'package:pos_desktop/services/printing/delivery_note_pdf.dart';
-import 'package:pos_desktop/services/pdf/tax_invoice_pdf.dart';
+import 'package:pos_desktop/services/printing/tax_invoice_pdf.dart';
 import 'package:pos_desktop/services/pdf/thermal_receipt_pdf.dart';
 import 'package:pos_desktop/models/shop_info.dart';
 import 'package:decimal/decimal.dart';

@@ -1,17 +1,12 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter/services.dart' show rootBundle;
 
 class PdfHelper {
-  // Keys for Logo & Shop Info
-  static const String _keyShopLogo = 'shop_logo_base64';
 
   static Future<pw.Font> getFontRegular() async {
     await initializeDateFormatting('th', null);
@@ -45,30 +40,7 @@ class PdfHelper {
     }
   }
 
-  static Future<pw.MemoryImage?> getLogo() async {
-    final prefs = await SharedPreferences.getInstance();
 
-    try {
-      // 1. Try loading from Path (shop_logo_path) - Primary Method
-      final logoPath = prefs.getString('shop_logo_path');
-      if (logoPath != null && logoPath.isNotEmpty) {
-        final file = File(logoPath);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          return pw.MemoryImage(bytes);
-        }
-      }
-
-      // 2. Fallback: Try loading from Base64 (legacy)
-      final base64String = prefs.getString(_keyShopLogo);
-      if (base64String != null && base64String.isNotEmpty) {
-        return pw.MemoryImage(base64Decode(base64String));
-      }
-    } catch (e) {
-      debugPrint('Error loading logo: $e');
-    }
-    return null;
-  }
 
   // Draw Ruler Overlay (for verifying dimension)
   static pw.Widget buildRuler(double width, double height, pw.Font font) {

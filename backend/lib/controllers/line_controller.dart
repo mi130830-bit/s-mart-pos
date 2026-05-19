@@ -234,6 +234,9 @@ class LineController {
 
       await _lineService.pushImage(lineUserId, imageUrl);
 
+      // ✅ 4. Auto-cleanup old bills (older than 7 days)
+      _cleanupOldBills(directory);
+
       return Response.ok('Receipt Image Sent');
     } catch (e, stack) {
       stderr.writeln('Push Receipt Image Error: $e');
@@ -241,6 +244,26 @@ class LineController {
       return Response.internalServerError(
         body: 'Failed to push receipt image: $e',
       );
+    }
+  }
+
+  void _cleanupOldBills(Directory directory) {
+    try {
+      final now = DateTime.now();
+      final files = directory.listSync().whereType<File>();
+      int deletedCount = 0;
+      for (final file in files) {
+        final lastModified = file.lastModifiedSync();
+        if (now.difference(lastModified).inDays >= 7) {
+          file.deleteSync();
+          deletedCount++;
+        }
+      }
+      if (deletedCount > 0) {
+        stdout.writeln('🧹 Cleaned up $deletedCount old bill images.');
+      }
+    } catch (e) {
+      stderr.writeln('⚠️ Failed to clean up old bills: $e');
     }
   }
 
