@@ -73,7 +73,7 @@
 แผนพัฒนาปรับปรุงโครงสร้างโค้ดสำหรับไฟล์ที่มีขนาดใหญ่เกิน 500 บรรทัด (ไม่รวมไฟล์ Generated `.g.dart`) เพื่อแยก Domain/UI Section และเพิ่มความง่ายในการรักษาความปลอดภัยและการทำงานในระยะยาว:
 
 ### 📂 1. Domain Repositories (Data & Logic Layers)
-*   [ ] `lib/repositories/stock_repository.dart` (~1,291 lines) - **เร่งด่วนที่สุด** (ควรแยกออกเป็น `StockReceiveRepository`, `StockHistoryRepository`, `StockAdjustmentRepository`)
+*   [x] `lib/repositories/stock_repository.dart` (~1,291 lines) - **เร่งด่วนที่สุด** (ควรแยกออกเป็น `StockReceiveRepository`, `StockHistoryRepository`, `StockAdjustmentRepository`)
 *   [ ] `lib/repositories/sales_repository.dart` (~1,123 lines) - **เร่งด่วน** (ควรแยกส่วนพิมพ์บิล, สรุปยอดกะ, บันทึกการขาย หรือย้ายเข้า Services)
 *   [ ] `lib/repositories/product_repository.dart` (~938 lines) - (ควรแยกการ Sync ข้อมูล, การจัดการคลัง, ข้อมูลสินค้าหลัก)
 *   [ ] `lib/repositories/debtor_repository.dart` (~782 lines) - (ควรแยกการจัดการชำระหนี้, ประวัติ Ledger หนี้)
