@@ -33,6 +33,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   final UnitRepository _unitRepo = UnitRepository();
 
   final List<StockInItem> _stockInItems = [];
+  final List<Map<String, TextEditingController>> _itemControllers = [];
   final TextEditingController _docNoCtrl = TextEditingController();
 
   List<Supplier> _suppliers = [];
@@ -43,6 +44,35 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   bool _isPaid = false;
   bool _isLoading = false;
 
+  Map<String, TextEditingController> _createControllersForItem(StockInItem item) {
+    final qtyStr = item.quantity > 0
+        ? item.quantity.toString().replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "")
+        : "";
+    final costStr = item.costPrice
+        .toStringAsFixed(4)
+        .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
+    return {
+      'qty': TextEditingController(text: qtyStr),
+      'cost': TextEditingController(text: costStr),
+    };
+  }
+
+  void _calculateTotals() {
+    setState(() {
+      for (int i = 0; i < _stockInItems.length; i++) {
+        final item = _stockInItems[i];
+        final qtyCtrl = _itemControllers[i]['qty'];
+        final costCtrl = _itemControllers[i]['cost'];
+        if (qtyCtrl != null) {
+          item.quantity = double.tryParse(qtyCtrl.text) ?? 0.0;
+        }
+        if (costCtrl != null) {
+          item.costPrice = double.tryParse(costCtrl.text) ?? 0.0;
+        }
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -52,9 +82,11 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   @override
   void dispose() {
     _docNoCtrl.dispose();
-    for (var item in _stockInItems) {
-      item.dispose();
+    for (var ctrls in _itemControllers) {
+      ctrls['qty']?.dispose();
+      ctrls['cost']?.dispose();
     }
+    _itemControllers.clear();
     super.dispose();
   }
 
@@ -116,13 +148,15 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               double.tryParse(item['receivedQuantity'].toString()) ?? 0;
 
           if (p != null) {
-            _stockInItems.add(StockInItem(
+            final newItem = StockInItem(
               product: p,
               quantity: qty,
               costPrice: double.tryParse(item['costPrice'].toString()) ?? 0,
               vatType: p.vatType,
               receivedQuantity: received, // ✅ Added
-            ));
+            );
+            _stockInItems.add(newItem);
+            _itemControllers.add(_createControllersForItem(newItem));
           } else {
             // ✅ Fallback for Deleted Product
             final dummyProduct = Product(
@@ -136,13 +170,15 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               points: 0,
               trackStock: false,
             );
-            _stockInItems.add(StockInItem(
+            final newItem = StockInItem(
               product: dummyProduct,
               quantity: qty,
               costPrice: double.tryParse(item['costPrice'].toString()) ?? 0,
               vatType: 0,
               receivedQuantity: received, // ✅ Added
-            ));
+            );
+            _stockInItems.add(newItem);
+            _itemControllers.add(_createControllersForItem(newItem));
           }
         }
       }
@@ -171,15 +207,19 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
           );
           if (existingIndex >= 0) {
             _stockInItems[existingIndex].quantity += 1;
+            final newQty = _stockInItems[existingIndex].quantity;
+            _itemControllers[existingIndex]['qty']?.text = newQty > 0
+                ? newQty.toString().replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "")
+                : "";
           } else {
-            _stockInItems.add(
-              StockInItem(
-                product: picked,
-                quantity: 1,
-                costPrice: picked.costPrice,
-                vatType: picked.vatType,
-              ),
+            final newItem = StockInItem(
+              product: picked,
+              quantity: 1,
+              costPrice: picked.costPrice,
+              vatType: picked.vatType,
             );
+            _stockInItems.add(newItem);
+            _itemControllers.add(_createControllersForItem(newItem));
           }
         }
       });
@@ -198,14 +238,14 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
 
     if (newProduct != null && mounted) {
       setState(() {
-        _stockInItems.add(
-          StockInItem(
-            product: newProduct,
-            quantity: 1,
-            costPrice: newProduct.costPrice,
-            vatType: newProduct.vatType,
-          ),
+        final newItem = StockInItem(
+          product: newProduct,
+          quantity: 1,
+          costPrice: newProduct.costPrice,
+          vatType: newProduct.vatType,
         );
+        _stockInItems.add(newItem);
+        _itemControllers.add(_createControllersForItem(newItem));
       });
     }
   }
@@ -232,8 +272,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
             _stockInItems[i] = StockInItem(
               product: updatedProduct,
               quantity: oldItem.quantity,
-              costPrice: oldItem
-                  .costPrice, // Keep trip cost or update? Usually keep trip cost.
+              costPrice: oldItem.costPrice, // Keep trip cost or update? Usually keep trip cost.
               vatType: updatedProduct.vatType,
             );
           }
@@ -315,9 +354,13 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                   onPressed: () {
                     setState(() {
                       item.costPrice = calculateCostPerUnit();
-                      item.costCtrl.text = item.costPrice
-                          .toStringAsFixed(4)
-                          .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
+                      final idx = _stockInItems.indexOf(item);
+                      if (idx >= 0) {
+                        _itemControllers[idx]['cost']?.text = item.costPrice
+                            .toStringAsFixed(4)
+                            .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
+                      }
+                      _calculateTotals();
                     });
                     Navigator.pop(context);
                   },
@@ -712,15 +755,21 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                                         index: index,
                                         unitName: unitName,
                                         poStatus: _poStatus,
+                                        qtyCtrl: _itemControllers[index]['qty']!,
+                                        costCtrl: _itemControllers[index]['cost']!,
                                         onEdit: () => _editProductDetail(item),
                                         onCalculate: () => _showCostCalculator(item),
                                         onDelete: () {
                                           setState(() {
-                                            _stockInItems[index].dispose();
+                                            _itemControllers[index]['qty']?.dispose();
+                                            _itemControllers[index]['cost']?.dispose();
+                                            _itemControllers.removeAt(index);
                                             _stockInItems.removeAt(index);
+                                            _calculateTotals();
                                           });
                                         },
-                                        onTotalChanged: () => setState(() {}),
+                                        onQtyChanged: (val) => _calculateTotals(),
+                                        onCostChanged: (val) => _calculateTotals(),
                                       );
                                     },
                                   ),

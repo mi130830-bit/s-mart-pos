@@ -3,17 +3,18 @@ import 'package:intl/intl.dart';
 import '../../../../../widgets/common/custom_text_field.dart';
 import '../../models/stock_in_item.dart';
 
-// ✅ Task 1: Refactored StockInTableRow to StatefulWidget to manage local TextField edits 
-// without triggering full parent page rebuilds, preventing cursor jump and lag.
 class StockInTableRow extends StatefulWidget {
   final StockInItem item;
   final int index;
   final String unitName;
   final String poStatus;
+  final TextEditingController qtyCtrl;
+  final TextEditingController costCtrl;
   final VoidCallback onEdit;
   final VoidCallback onCalculate;
   final VoidCallback onDelete;
-  final VoidCallback onTotalChanged; // Notify parent to update grand totals
+  final ValueChanged<String> onQtyChanged;
+  final ValueChanged<String> onCostChanged;
 
   const StockInTableRow({
     super.key,
@@ -21,10 +22,13 @@ class StockInTableRow extends StatefulWidget {
     required this.index,
     required this.unitName,
     required this.poStatus,
+    required this.qtyCtrl,
+    required this.costCtrl,
     required this.onEdit,
     required this.onCalculate,
     required this.onDelete,
-    required this.onTotalChanged,
+    required this.onQtyChanged,
+    required this.onCostChanged,
   });
 
   @override
@@ -34,38 +38,19 @@ class StockInTableRow extends StatefulWidget {
 class _StockInTableRowState extends State<StockInTableRow> {
   late FocusNode _qtyFocusNode;
   late FocusNode _costFocusNode;
-  bool _qtyWasFocused = false;
-  bool _costWasFocused = false;
 
   @override
   void initState() {
     super.initState();
     _qtyFocusNode = FocusNode();
     _costFocusNode = FocusNode();
-
-    _qtyFocusNode.addListener(_onFocusChange);
-    _costFocusNode.addListener(_onFocusChange);
   }
 
   @override
   void dispose() {
-    _qtyFocusNode.removeListener(_onFocusChange);
-    _costFocusNode.removeListener(_onFocusChange);
     _qtyFocusNode.dispose();
     _costFocusNode.dispose();
     super.dispose();
-  }
-
-  void _onFocusChange() {
-    // Notify parent ONLY when a textfield loses focus to recalculate grand total.
-    if (_qtyWasFocused && !_qtyFocusNode.hasFocus) {
-      widget.onTotalChanged();
-    }
-    if (_costWasFocused && !_costFocusNode.hasFocus) {
-      widget.onTotalChanged();
-    }
-    _qtyWasFocused = _qtyFocusNode.hasFocus;
-    _costWasFocused = _costFocusNode.hasFocus;
   }
 
   @override
@@ -148,19 +133,17 @@ class _StockInTableRowState extends State<StockInTableRow> {
                       ],
                     )
                   : CustomTextField(
-                      controller: widget.item.qtyCtrl,
+                      controller: widget.qtyCtrl,
                       focusNode: _qtyFocusNode,
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                       onChanged: (val) {
-                        setState(() {
-                          widget.item.quantity = double.tryParse(val) ?? 0.0;
-                        });
+                        widget.onQtyChanged(val);
                       },
                       onSubmitted: (_) {
-                        widget.onTotalChanged();
+                        widget.onQtyChanged(widget.qtyCtrl.text);
                       },
                       selectAllOnFocus: true,
                       enabled: widget.poStatus == 'NEW' ||
@@ -176,19 +159,17 @@ class _StockInTableRowState extends State<StockInTableRow> {
               children: [
                 Expanded(
                   child: CustomTextField(
-                    controller: widget.item.costCtrl,
+                    controller: widget.costCtrl,
                     focusNode: _costFocusNode,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.right,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     onChanged: (val) {
-                      setState(() {
-                        widget.item.costPrice = double.tryParse(val) ?? 0.0;
-                      });
+                      widget.onCostChanged(val);
                     },
                     onSubmitted: (_) {
-                      widget.onTotalChanged();
+                      widget.onCostChanged(widget.costCtrl.text);
                     },
                     selectAllOnFocus: true,
                   ),
