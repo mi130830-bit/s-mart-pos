@@ -77,11 +77,11 @@
     *   *💡 Note*: ในอนาคตสามารถแยกย่อย `purchase_order_extension.dart` (~632 บรรทัด) ออกเป็น `purchase_order_query_extension.dart` (ดึงข้อมูล) และ `purchase_order_mutation_extension.dart` (ทำธุรกรรม/แก้ไขสถานะ) เพื่อความคมและเป็นระเบียบยิ่งขึ้น
 *   [x] `lib/repositories/sales_repository.dart` (~1,123 lines) - **เร่งด่วน** (แยกโครงสร้างเป็น `part` เรียบร้อย)
 *   [x] `lib/repositories/product_repository.dart` (~938 lines) - (แยกการ Sync ข้อมูล, การจัดการคลัง, ข้อมูลสินค้าหลัก เรียบร้อยแล้ว)
-*   [ ] `lib/repositories/debtor_repository.dart` (~782 lines) - (ควรแยกการจัดการชำระหนี้, ประวัติ Ledger หนี้)
-*   [ ] `lib/repositories/customer_repository.dart` (~720 lines) - (ควรแยกฟังก์ชันสมาชิก/แต้มสะสม ออกจากข้อมูลที่อยู่ลูกค้า)
+*   [x] `lib/repositories/debtor_repository.dart` (~782 lines) - (แยกการจัดการชำระหนี้, ประวัติ Ledger หนี้ เรียบร้อยแล้ว)
+*   [x] `lib/repositories/customer_repository.dart` (~720 lines) - (แยกฟังก์ชันสมาชิก/แต้มสะสม ออกจากข้อมูลที่อยู่ลูกค้า เรียบร้อยแล้ว)
 
 ### 🖥️ 2. Large UI Screens & Dialogs (Presentation Layer)
-*   [ ] `lib/screens/products/stock_in/pages/stock_in_create_page.dart` (~1,132 lines) - **เร่งด่วน** (ควรดึง Widget ตารางและฟอร์มสร้างใบสั่งซื้อไปเป็น Sub-widgets)
+*   [x] `lib/screens/products/stock_in/pages/stock_in_create_page.dart` (~1,132 lines) - **เร่งด่วน** (ดึง Widget ตารางและฟอร์มสร้างใบสั่งซื้อไปเป็น Sub-widgets เรียบร้อยแล้ว)
 *   [ ] `lib/screens/customers/debtor_list_screen.dart` (~964 lines) - (ควรแยก Tab ชำระหนี้ และ Tab แสดงรายการลูกหนี้)
 *   [ ] `lib/screens/reports/delivery_dashboard_screen.dart` (~940 lines) - (แยก Widget แผนที่ Google Maps, สรุปคนขับ และกราฟรายงาน)
 *   [ ] `lib/screens/products/widgets/quick_menu_dialog.dart` (~848 lines) - (แยกเมนูทางลัดปุ่มลัดออกเป็น Module)
