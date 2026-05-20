@@ -78,3 +78,9 @@ drawer_log.txt
 *.key
 *.pem
 *.p12
+
+# Runtime bills
+backend/public/bills/*.png
+
+# Scratch scripts
+scratch_split.py

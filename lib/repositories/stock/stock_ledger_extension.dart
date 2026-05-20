@@ -191,4 +191,36 @@ extension StockLedgerExtension on StockRepository {
       return [];
     }
   }
+
+  Future<void> deleteAdjustmentGroup(List<int> ledgerIds) async {
+    if (ledgerIds.isEmpty) return;
+    if (!_dbService.isConnected()) await _dbService.connect();
+    await _dbService.execute('START TRANSACTION;');
+
+    try {
+      for (var id in ledgerIds) {
+        final res = await _dbService.query(
+            'SELECT * FROM stockledger WHERE id = :id FOR UPDATE', {'id': id});
+        if (res.isEmpty) continue;
+
+        final row = res.first;
+        final pId = int.tryParse(row['productId'].toString()) ?? 0;
+        final qtyChange =
+            double.tryParse(row['quantityChange'].toString()) ?? 0.0;
+
+        if (pId != 0 && qtyChange != 0) {
+          await _adjustRecursive(pId, -qtyChange, 'ADJUST_CORRECT', 'Undo #$id',
+              null,
+              maxDepth: 10);
+        }
+        await _dbService
+            .execute('DELETE FROM stockledger WHERE id = :id', {'id': id});
+      }
+      await _dbService.execute('COMMIT;');
+    } catch (e) {
+      await _dbService.execute('ROLLBACK;');
+      debugPrint('Error deleting adjustment group: $e');
+      rethrow;
+    }
+  }
 }

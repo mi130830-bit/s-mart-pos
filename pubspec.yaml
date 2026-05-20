@@ -4,7 +4,7 @@ description: "Hybrid POS (S_MartPOS) for Desktop/Windows."
 
 publish_to: 'none'
 
-version: 1.5.9
+version: 1.6.0
 
 environment:
   sdk: '>=3.2.3 <4.0.0'

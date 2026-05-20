@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../services/alert_service.dart';
 import '../../../../models/product.dart';
@@ -9,13 +9,15 @@ import '../../../../repositories/stock_repository.dart';
 import '../../../../repositories/supplier_repository.dart';
 import '../../../../repositories/unit_repository.dart';
 import '../../product_multi_selection_dialog.dart';
-import '../../widgets/supplier_search_dialog.dart';
 import '../../dialogs/product_form/product_form_dialog.dart';
 import '../../../../widgets/common/custom_text_field.dart';
 import '../../../../widgets/common/custom_buttons.dart';
 import '../../../../widgets/common/confirm_dialog.dart';
 import '../models/stock_in_item.dart';
 import '../dialogs/partial_receive_dialog.dart';
+import 'widgets/stock_in_table_row.dart';
+import 'widgets/stock_in_settings_panel.dart';
+import 'widgets/stock_in_summary_panel.dart';
 class StockInCreatePage extends StatefulWidget {
   final int? existingPoId;
   const StockInCreatePage({super.key, this.existingPoId});
@@ -39,6 +41,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   String _poStatus = 'NEW'; // NEW, DRAFT, ORDERED, RECEIVED
   int _vatType = 0; // 0=Included, 1=Excluded, 2=NoVAT
   bool _isPaid = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -345,48 +348,22 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     // Find items with ID = 0 and save them now
     final pendingItems = _stockInItems.where((i) => i.product.id == 0).toList();
     if (pendingItems.isNotEmpty) {
-      // Show loading indicator distinct from main one? Or just share same loading?
-      // Since we show loading below, let's just do it here implicitly or move loading up.
-      // Better to move loading up to cover this phase.
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
+      setState(() => _isLoading = true);
 
       try {
         for (var item in pendingItems) {
-          // ✅ Allow empty barcode (Database should allow NULL)
-          // Removed auto-generation logic to satisfy user requirement:
-          // "Leave barcode empty first... go create automatically when receiving"
-          // if (item.product.barcode == null || ...) { ... }
-
           int newId = await _productRepo.saveProduct(item.product);
           if (newId > 0) {
             // Update item with new ID
             setState(() {
               item.product = item.product.copyWith(id: newId);
             });
-            // If we also need to save tiers/barcodes, we should ideally handle that.
-            // But ProductFormDialog returns a Product object. Tiers/Components are separate.
-            // If those were "in-memory", we might lose them here unless Product model holds them.
-            // Product model HAS components and tiers lists but usually null.
-            // Currently ProductFormDialog saves tiers/components separately inside _save.
-            // If delayedSave is true, ProductFormDialog skips all saving.
-            // AND it returns `newProduct` which MIGHT NOT contain tiers/components populated in `priceTiers` field?
-            // Let's check ProductFormDialog logic roughly.
-            // It creates `newProduct` but doesn't attach `_priceTiers` to it explicitly for return?
-            // Line 871: `final newProduct = Product(...)`. `components` is passed from input?
-            // No, `components` field in Product is generic dynamic list.
-            // WE MIGHT LOSE TIERS/COMPONENTS logic here.
-            // But for "Simple Product Creation" in PO, user likely just adds Name/Price.
-            // We assume simple product for now.
           }
         }
-        if (mounted) Navigator.pop(context); // Close loading
+        if (mounted) setState(() => _isLoading = false); // Close loading
       } catch (e) {
         if (mounted) {
-          Navigator.pop(context);
+          setState(() => _isLoading = false);
           AlertService.show(
             context: context,
             message: 'Error saving new products: $e',
@@ -463,11 +440,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     if (!mounted) return;
 
     // Process
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    setState(() => _isLoading = true);
 
     try {
       final itemsMap = _stockInItems
@@ -503,7 +476,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
       }
 
       if (mounted) {
-        Navigator.pop(context, true); // Close dialog
+        setState(() => _isLoading = false);
         AlertService.show(
           context: context,
           message:
@@ -514,10 +487,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
       }
     } catch (e) {
       if (mounted) {
-        // Fix: Use Future.delayed to avoid 'debugLocked' error if error happens too fast
-        await Future.delayed(Duration.zero);
-        if (!mounted) return;
-        Navigator.pop(context); // Remove loading
+        setState(() => _isLoading = false);
         AlertService.show(
           context: context,
           message: 'Error: $e',
@@ -547,11 +517,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
 
     // 3. Process
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    setState(() => _isLoading = true);
 
     try {
       await _stockRepo.receivePartialPurchaseOrder(
@@ -560,7 +526,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
       );
 
       if (mounted) {
-        Navigator.of(context).pop(); // Close Loading
+        setState(() => _isLoading = false);
 
         AlertService.show(
           context: context,
@@ -578,7 +544,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // Close Loading
+        setState(() => _isLoading = false);
         AlertService.show(
             context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
       }
@@ -613,519 +579,220 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.existingPoId != null
-                      ? 'จัดการใบสั่งซื้อ #${widget.existingPoId} (${_getThaiStatus(_poStatus)})'
-                      : 'สร้างใบรับสินค้า (Goods Receipt)',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ),
-              if (_poStatus == 'NEW' ||
-                  _poStatus == 'DRAFT' ||
-                  _poStatus == 'RECEIVED' ||
-                  _poStatus == 'PARTIAL') ...[
-                CustomButton(
-                  onPressed: _createNewProduct,
-                  icon: Icons.add_box,
-                  label: 'สร้างสินค้าใหม่',
-                  backgroundColor: Colors.teal,
-                  foregroundColor: Colors.white,
-                ),
-                const SizedBox(width: 10),
-                CustomButton(
-                  onPressed: _addProductToStockIn,
-                  icon: Icons.add_shopping_cart,
-                  label: 'เพิ่มสินค้า (F1)',
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                ),
-              ]
-            ],
-          ),
-        ),
-
-        // Header Row
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.indigo, // Use app primary color
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(8),
-              topRight: Radius.circular(8),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: const Row(
-            children: [
-              SizedBox(
-                  width: 40,
-                  child: Text('#',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white))),
-              Expanded(
-                  flex: 3,
-                  child: Text('ชื่อสินค้า',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white))),
-              Expanded(
-                  flex: 1,
-                  child: Text('จำนวน',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white))),
-              Expanded(
-                  flex: 1,
-                  child: Text('หน่วย',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white))),
-              Expanded(
-                  flex: 2,
-                  child: Text('ทุน/หน่วย',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white))),
-              Expanded(
-                  flex: 1,
-                  child: Text('รวม',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white))),
-              SizedBox(
-                  width: 50,
-                  child: Center(
-                      child: Text('ลบ',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white)))),
-            ],
-          ),
-        ),
-
-        // List View
-        Expanded(
-          child: _stockInItems.isEmpty
-              ? const Center(
-                  child: Text('ยังไม่มีรายการสินค้า',
-                      style: TextStyle(color: Colors.grey)))
-              : ListView.separated(
-                  itemCount: _stockInItems.length,
-                  separatorBuilder: (ctx, i) => const Divider(height: 1),
-                  itemBuilder: (ctx, index) {
-                    final item = _stockInItems[index];
-                    final unitName = _units
-                        .firstWhere(
-                          (u) => u.id == item.product.unitId,
-                          orElse: () => Unit(id: 0, name: '-'),
-                        )
-                        .name;
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: index % 2 == 0
-                            ? Colors.white
-                            : Colors.indigo.withValues(alpha: 0.05),
-                        border: Border(
-                            bottom: BorderSide(color: Colors.grey.shade300)),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 16),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 40, child: Text('${index + 1}')),
-                          Expanded(
-                            flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        item.product.name,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // ✏️ Edit Product Button
-                                    InkWell(
-                                      onTap: () => _editProductDetail(item),
-                                      child: const Icon(Icons.edit_note,
-                                          color: Colors.blue, size: 20),
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
-                                    Text(item.product.barcode ?? '-',
-                                        style: const TextStyle(
-                                            fontSize: 13, color: Colors.grey)),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '| ขาย: ${NumberFormat('#,##0.00').format(item.product.retailPrice)}',
-                                      style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            flex: 1,
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              child: (item.receivedQuantity > 0 && _poStatus != 'RECEIVED')
-                                  ? Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          '${NumberFormat('#,##0.##').format(item.receivedQuantity)} / ${NumberFormat('#,##0.##').format(item.quantity)}',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16),
-                                        ),
-                                        const Text(
-                                          '(รับแล้ว)',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.green),
-                                        )
-                                      ],
-                                    )
-                                  : CustomTextField(
-                                      controller: item.qtyCtrl,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                              decimal: true),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                      onChanged: (val) => setState(() =>
-                                          item.quantity =
-                                              double.tryParse(val) ?? 0),
-                                      selectAllOnFocus: true,
-                                      enabled: _poStatus == 'NEW' ||
-                                          _poStatus == 'DRAFT' ||
-                                          _poStatus == 'RECEIVED', // Enable edit if NEW, DRAFT, or RECEIVED (editing mode)
-                                    ),
-                            ),
-                          ),
-                          Expanded(
-                              flex: 1,
-                              child:
-                                  Text(unitName, textAlign: TextAlign.center)),
-                          Expanded(
-                            flex: 2,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: CustomTextField(
-                                    controller: item.costCtrl,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                            decimal: true),
-                                    textAlign: TextAlign.right,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold),
-                                    onChanged: (val) {
-                                      setState(() => item.costPrice =
-                                          double.tryParse(val) ?? 0);
-                                    },
-                                    selectAllOnFocus: true,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.calculate,
-                                      color: Colors.blue, size: 24),
-                                  onPressed: () => _showCostCalculator(item),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            flex: 1,
-                            child: Text(
-                                NumberFormat('#,##0.00').format(item.total),
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.indigo)),
-                          ),
-                          SizedBox(
-                            width: 50,
-                            child: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
-                                setState(() {
-                                  _stockInItems[index].dispose();
-                                  _stockInItems.removeAt(index);
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-        ),
-
-        // Footer
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.indigo.shade50,
-          child: Column(
-            children: [
-              Row(
+        Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
                 children: [
                   Expanded(
-                    flex: 2,
-                    child: InkWell(
-                      onTap: () async {
-                        final Supplier? selected = await showDialog<Supplier>(
-                          context: context,
-                          builder: (context) => const SupplierSearchDialog(),
-                        );
-                        if (selected != null) {
-                          setState(() {
-                            _selectedSupplierId = selected.id;
-                          });
-                        }
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'ผู้ขาย',
-                          border: OutlineInputBorder(),
-                          fillColor: Colors.white,
-                          filled: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        child: Text(
-                          _suppliers
-                              .firstWhere((s) => s.id == _selectedSupplierId,
-                                  orElse: () =>
-                                      Supplier(id: 0, name: '- เลือกผู้ขาย -'))
-                              .name,
-                          style: TextStyle(
-                              color: _selectedSupplierId == null
-                                  ? Colors.grey
-                                  : Colors.black),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                    child: Text(
+                      widget.existingPoId != null
+                          ? 'จัดการใบสั่งซื้อ #${widget.existingPoId} (${_getThaiStatus(_poStatus)})'
+                          : 'สร้างใบรับสินค้า (Goods Receipt)',
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  // VAT Selection
-                  Expanded(
-                    flex: 1,
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'ประเภทภาษี',
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        fillColor: Colors.white,
-                        filled: true,
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<int>(
-                          value: _vatType,
-                          isDense: true,
-                          items: const [
-                            DropdownMenuItem(value: 0, child: Text('รวมภาษี')),
-                            DropdownMenuItem(value: 1, child: Text('แยกภาษี')),
-                            DropdownMenuItem(
-                                value: 2, child: Text('ไม่มีภาษี')),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _vatType = val);
-                            }
-                          },
-                        ),
-                      ),
+                  if (_poStatus == 'NEW' ||
+                      _poStatus == 'DRAFT' ||
+                      _poStatus == 'RECEIVED' ||
+                      _poStatus == 'PARTIAL') ...[
+                    CustomButton(
+                      onPressed: _createNewProduct,
+                      icon: Icons.add_box,
+                      label: 'สร้างสินค้าใหม่',
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 1,
-                    child: CustomTextField(
-                      controller: _docNoCtrl,
-                      label: 'เลขที่เอกสาร',
-                      filled: true,
-                      fillColor: Colors.white,
+                    const SizedBox(width: 10),
+                    CustomButton(
+                      onPressed: _addProductToStockIn,
+                      icon: Icons.add_shopping_cart,
+                      label: 'เพิ่มสินค้า (F1)',
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Payment Toggle
-                  Expanded(
-                    flex: 1,
-                    child: InkWell(
-                      onTap: () => setState(() => _isPaid = !_isPaid),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'สถานะการเงิน',
-                          border: OutlineInputBorder(),
-                          fillColor: Colors.white,
-                          filled: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _isPaid ? Icons.check_circle : Icons.error_outline,
-                              color: _isPaid ? Colors.green : Colors.red,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _isPaid ? 'จ่ายเงินแล้ว' : 'ยังไม่จ่าย',
-                              style: TextStyle(
-                                color: _isPaid ? Colors.green : Colors.red,
-                                fontWeight: FontWeight.bold,
+                  ]
+                ],
+              ),
+            ),
+
+            // Horizontal Scroll wrapper for Table Header and List View
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final double tableWidth = constraints.maxWidth > 850
+                      ? constraints.maxWidth
+                      : 850;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: tableWidth,
+                      child: Column(
+                        children: [
+                          // Header Row
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.indigo, // Use app primary color
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                topRight: Radius.circular(8),
                               ),
                             ),
-                          ],
-                        ),
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            child: const Row(
+                              children: [
+                                SizedBox(
+                                    width: 40,
+                                    child: Text('#',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                Expanded(
+                                    flex: 3,
+                                    child: Text('ชื่อสินค้า',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                Expanded(
+                                    flex: 1,
+                                    child: Text('จำนวน',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                Expanded(
+                                    flex: 1,
+                                    child: Text('หน่วย',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                Expanded(
+                                    flex: 2,
+                                    child: Text('ทุน/หน่วย',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                Expanded(
+                                    flex: 1,
+                                    child: Text('รวม',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                SizedBox(
+                                    width: 50,
+                                    child: Center(
+                                        child: Text('ลบ',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white)))),
+                              ],
+                            ),
+                          ),
+
+                          // List View
+                          Expanded(
+                            child: _stockInItems.isEmpty
+                                ? const Center(
+                                    child: Text('ยังไม่มีรายการสินค้า',
+                                        style: TextStyle(color: Colors.grey)))
+                                : ListView.separated(
+                                    itemCount: _stockInItems.length,
+                                    separatorBuilder: (ctx, i) => const Divider(height: 1),
+                                    itemBuilder: (ctx, index) {
+                                      final item = _stockInItems[index];
+                                      final unitName = _units
+                                          .firstWhere(
+                                            (u) => u.id == item.product.unitId,
+                                            orElse: () => Unit(id: 0, name: '-'),
+                                          )
+                                          .name;
+
+                                      return StockInTableRow(
+                                        item: item,
+                                        index: index,
+                                        unitName: unitName,
+                                        poStatus: _poStatus,
+                                        onEdit: () => _editProductDetail(item),
+                                        onCalculate: () => _showCostCalculator(item),
+                                        onDelete: () {
+                                          setState(() {
+                                            _stockInItems[index].dispose();
+                                            _stockInItems.removeAt(index);
+                                          });
+                                        },
+                                        onTotalChanged: () => setState(() {}),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
-              const SizedBox(height: 10),
+            ),
 
-              // ✅ VAT Calculation Display
-              Builder(builder: (context) {
-                final double subtotal =
-                    _stockInItems.fold(0.0, (sum, item) => sum + item.total);
-                double vatAmount = 0.0;
-                if (_vatType == 1) {
-                  // Excluded
-                  vatAmount = subtotal * 0.07;
-                } else if (_vatType == 0) {
-                  // Included
-                  // For display purposes, we might want to show how much VAT is inside?
-                  // "Included" means GrandTotal = Entered Price.
-                  // VAT = GrandTotal * 7 / 107
-                  vatAmount = subtotal * 7 / 107;
-                  // grandTotal remains subtotal (as entered)
-                }
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (_vatType != 2) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text(
-                              _vatType == 0
-                                  ? 'ยอดรวม (รวม VAT):'
-                                  : 'ยอดรวมก่อนภาษี:',
-                              style: const TextStyle(fontSize: 16)),
-                          const SizedBox(width: 8),
-                          Text(NumberFormat('#,##0.00').format(subtotal),
-                              style: const TextStyle(fontSize: 16)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text('ภาษีมูลค่าเพิ่ม (7%):',
-                              style: const TextStyle(
-                                  fontSize: 16, color: Colors.grey)),
-                          const SizedBox(width: 8),
-                          Text(NumberFormat('#,##0.00').format(vatAmount),
-                              style: const TextStyle(
-                                  fontSize: 16, color: Colors.grey)),
-                        ],
-                      ),
-                      const Divider(),
-                    ],
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Text(
-                          'ยอดรวมสุทธิ: ',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          '฿${NumberFormat('#,##0.00').format(_totalCost)}',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.indigo,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              }),
-              const SizedBox(height: 10),
-
-              // Action Buttons
-              Row(
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.indigo.shade50,
+              child: Column(
                 children: [
-                  if (_poStatus == 'NEW' || _poStatus == 'DRAFT') ...[
-                    Expanded(
-                      child: SizedBox(
-                        height: 50,
-                        child: CustomButton(
-                          onPressed: () => _processAction('ORDERED'),
-                          icon: Icons.save,
-                          label: 'บันทึกใบสั่งซื้อ (ยังไม่เข้าสต็อก)',
-                          type: ButtonType.secondary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                  ],
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: CustomButton(
-                        onPressed: _stockInItems.isEmpty
-                            ? null
-                            : () => _processAction('RECEIVED'),
-                        icon: Icons.archive,
-                        label: (_poStatus == 'RECEIVED')
-                            ? 'บันทึกการแก้ไข'
-                            : 'รับสินค้าเข้าสต็อก',
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
+                  StockInSettingsPanel(
+                    suppliers: _suppliers,
+                    selectedSupplierId: _selectedSupplierId,
+                    vatType: _vatType,
+                    docNoCtrl: _docNoCtrl,
+                    isPaid: _isPaid,
+                    onSupplierChanged: (s) => setState(() => _selectedSupplierId = s?.id),
+                    onVatChanged: (val) {
+                      if (val != null) {
+                        setState(() => _vatType = val);
+                      }
+                    },
+                    onPaymentToggle: () => setState(() => _isPaid = !_isPaid),
                   ),
+                  const SizedBox(height: 10),
+
+                  // ✅ VAT Calculation Display
+                  Builder(builder: (context) {
+                    final double subtotal =
+                        _stockInItems.fold(0.0, (sum, item) => sum + item.total);
+                    double vatAmount = 0.0;
+                    if (_vatType == 1) {
+                      // Excluded
+                      vatAmount = subtotal * 0.07;
+                    } else if (_vatType == 0) {
+                      // Included
+                      vatAmount = subtotal * 7 / 107;
+                    }
+
+                    return StockInSummaryPanel(
+                      subtotal: subtotal,
+                      vatAmount: vatAmount,
+                      grandTotal: _totalCost,
+                      vatType: _vatType,
+                      poStatus: _poStatus,
+                      hasItems: _stockInItems.isNotEmpty,
+                      onSaveOrder: () => _processAction('ORDERED'),
+                      onReceiveStock: () => _processAction('RECEIVED'),
+                    );
+                  }),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        if (_isLoading) ...[
+          const ModalBarrier(
+            dismissible: false,
+            color: Colors.black26,
+          ),
+          const Center(
+            child: CircularProgressIndicator(),
+          ),
+        ],
       ],
     );
   }

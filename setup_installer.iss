@@ -3,7 +3,7 @@
 
 ; --- กำหนดชื่อแอปและเวอร์ชัน ---
 #define MyAppName "S_Mart POS"
-#define MyAppVersion "1.4.8" 
+#define MyAppVersion "1.5.9" 
 #define MyAppPublisher "S_Mart"
 #define MyAppExeName "pos_desktop.exe"
 
@@ -93,7 +93,7 @@ end;
 ; 1. ✅ ติดตั้ง VC++ Redistributable อัตโนมัติหากยังไม่มี (แก้ปัญหาเปิดแอปไม่ได้)
 Filename: "{app}\vc_redist.x64.exe"; Parameters: "/quiet /norestart"; \
     StatusMsg: "Installing Visual C++ 2015-2022 Redistributable..."; \
-    Check: not IsVCInstalled; Flags: runhidden
+    Check: not IsVCInstalled; Flags: runhidden skipifdoesntexist
 
 ; 2. ตัวเลือกหลังติดตั้งเสร็จ
 Filename: "{app}\start_system.bat"; Description: "Launch S-Mart POS System (Server Mode)"; Flags: nowait postinstall skipifsilent unchecked

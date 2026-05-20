@@ -75,8 +75,8 @@
 ### 📂 1. Domain Repositories (Data & Logic Layers)
 *   [x] `lib/repositories/stock_repository.dart` (~1,291 lines) - **เร่งด่วนที่สุด** (แยกโครงสร้างเป็น `part` เรียบร้อย)
     *   *💡 Note*: ในอนาคตสามารถแยกย่อย `purchase_order_extension.dart` (~632 บรรทัด) ออกเป็น `purchase_order_query_extension.dart` (ดึงข้อมูล) และ `purchase_order_mutation_extension.dart` (ทำธุรกรรม/แก้ไขสถานะ) เพื่อความคมและเป็นระเบียบยิ่งขึ้น
-*   [ ] `lib/repositories/sales_repository.dart` (~1,123 lines) - **เร่งด่วน** (ควรแยกส่วนพิมพ์บิล, สรุปยอดกะ, บันทึกการขาย หรือย้ายเข้า Services)
-*   [ ] `lib/repositories/product_repository.dart` (~938 lines) - (ควรแยกการ Sync ข้อมูล, การจัดการคลัง, ข้อมูลสินค้าหลัก)
+*   [x] `lib/repositories/sales_repository.dart` (~1,123 lines) - **เร่งด่วน** (แยกโครงสร้างเป็น `part` เรียบร้อย)
+*   [x] `lib/repositories/product_repository.dart` (~938 lines) - (แยกการ Sync ข้อมูล, การจัดการคลัง, ข้อมูลสินค้าหลัก เรียบร้อยแล้ว)
 *   [ ] `lib/repositories/debtor_repository.dart` (~782 lines) - (ควรแยกการจัดการชำระหนี้, ประวัติ Ledger หนี้)
 *   [ ] `lib/repositories/customer_repository.dart` (~720 lines) - (ควรแยกฟังก์ชันสมาชิก/แต้มสะสม ออกจากข้อมูลที่อยู่ลูกค้า)
 
