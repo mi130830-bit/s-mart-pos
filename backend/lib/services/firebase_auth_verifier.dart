@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
@@ -35,7 +36,7 @@ class FirebaseAuthVerifier {
         throw Exception('Failed to fetch JWKS: ${response.statusCode}');
       }
     } catch (e) {
-      print('⚠️ FirebaseAuthVerifier Error fetching keys: $e');
+      stderr.writeln('⚠️ FirebaseAuthVerifier Error fetching keys: $e');
       rethrow;
     }
   }
@@ -48,7 +49,7 @@ class FirebaseAuthVerifier {
       final kid = unverifiedJwt.header?['kid'];
 
       if (kid == null) {
-        print('⚠️ FirebaseAuthVerifier: Token missing kid in header');
+        stderr.writeln('⚠️ FirebaseAuthVerifier: Token missing kid in header');
         return null;
       }
 
@@ -59,7 +60,7 @@ class FirebaseAuthVerifier {
 
       final certificateString = _keys[kid];
       if (certificateString == null) {
-        print('⚠️ FirebaseAuthVerifier: Unknown kid $kid even after refresh');
+        stderr.writeln('⚠️ FirebaseAuthVerifier: Unknown kid $kid even after refresh');
         return null;
       }
 
@@ -78,12 +79,12 @@ class FirebaseAuthVerifier {
       final exp = payload['exp'];
 
       if (aud != _projectId) {
-        print('⚠️ FirebaseAuthVerifier: Invalid aud: $aud');
+        stderr.writeln('⚠️ FirebaseAuthVerifier: Invalid aud: $aud');
         return null;
       }
 
       if (iss != 'https://securetoken.google.com/$_projectId') {
-        print('⚠️ FirebaseAuthVerifier: Invalid iss: $iss');
+        stderr.writeln('⚠️ FirebaseAuthVerifier: Invalid iss: $iss');
         return null;
       }
 
@@ -91,14 +92,14 @@ class FirebaseAuthVerifier {
       if (exp != null) {
         final expTime = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
         if (DateTime.now().isAfter(expTime)) {
-          print('⚠️ FirebaseAuthVerifier: Token expired');
+          stderr.writeln('⚠️ FirebaseAuthVerifier: Token expired');
           return null;
         }
       }
 
       return payload; // Validation passed
     } catch (e) {
-      print('⚠️ FirebaseAuthVerifier: Verification Failed: $e');
+      stderr.writeln('⚠️ FirebaseAuthVerifier: Verification Failed: $e');
       return null;
     }
   }
