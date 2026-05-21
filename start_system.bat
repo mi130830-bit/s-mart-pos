@@ -9,6 +9,8 @@ set "BASE_DIR=%~dp0"
 
 :: 1. Start Backend Server
 echo [1/3] Launching Backend Server (Port 8080)...
+taskkill /F /FI "WINDOWTITLE eq S-Link Backend API*" /T >nul 2>&1
+taskkill /F /IM server.exe /T >nul 2>&1
 if exist "%BASE_DIR%backend\server.exe" (
     start "S-Link Backend API" /D "%BASE_DIR%backend" "%BASE_DIR%backend\server.exe"
 ) else (
@@ -20,6 +22,8 @@ timeout /t 5 >nul
 
 :: 2. Start Cloudflare Tunnel
 echo [2/3] Launching Cloudflare Tunnel...
+taskkill /F /FI "WINDOWTITLE eq Cloudflare Tunnel*" /T >nul 2>&1
+taskkill /F /IM cloudflared.exe /T >nul 2>&1
 if exist "%BASE_DIR%cloudflared.exe" (
     echo       Starting Tunnel...
     :: Launching Permanent Tunnel (pos)
@@ -32,6 +36,7 @@ timeout /t 3 >nul
 
 :: 3. Start POS Application
 echo [3/3] Launching POS Desktop Application...
+taskkill /F /IM pos_desktop.exe /T >nul 2>&1
 
 :: Priority: 1. Installer Root 2. Build Release 3. Build Debug
 if exist "%BASE_DIR%pos_desktop.exe" (
@@ -51,8 +56,9 @@ echo   All systems launched successfully!
 echo ====================================
 echo.
 echo IMPORTANT:
-echo   - Keep all black command windows OPEN
+echo   - Keep all black command windows OPEN (Backend API and Cloudflare)
 echo   - Backend API: http://localhost:8080
 echo.
-echo Press any key to exit this launcher...
-pause >nul
+echo This launcher window will automatically close in 5 seconds...
+timeout /t 5 >nul
+exit
