@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../state/auth_provider.dart';
 import '../../../widgets/common/thai_aware_search_field.dart';
@@ -10,7 +10,7 @@ import '../../../services/alert_service.dart';
 import 'dashboard_orders_table.dart';
 
 /// แท็บ "รายการวันนี้" ในหน้า Dashboard
-class DashboardTabDaily extends StatelessWidget {
+class DashboardTabDaily extends ConsumerWidget {
   final DateTime selectedDate;
   final List<Map<String, dynamic>> orders;
   final String searchQuery;
@@ -61,8 +61,8 @@ class DashboardTabDaily extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),

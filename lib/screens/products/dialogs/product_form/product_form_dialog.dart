@@ -18,7 +18,8 @@ import '../../../../services/alert_service.dart';
 import '../../widgets/product_search_dialog_for_select.dart';
 import '../../widgets/supplier_search_dialog.dart';
 import '../../widgets/component_row.dart';
-import 'package:provider/provider.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../state/auth_provider.dart';
 import '../../../../widgets/common/custom_text_field.dart';
 import '../../../../widgets/common/custom_buttons.dart';
@@ -31,6 +32,7 @@ import '../../../../models/shelf.dart';
 import '../../../../services/settings_service.dart';
 import '../../../../widgets/dialogs/admin_pin_dialog.dart';
 
+import '../../widgets/autocomplete_fields.dart';
 import '../../product_list_view.dart';
 
 // --- PART FILES ---
@@ -43,7 +45,7 @@ part 'tabs/product_unit_barcode_tab.dart';
 part 'tabs/product_stock_history_tab.dart';
 part 'tabs/product_sales_history_tab.dart';
 
-class ProductFormDialog extends StatefulWidget {
+class ProductFormDialog extends ConsumerStatefulWidget {
   final ProductRepository repo;
   final Product? product;
   final bool delayedSave; // New parameter
@@ -56,10 +58,10 @@ class ProductFormDialog extends StatefulWidget {
   });
 
   @override
-  State<ProductFormDialog> createState() => _ProductFormDialogState();
+  ConsumerState<ProductFormDialog> createState() => _ProductFormDialogState();
 }
 
-class _ProductFormDialogState extends State<ProductFormDialog> {
+class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
 
   // Controllers

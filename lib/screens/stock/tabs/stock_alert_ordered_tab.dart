@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/shortage_provider.dart';
 import '../../../models/shortage_log_model.dart';
 import '../../../services/alert_service.dart';
 import '../dialogs/stock_alert_confirm_dialog.dart';
 import '../utils/stock_date_utils.dart';
 
-class StockAlertOrderedTab extends StatefulWidget {
+class StockAlertOrderedTab extends ConsumerStatefulWidget {
   const StockAlertOrderedTab({super.key});
 
   @override
-  State<StockAlertOrderedTab> createState() => _StockAlertOrderedTabState();
+  ConsumerState<StockAlertOrderedTab> createState() => _StockAlertOrderedTabState();
 }
 
-class _StockAlertOrderedTabState extends State<StockAlertOrderedTab> {
+class _StockAlertOrderedTabState extends ConsumerState<StockAlertOrderedTab> {
   final Set<String> _collapsedMonths = {};
   final Map<String, int> _orderedMonthPages = {};
   final int _itemsPerPage = 20;
@@ -44,7 +44,7 @@ class _StockAlertOrderedTabState extends State<StockAlertOrderedTab> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<ShortageProvider>(context);
+    final provider = ref.watch(shortageProvider);
     final allAlerts = provider.orderedShortages;
     final grouped = _groupByMonth(allAlerts);
     final monthKeys = grouped.keys.toList();

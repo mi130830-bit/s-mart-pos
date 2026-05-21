@@ -7,6 +7,7 @@ import 'package:dotenv/dotenv.dart';
 
 import 'package:backend/api_router.dart';
 import 'package:backend/middlewares/cors_middleware.dart';
+import 'package:backend/services/print_bridge_service.dart';
 
 void main(List<String> args) async {
   // Load .env
@@ -37,6 +38,9 @@ void main(List<String> args) async {
       .addMiddleware(logRequests())
       .addMiddleware(corsMiddleware())
       .addHandler(optionsHandler(router.call));
+
+  // Start Firestore -> MySQL Bridge
+  PrintBridgeService().startBridge();
 
   // Start Server
   final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);

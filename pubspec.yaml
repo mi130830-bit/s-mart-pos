@@ -54,6 +54,7 @@ dependencies:
   string_similarity: ^2.1.1
   win32: ^5.15.0
   ffi: ^2.2.0
+  flutter_riverpod: ^2.6.1
 
 
 dev_dependencies:

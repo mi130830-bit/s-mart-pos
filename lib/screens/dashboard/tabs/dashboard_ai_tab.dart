@@ -1,33 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../controllers/dashboard_controller.dart';
 import '../widgets/dashboard_ai_section.dart';
 
 /// แท็บ 4: "วิเคราะห์ AI" — แสดงผลการวิเคราะห์ Gemini AI
-class DashboardAiTab extends StatelessWidget {
-  final String aiAnalysis;
-  final bool isAnalyzing;
-  final VoidCallback onStart;
-  final VoidCallback onRefresh;
-
-  const DashboardAiTab({
-    super.key,
-    required this.aiAnalysis,
-    required this.isAnalyzing,
-    required this.onStart,
-    required this.onRefresh,
-  });
+class DashboardAiTab extends ConsumerWidget {
+  const DashboardAiTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(dashboardProvider);
+    final notifier = ref.read(dashboardProvider.notifier);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
           DashboardAiSection(
-            aiAnalysis: aiAnalysis,
-            isAnalyzing: isAnalyzing,
-            onStart: onStart,
-            onRefresh: onRefresh,
+            aiAnalysis: state.aiAnalysis,
+            isAnalyzing: state.isAnalyzing,
+            onStart: () => notifier.fetchAiAnalysis(),
+            onRefresh: () => notifier.fetchAiAnalysis(),
           ),
           const SizedBox(height: 20),
           const Text(

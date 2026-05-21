@@ -5,11 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:decimal/decimal.dart';
 import 'package:pasteboard/pasteboard.dart';
-import 'package:pdf/pdf.dart';
 import '../../../../services/alert_service.dart';
 import '../../../../services/settings_service.dart';
 import '../../../../services/mysql_service.dart';
 import '../../../../services/firebase_service.dart';
+import '../../../../services/logger_service.dart';
 import '../../../../services/printing/receipt_service.dart';
 import '../../../../models/payment_record.dart';
 import '../../../../models/delivery_type.dart';
@@ -19,9 +19,9 @@ import '../../pos_state_manager.dart';
 import '../../pos_payment_panel.dart';
 import '../../../../widgets/common/confirm_dialog.dart';
 import '../../../../widgets/dialogs/point_redemption_dialog.dart';
-import '../../../../widgets/common/barcode_listener_wrapper.dart';
 import '../../../../utils/pos_reprint_barcode_router.dart';
 import 'slip_verification_controller.dart';
+import '../widgets/reprint_dialog.dart';
 
 mixin PaymentModalControllerMixin<T extends StatefulWidget>
     on State<T>, SlipVerificationControllerMixin<T> {
@@ -47,7 +47,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     amountFocusNode.dispose();
   }
 
-  void fillRemainingAmount(PosStateManager posState) {
+  void fillRemainingAmount(PosStateNotifier posState) {
     if (selectedPaymentType == PaymentType.credit) return;
 
     final Decimal total = Decimal.parse(posState.grandTotal.toString());
@@ -71,7 +71,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     updateDisplayToCustomer(posState);
   }
 
-  void removePayment(int index, PosStateManager posState) {
+  void removePayment(int index, PosStateNotifier posState) {
     setState(() {
       payments.removeAt(index);
       fillRemainingAmount(posState);
@@ -79,7 +79,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     });
   }
 
-  Future<void> handlePaste(PosStateManager posState) async {
+  Future<void> handlePaste(PosStateNotifier posState) async {
     if (isVerifyingSlip) return;
     if (selectedPaymentType != PaymentType.qr) {
       setState(() => selectedPaymentType = PaymentType.qr);
@@ -99,12 +99,13 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
           },
         );
       }
-    } catch (e) {
-      debugPrint('Paste Error: $e');
+    } catch (e, stackTrace) {
+      LoggerService.error('PaymentModal', 'Paste Error: $e', e, stackTrace);
+      showError('ไม่สามารถดึงรูปภาพสลิปจากคลิปบอร์ดได้: $e');
     }
   }
 
-  void updateDisplayToCustomer(PosStateManager posState) {
+  void updateDisplayToCustomer(PosStateNotifier posState) {
     final Decimal currentInput = receivedAmount;
     final Decimal totalPaidInList = totalPaid;
     final Decimal totalCaptured = totalPaidInList + currentInput;
@@ -129,7 +130,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     }
   }
 
-  void addPayment(PosStateManager posState) {
+  void addPayment(PosStateNotifier posState) {
     if (selectedPaymentType == PaymentType.credit) return;
 
     final Decimal currentInput = receivedAmount;
@@ -153,7 +154,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
   }
 
   Future<void> openPointRedemptionDialog(
-      PosStateManager posState, SettingsService settings) async {
+      PosStateNotifier posState, SettingsService settings) async {
     if (posState.currentCustomer == null) return;
     if (!settings.pointEnabled) return;
 
@@ -223,8 +224,9 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
           remark: remark,
         );
       }
-    } catch (e) {
-      debugPrint("Print Error: $e");
+    } catch (e, stackTrace) {
+      LoggerService.error('PaymentModal', 'Print Error: $e', e, stackTrace);
+      showError('พิมพ์ใบเสร็จไม่สำเร็จ: $e');
     }
   }
 
@@ -262,7 +264,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
                   p.method == 'Credit') ??
               false);
 
-      debugPrint('📤 [Line] Capturing receipt/delivery image for #$orderId');
+      LoggerService.info('PaymentModal', '📤 [Line] Capturing receipt/delivery image for #$orderId');
 
       Uint8List? imageBytes;
       if (isCreditOnly) {
@@ -287,8 +289,9 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       }
 
       if (imageBytes == null) {
-        debugPrint(
-            '⚠️ [Line] Receipt image capture returned null for #$orderId');
+        LoggerService.warning(
+            'PaymentModal', '⚠️ [Line] Receipt image capture returned null for #$orderId');
+        showError('ไม่สามารถสร้างรูปภาพสลิปเพื่อส่ง Line ได้');
         return;
       }
 
@@ -301,20 +304,24 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       }
       final url = Uri.parse('$baseUrl/api/v1/line/push-receipt-image');
 
-      debugPrint('📤 [Line] Sending receipt image for #$orderId → $lineUserId');
-      await firebaseSvc.sendLineReceiptImageDirect(
+      LoggerService.info('PaymentModal', '📤 [Line] Sending receipt image for #$orderId → $lineUserId');
+      final result = await firebaseSvc.sendLineReceiptImageDirect(
         db: db,
         orderId: orderId,
         lineUserId: lineUserId,
         url: url,
         base64Image: base64Image,
       );
-    } catch (e) {
-      debugPrint('❌ [Line] _sendLineNotifications error: $e');
+      if (!result) {
+        showError('ส่งสลิปผ่าน Line ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error('PaymentModal', '❌ [Line] sendLineNotifications error: $e', e, stackTrace);
+      showError('ไม่สามารถส่ง Line ใบเสร็จได้: $e');
     }
   }
 
-  Future<void> processFinish(PosStateManager posState) async {
+  Future<void> processFinish(PosStateNotifier posState) async {
     if (isLoading) return;
 
     final double grandTotalDouble = posState.grandTotal;
@@ -440,8 +447,8 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
                 lineUserId: res.first['line_user_id'].toString());
             hasLineId = true;
           }
-        } catch (e) {
-          debugPrint('⚠️ Fetch DB Line ID Error: $e');
+        } catch (e, stackTrace) {
+          LoggerService.error('PaymentModal', '⚠️ Fetch DB Line ID Error: $e', e, stackTrace);
         }
       }
 
@@ -478,111 +485,36 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
           final cashierNameStr = posState.currentUser?.displayName ?? 'Staff';
           final paymentsSnapshot = List<PaymentRecord>.from(payments);
 
-          String? pendingBarcode;
-
           showDialog(
             context: rootContext,
-            builder: (ctx) => BarcodeListenerWrapper(
-              onBarcodeScanned: (scannedCode) {
-                pendingBarcode = scannedCode;
-                Navigator.of(ctx).pop();
+            builder: (_) => ReprintDialog(
+              orderId: orderId,
+              items: snapshotItems,
+              customer: snapshotCustomer,
+              total: snapshotTotal,
+              discount: snapshotDiscount,
+              grandTotal: grandTotalDouble,
+              received: totalReceived.toDouble(),
+              change: change.toDouble(),
+              payments: paymentsSnapshot,
+              cashierName: cashierNameStr,
+              receiptService: receiptService,
+              onBarcodeScanned: (barcode, _) {
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  LoggerService.info('PaymentModal',
+                      '📦 [Reprint Dialog] Forwarding barcode to POS: $barcode');
+                  PosReprintBarcodeRouter.broadcast(barcode);
+                });
               },
-              child: AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: const Row(
-                  children: [
-                    Icon(Icons.print, color: Colors.blue, size: 28),
-                    SizedBox(width: 10),
-                    Text('พิมพ์ใบเสร็จซ้ำหรือไม่?'),
-                  ],
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('สามารถเลือกพิมพ์สลิปซ้ำ (80มม.) หรือพิมพ์บิลเงินสด (A5) ได้'),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.qr_code_scanner, size: 14, color: Colors.grey.shade500),
-                        const SizedBox(width: 4),
-                        Text(
-                          'หรือสแกนบาร์โค้ดสินค้าถัดไปเพื่อเริ่มขายทันที',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton.icon(
-                    icon: const Icon(Icons.receipt_long),
-                    label: const Text('พิมพ์ 80มม.'),
-                    onPressed: () {
-                      printReceipt(
-                        orderId: orderId,
-                        items: snapshotItems,
-                        customer: snapshotCustomer,
-                        total: snapshotTotal,
-                        discount: snapshotDiscount,
-                        grandTotal: grandTotalDouble,
-                        received: totalReceived.toDouble(),
-                        change: change.toDouble(),
-                        payments: paymentsSnapshot,
-                        cashierName: cashierNameStr,
-                        remark: 'ใบเสร็จรับเงิน (สำเนา)',
-                      );
-                      Navigator.pop(ctx);
-                    },
-                  ),
-                  TextButton.icon(
-                    icon: const Icon(Icons.description),
-                    label: const Text('พิมพ์ A5 (บิลเงินสด)'),
-                    onPressed: () {
-                      receiptService.printReceipt(
-                        orderId: orderId,
-                        items: snapshotItems,
-                        customer: snapshotCustomer,
-                        total: snapshotTotal,
-                        discount: snapshotDiscount,
-                        grandTotal: grandTotalDouble,
-                        received: totalReceived.toDouble(),
-                        change: change.toDouble(),
-                        payments: paymentsSnapshot,
-                        cashierName: cashierNameStr,
-                        remark: 'ใบเสร็จรับเงิน (สำเนา)',
-                        pageFormatOverride: PdfPageFormat.a5,
-                        useCashBillSettings: true,
-                      );
-                      Navigator.pop(ctx);
-                    },
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade200,
-                      foregroundColor: Colors.black87,
-                    ),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('ไม่พิมพ์ (เสร็จสิ้น)'),
-                  ),
-                ],
-              ),
             ),
-          ).then((_) {
-            if (pendingBarcode != null && rootContext.mounted) {
-              Future.delayed(const Duration(milliseconds: 150), () {
-                if (!rootContext.mounted) return;
-                debugPrint('📦 [Reprint Dialog] Forwarding barcode to POS: $pendingBarcode');
-                PosReprintBarcodeRouter.broadcast(pendingBarcode!);
-              });
-            }
-          });
+          );
         }
       } else {
-        debugPrint('ℹ️ [Reprint] isCreditOnlyReprint=true — ข้าม Reprint Dialog');
+        LoggerService.info('PaymentModal', 'ℹ️ [Reprint] isCreditOnlyReprint=true — ข้าม Reprint Dialog');
       }
 
-    } catch (e) {
+    } catch (e, stackTrace) {
+      LoggerService.error('PaymentModal', 'เกิดข้อผิดพลาดในการบันทึกบิล: $e', e, stackTrace);
       showError('เกิดข้อผิดพลาด: $e');
       setState(() => isLoading = false);
     }

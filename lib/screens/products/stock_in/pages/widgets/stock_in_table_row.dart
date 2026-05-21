@@ -140,6 +140,9 @@ class _StockInTableRowState extends State<StockInTableRow> {
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                       onChanged: (val) {
+                        setState(() {
+                          widget.item.quantity = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                        });
                         widget.onQtyChanged(val);
                       },
                       onSubmitted: (_) {
@@ -166,6 +169,9 @@ class _StockInTableRowState extends State<StockInTableRow> {
                     textAlign: TextAlign.right,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     onChanged: (val) {
+                      setState(() {
+                        widget.item.costPrice = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                      });
                       widget.onCostChanged(val);
                     },
                     onSubmitted: (_) {

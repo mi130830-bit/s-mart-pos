@@ -2,23 +2,26 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:pos_desktop/state/shortage_provider.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'firebase_options.dart';
 import 'state/auth_provider.dart';
 import 'state/theme_provider.dart';
-import 'screens/pos/pos_state_manager.dart';
+
 import 'services/mysql_service.dart';
 import 'services/system/backup_scheduler.dart';
 import 'services/local_db_service.dart';
 import 'screens/dashboard/main_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/customer_display/customer_display_screen.dart';
+import 'screens/settings/initial_setup_screen.dart';
 import 'services/telegram_scheduler.dart';
 import 'services/telegram_service.dart';
 import 'services/notification_scheduler.dart';
@@ -36,6 +39,7 @@ void main(List<String> args) {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      await initializeDateFormatting('th', null);
 
       // ---------------------------------------------------------
       // ✅ 0. ระบบป้องกันเปิดแอปซ้อน (Port Binding + PowerShell Popup)
@@ -144,18 +148,8 @@ void main(List<String> args) {
       }
 
       runApp(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider(create: (_) => AuthProvider()),
-            ChangeNotifierProxyProvider<AuthProvider, PosStateManager>(
-              create: (_) => PosStateManager(),
-              update: (_, auth, posState) =>
-                  (posState ?? PosStateManager())..updateUser(auth.currentUser),
-            ),
-            ChangeNotifierProvider(create: (_) => ThemeProvider()),
-            ChangeNotifierProvider(create: (_) => ShortageProvider()),
-          ],
-          child: const PosApp(),
+        const ProviderScope(
+          child: PosApp(),
         ),
       );
 
@@ -211,19 +205,19 @@ void main(List<String> args) {
 // ✅ Global Navigator Key for background dialogs (e.g. DeliveryReminderScheduler)
 final GlobalKey<NavigatorState> _navigatorKey = AlertService.navigatorKey;
 
-class PosApp extends StatefulWidget {
+class PosApp extends ConsumerStatefulWidget {
   const PosApp({super.key});
   @override
-  State<PosApp> createState() => _PosAppState();
+  ConsumerState<PosApp> createState() => _PosAppState();
 }
 
-class _PosAppState extends State<PosApp> {
+class _PosAppState extends ConsumerState<PosApp> {
   @override
   void initState() {
     super.initState();
     _setupWindow();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AuthProvider>().tryAutoLogin();
+      ref.read(authProvider.notifier).tryAutoLogin();
     });
   }
 
@@ -245,85 +239,86 @@ class _PosAppState extends State<PosApp> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<AuthProvider, ThemeProvider>(
-      builder: (context, AuthProvider auth, ThemeProvider theme, _) {
-        if (auth.isCheckingAuth) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: Scaffold(
-              backgroundColor:
-                  theme.isDarkMode ? const Color(0xFF1A1C1E) : Colors.white,
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 20),
-                    Text(
-                      'กำลังตรวจสอบการเชื่อมต่อ...',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color:
-                            theme.isDarkMode ? Colors.white70 : Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    // Show target host to help user debug
-                    FutureBuilder<Map<String, String?>>(
-                      future: MySQLService().getConfig(),
-                      builder: (context, snapshot) {
-                        final host = snapshot.data?['host'] ?? 'localhost';
-                        return Text(
-                          'Target: $host',
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
-                        );
-                      },
-                    ),
-                  ],
+    final authState = ref.watch(authProvider);
+    final themeState = ref.watch(themeProvider);
+
+    if (authState.isCheckingAuth) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor:
+              themeState.isDarkMode ? const Color(0xFF1A1C1E) : Colors.white,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
+                Text(
+                  'กำลังตรวจสอบการเชื่อมต่อ...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: themeState.isDarkMode ? Colors.white70 : Colors.black87,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 10),
+                FutureBuilder<Map<String, String?>>(
+                  future: MySQLService().getConfig(),
+                  builder: (context, snapshot) {
+                    final host = snapshot.data?['host'] ?? 'localhost';
+                    return Text(
+                      'Target: $host',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    );
+                  },
+                ),
+              ],
             ),
-          );
-        }
-        try {
-          return MaterialApp(
-            navigatorKey: _navigatorKey,
-            debugShowCheckedModeBanner: false,
-            themeMode: theme.themeMode,
-            theme: AppTheme.lightTheme.copyWith(
-              textTheme: AppTheme.lightTheme.textTheme
-                  .apply(fontFamily: theme.fontFamily),
-            ),
-            darkTheme: AppTheme.darkTheme.copyWith(
-              textTheme: AppTheme.darkTheme.textTheme
-                  .apply(fontFamily: theme.fontFamily),
-            ),
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: const [Locale('th', 'TH'), Locale('en', 'US')],
-            locale: const Locale('th', 'TH'),
-            home:
-                auth.isAuthenticated ? const MainScreen() : const LoginScreen(),
-          );
-        } catch (e, stack) {
-          debugPrint('🔥 [Main] Error building MaterialApp: $e\n$stack');
-          return Directionality(
-            textDirection: TextDirection.ltr,
-            child: Center(
-              child: Text(
-                'CRITICAL ERROR:\n$e',
-                style: const TextStyle(color: Colors.red, fontSize: 24),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
-      },
-    );
+          ),
+        ),
+      );
+    }
+
+    try {
+      return MaterialApp(
+        navigatorKey: _navigatorKey,
+        debugShowCheckedModeBanner: false,
+        themeMode: themeState.themeMode,
+        theme: AppTheme.lightTheme.copyWith(
+          textTheme: AppTheme.lightTheme.textTheme
+              .apply(fontFamily: themeState.fontFamily),
+        ),
+        darkTheme: AppTheme.darkTheme.copyWith(
+          textTheme: AppTheme.darkTheme.textTheme
+              .apply(fontFamily: themeState.fontFamily),
+        ),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('th', 'TH'), // Thai
+          Locale('en', 'US'), // English
+        ],
+        locale: const Locale('th', 'TH'),
+        home: authState.isSetupRequired
+            ? const InitialSetupScreen()
+            : (authState.isAuthenticated ? const MainScreen() : const LoginScreen()),
+      );
+    } catch (e, stack) {
+      debugPrint('🔥 [Main] Error building MaterialApp: $e\n$stack');
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: Text(
+            'CRITICAL ERROR:\n$e',
+            style: const TextStyle(color: Colors.red, fontSize: 24),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
   }
 }
 

@@ -108,9 +108,26 @@ extension PurchaseOrderReceivingExtension on StockRepository {
         newStatus = 'PARTIAL';
       }
 
+      final totalRes = await _dbService.query(
+        'SELECT SUM(total) as newTotal FROM purchase_order_item WHERE poId = :id',
+        {'id': originalPoId},
+      );
+      double newTotal = 0.0;
+      if (totalRes.isNotEmpty && totalRes.first['newTotal'] != null) {
+        newTotal = double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
+      }
+
+      final vatRes = await _dbService.query(
+          'SELECT vatType FROM purchase_order WHERE id = :id', {'id': originalPoId});
+      int vatType = 0;
+      if (vatRes.isNotEmpty) {
+        vatType = int.tryParse(vatRes.first['vatType'].toString()) ?? 0;
+      }
+      if (vatType == 1) newTotal = newTotal * 1.07;
+
       await _dbService.execute(
-        'UPDATE purchase_order SET status = :status, updatedAt = NOW() WHERE id = :id',
-        {'status': newStatus, 'id': originalPoId},
+        'UPDATE purchase_order SET status = :status, totalAmount = :total, updatedAt = NOW() WHERE id = :id',
+        {'status': newStatus, 'total': newTotal, 'id': originalPoId},
       );
 
       await _dbService.execute('COMMIT;');

@@ -5,7 +5,7 @@ import '../../widgets/common/custom_buttons.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/settings_section_header.dart';
 import '../../models/product.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../pos/pos_state_manager.dart';
 import '../products/product_multi_selection_dialog.dart';
 
@@ -14,14 +14,14 @@ part 'general_settings/widgets/policy_settings_card.dart';
 part 'general_settings/widgets/point_settings_card.dart';
 part 'general_settings/widgets/security_settings_card.dart';
 
-class GeneralSettingsScreen extends StatefulWidget {
+class GeneralSettingsScreen extends ConsumerStatefulWidget {
   const GeneralSettingsScreen({super.key});
 
   @override
-  State<GeneralSettingsScreen> createState() => _GeneralSettingsScreenState();
+  ConsumerState<GeneralSettingsScreen> createState() => _GeneralSettingsScreenState();
 }
 
-class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
+class _GeneralSettingsScreenState extends ConsumerState<GeneralSettingsScreen> {
   // ── Policy State ──────────────────────────────────────────────────────────
   double _vatRate = 7.0;
   double _memberDiscountRate = 0.0;
@@ -108,7 +108,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
 
     if (mounted) {
       try {
-        context.read<PosStateManager>().refreshGeneralSettings();
+        ref.read(posProvider.notifier).refreshGeneralSettings();
       } catch (_) {
         // Ignored if Provider is not found (e.g. testing)
       }

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/auth_provider.dart';
 import 'customer_list_view.dart'; // ไฟล์ใหม่ (ข้อ 2)
 import 'debtor_list_screen.dart'; // ไฟล์ใหม่ (ข้อ 3)
-import 'billing_list_screen.dart'; // [NEW] Billing Screen
+import 'billing/billing_list_screen.dart'; // [NEW] Billing Screen
 import 'customer_import_screen.dart'; // [NEW] Import Screen
 import '../../repositories/customer_repository.dart';
 import '../../services/alert_service.dart';
 import '../../widgets/dialogs/admin_pin_dialog.dart';
 
-class CustomerManagementScreen extends StatefulWidget {
+class CustomerManagementScreen extends ConsumerStatefulWidget {
   const CustomerManagementScreen({super.key});
 
   @override
-  State<CustomerManagementScreen> createState() =>
+  ConsumerState<CustomerManagementScreen> createState() =>
       _CustomerManagementScreenState();
 }
 
-class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
+class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScreen> {
   String _currentView = 'MENU';
 
   // กลับไปหน้าเมนู
@@ -106,7 +106,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
   }
 
   Widget _buildMainMenu() {
-    final auth = Provider.of<AuthProvider>(context);
+    final auth = ref.watch(authProvider);
 
     // สร้างรายการเมนูตามสิทธิ์ที่มี (เหมือนหน้า Stock)
     final List<Widget> menuItems = [

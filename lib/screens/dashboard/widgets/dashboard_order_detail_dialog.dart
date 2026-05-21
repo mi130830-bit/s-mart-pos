@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/order_item.dart';
 import '../../../repositories/sales_repository.dart';
@@ -33,7 +33,8 @@ Future<void> showDashboardOrderDetailDialog({
   double profit = grandTotal - totalCost;
 
   if (!context.mounted) return;
-  final auth = Provider.of<AuthProvider>(context, listen: false);
+  final container = ProviderScope.containerOf(context, listen: false);
+  final auth = container.read(authProvider);
   final bool canViewCost = auth.hasPermission('view_cost');
   final bool canViewProfit = auth.hasPermission('view_profit');
 

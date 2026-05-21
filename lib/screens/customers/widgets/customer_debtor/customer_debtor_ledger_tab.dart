@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../models/customer.dart';
-import '../../../models/debtor_transaction.dart';
+import '../../../../models/customer.dart';
+import '../../../../models/debtor_transaction.dart';
 
 /// Tab แสดงรายการเดินบัญชี / หนี้
 class CustomerDebtorLedgerTab extends StatelessWidget {

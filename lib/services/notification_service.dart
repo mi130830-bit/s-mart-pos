@@ -256,6 +256,31 @@ class NotificationService {
     }
   }
 
+  /// Sends a raw push message to a Line User ID.
+  Future<bool> sendLinePushMessage({
+    required String lineUserId,
+    required String message,
+  }) async {
+    try {
+      final urlStr = SettingsService().apiUrl;
+      final url = Uri.parse('$urlStr/line/push-message');
+      
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "lineUserId": lineUserId,
+          "message": message,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Failed to send Line push message to $lineUserId: $e');
+      return false;
+    }
+  }
+
   // ✅ New Debt Payment Notification (Scenario 5)
   Future<void> sendDebtPaymentNotification({
     required Customer customer,

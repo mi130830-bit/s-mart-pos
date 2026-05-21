@@ -118,7 +118,7 @@ extension SalesReturnExtension on SalesRepository {
       ''';
       return await _dbService.query(sql);
     } catch (e) {
-      debugPrint('Error in getReturnHistory: $e');
+      LoggerService.error('SalesRepository', 'Error in getReturnHistory', e);
       return [];
     }
   }

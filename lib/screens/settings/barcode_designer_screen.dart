@@ -1,33 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/barcode_template.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
-import 'package:uuid/uuid.dart';
+import 'controllers/barcode_designer_controller.dart';
 
-class BarcodeDesignerScreen extends StatefulWidget {
+class BarcodeDesignerScreen extends ConsumerStatefulWidget {
   final BarcodeTemplate template;
 
   const BarcodeDesignerScreen({super.key, required this.template});
 
   @override
-  State<BarcodeDesignerScreen> createState() => _BarcodeDesignerScreenState();
+  ConsumerState<BarcodeDesignerScreen> createState() => _BarcodeDesignerScreenState();
 }
 
-class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
-  late BarcodeTemplate _template;
-  BarcodeElement? _selectedElement;
-  int _elementCounter = 1;
+class _BarcodeDesignerScreenState extends ConsumerState<BarcodeDesignerScreen> {
   final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _template = widget.template;
-    // Ensure all elements have IDs
-    for (var e in _template.elements) {
-      if (e.id.isEmpty) e.id = const Uuid().v4();
-    }
+    Future.microtask(() {
+      ref.read(barcodeDesignerProvider.notifier).init(widget.template);
+    });
     _focusNode.requestFocus();
   }
 
@@ -39,7 +36,10 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
-    if (_selectedElement == null) return;
+
+    final controller = ref.read(barcodeDesignerProvider.notifier);
+    final state = ref.read(barcodeDesignerProvider);
+    if (state.selectedElement == null) return;
 
     // Don't move if we are typing in a text field
     final primaryFocus = FocusManager.instance.primaryFocus;
@@ -47,44 +47,25 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
 
     final double step = HardwareKeyboard.instance.isShiftPressed ? 1.0 : 0.1;
 
-    setState(() {
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-        _selectedElement!.x -= step;
-      } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-        _selectedElement!.x += step;
-      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-        _selectedElement!.y -= step;
-      } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        _selectedElement!.y += step;
-      } else if (event.logicalKey == LogicalKeyboardKey.delete ||
-          event.logicalKey == LogicalKeyboardKey.backspace) {
-        _template.elements.remove(_selectedElement);
-        _selectedElement = null;
-      }
-    });
-  }
-
-  void _addElement(BarcodeElementType type) {
-    setState(() {
-      final newEl = BarcodeElement(
-        id: const Uuid().v4(),
-        type: type,
-        content: type == BarcodeElementType.text
-            ? 'ข้อความ $_elementCounter'
-            : '12345678',
-        x: 5,
-        y: 5,
-        width: type == BarcodeElementType.barcode ? 25 : 20,
-        height: type == BarcodeElementType.barcode ? 10 : 10,
-      );
-      _template.elements.add(newEl);
-      _selectedElement = newEl;
-      _elementCounter++;
-    });
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      controller.moveSelectedElement(Direction.left, step);
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      controller.moveSelectedElement(Direction.right, step);
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      controller.moveSelectedElement(Direction.up, step);
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      controller.moveSelectedElement(Direction.down, step);
+    } else if (event.logicalKey == LogicalKeyboardKey.delete ||
+        event.logicalKey == LogicalKeyboardKey.backspace) {
+      controller.removeSelectedElement();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(barcodeDesignerProvider);
+    final controller = ref.read(barcodeDesignerProvider.notifier);
+
     return Dialog(
       insetPadding: const EdgeInsets.all(20),
       child: KeyboardListener(
@@ -120,22 +101,24 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                 child: Row(
                   children: [
                     // Toolbar (Left)
-                    _buildToolbar(),
+                    _buildToolbar(controller),
                     // Canvas (Center)
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
                           // Allow clicking background to deselect and focus
-                          setState(() => _selectedElement = null);
+                          controller.selectElement(null);
                           _focusNode.requestFocus();
                         },
                         child: Center(
-                          child: _buildCanvas(),
+                          child: state.template == null 
+                            ? const CircularProgressIndicator()
+                            : _buildCanvas(controller, state),
                         ),
                       ),
                     ),
                     // Properties (Right)
-                    _buildPropertiesPanel(),
+                    _buildPropertiesPanel(controller, state),
                   ],
                 ),
               ),
@@ -147,7 +130,7 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     CustomButton(
-                      onPressed: () => Navigator.pop(context, _template),
+                      onPressed: () => Navigator.pop(context, state.template),
                       icon: Icons.save,
                       label: 'บันทึกแบบ',
                       type: ButtonType.primary,
@@ -169,7 +152,7 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
     );
   }
 
-  Widget _buildToolbar() {
+  Widget _buildToolbar(BarcodeDesignerController controller) {
     return Container(
       width: 100,
       color: Colors.white,
@@ -181,15 +164,15 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           ),
           _toolbarItem(Icons.text_fields, 'ข้อความ',
-              () => _addElement(BarcodeElementType.text)),
+              () => controller.addElement(BarcodeElementType.text)),
           _toolbarItem(Icons.crop_square, 'สี่เหลี่ยม',
-              () => _addElement(BarcodeElementType.rectangle)),
+              () => controller.addElement(BarcodeElementType.rectangle)),
           _toolbarItem(Icons.barcode_reader, 'บาร์โค้ด',
-              () => _addElement(BarcodeElementType.barcode)),
+              () => controller.addElement(BarcodeElementType.barcode)),
           _toolbarItem(Icons.qr_code, 'QR Code',
-              () => _addElement(BarcodeElementType.qrCode)),
+              () => controller.addElement(BarcodeElementType.qrCode)),
           _toolbarItem(
-              Icons.image, 'โลโก้', () => _addElement(BarcodeElementType.logo)),
+              Icons.image, 'โลโก้', () => controller.addElement(BarcodeElementType.logo)),
         ],
       ),
     );
@@ -215,10 +198,11 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
     );
   }
 
-  Widget _buildCanvas() {
+  Widget _buildCanvas(BarcodeDesignerController controller, BarcodeDesignerState state) {
+    final template = state.template!;
     double scale = 12.0; // Scale mm to pixels
-    double w = _template.labelWidth * scale;
-    double h = _template.labelHeight * scale;
+    double w = template.labelWidth * scale;
+    double h = template.labelHeight * scale;
 
     return Container(
       width: w,
@@ -227,7 +211,7 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
         color: Colors.white,
         border: Border.all(color: Colors.black, width: 0.5),
         borderRadius:
-            _template.shape == 'rounded' ? BorderRadius.circular(16) : null,
+            template.shape == 'rounded' ? BorderRadius.circular(16) : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.1),
@@ -238,8 +222,8 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
       ),
       child: Stack(
         clipBehavior: Clip.none,
-        children: _template.elements.map((e) {
-          bool isSelected = _selectedElement?.id == e.id;
+        children: template.elements.map((e) {
+          bool isSelected = state.selectedElement?.id == e.id;
           return Positioned(
             left: e.x * scale,
             top: e.y * scale,
@@ -251,13 +235,14 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                 children: [
                   // Actual Content & Move Handle
                   GestureDetector(
-                    onTap: () => setState(() => _selectedElement = e),
+                    onTap: () => controller.selectElement(e),
                     onPanUpdate: isSelected
                         ? (details) {
-                            setState(() {
-                              e.x += details.delta.dx / scale;
-                              e.y += details.delta.dy / scale;
-                            });
+                            controller.updateElementPosition(
+                              e, 
+                              details.delta.dx / scale, 
+                              details.delta.dy / scale
+                            );
                           }
                         : null,
                     child: Container(
@@ -266,19 +251,19 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                             ? Border.all(color: Colors.blue, width: 1.5)
                             : Border.all(color: Colors.transparent),
                       ),
-                      child: Center(child: _buildElementContent(e, isSelected)),
+                      child: Center(child: _buildElementContent(e)),
                     ),
                   ),
                   // Resize Handles
                   if (isSelected) ...[
-                    _buildResizeHandle(e, Alignment.topLeft, scale),
-                    _buildResizeHandle(e, Alignment.topCenter, scale),
-                    _buildResizeHandle(e, Alignment.topRight, scale),
-                    _buildResizeHandle(e, Alignment.centerLeft, scale),
-                    _buildResizeHandle(e, Alignment.centerRight, scale),
-                    _buildResizeHandle(e, Alignment.bottomLeft, scale),
-                    _buildResizeHandle(e, Alignment.bottomCenter, scale),
-                    _buildResizeHandle(e, Alignment.bottomRight, scale),
+                    _buildResizeHandle(controller, e, Alignment.topLeft, scale),
+                    _buildResizeHandle(controller, e, Alignment.topCenter, scale),
+                    _buildResizeHandle(controller, e, Alignment.topRight, scale),
+                    _buildResizeHandle(controller, e, Alignment.centerLeft, scale),
+                    _buildResizeHandle(controller, e, Alignment.centerRight, scale),
+                    _buildResizeHandle(controller, e, Alignment.bottomLeft, scale),
+                    _buildResizeHandle(controller, e, Alignment.bottomCenter, scale),
+                    _buildResizeHandle(controller, e, Alignment.bottomRight, scale),
                   ],
                 ],
               ),
@@ -290,7 +275,7 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
   }
 
   Widget _buildResizeHandle(
-      BarcodeElement e, Alignment alignment, double scale) {
+      BarcodeDesignerController controller, BarcodeElement e, Alignment alignment, double scale) {
     const double handleSize = 12.0;
     return Positioned(
       left: alignment == Alignment.topLeft ||
@@ -323,42 +308,11 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
         cursor: _getCursorForAlignment(alignment),
         child: GestureDetector(
           onPanUpdate: (details) {
-            setState(() {
-              double dx = details.delta.dx / scale;
-              double dy = details.delta.dy / scale;
+            double dx = details.delta.dx / scale;
+            double dy = details.delta.dy / scale;
 
-              // Vertical resizing
-              if (alignment == Alignment.bottomRight ||
-                  alignment == Alignment.bottomCenter ||
-                  alignment == Alignment.bottomLeft) {
-                e.height += dy;
-                if (e.height < 1) e.height = 1;
-              }
-              if (alignment == Alignment.topLeft ||
-                  alignment == Alignment.topCenter ||
-                  alignment == Alignment.topRight) {
-                double oldH = e.height;
-                e.height -= dy;
-                if (e.height < 1) e.height = 1;
-                e.y += (oldH - e.height);
-              }
-
-              // Horizontal resizing
-              if (alignment == Alignment.bottomRight ||
-                  alignment == Alignment.centerRight ||
-                  alignment == Alignment.topRight) {
-                e.width += dx;
-                if (e.width < 1) e.width = 1;
-              }
-              if (alignment == Alignment.bottomLeft ||
-                  alignment == Alignment.centerLeft ||
-                  alignment == Alignment.topLeft) {
-                double oldW = e.width;
-                e.width -= dx;
-                if (e.width < 1) e.width = 1;
-                e.x += (oldW - e.width);
-              }
-            });
+            controller.updateElementSizeVertical(e, dy, alignment);
+            controller.updateElementSizeHorizontal(e, dx, alignment);
           },
           child: Container(
             width: handleSize,
@@ -396,7 +350,7 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
     return SystemMouseCursors.move;
   }
 
-  Widget _buildElementContent(BarcodeElement e, bool isSelected) {
+  Widget _buildElementContent(BarcodeElement e) {
     switch (e.type) {
       case BarcodeElementType.text:
         return Center(
@@ -435,12 +389,12 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
     }
   }
 
-  Widget _buildPropertiesPanel() {
+  Widget _buildPropertiesPanel(BarcodeDesignerController controller, BarcodeDesignerState state) {
     return Container(
       width: 300,
       color: Colors.white,
       padding: const EdgeInsets.all(16),
-      child: _selectedElement == null
+      child: state.selectedElement == null
           ? const Center(child: Text('กรุณาเลือกองค์ประกอบ'))
           : SingleChildScrollView(
               child: Column(
@@ -452,17 +406,17 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                   const Divider(),
                   _propDropdown<String>(
                       'สี', 'สีดำ', ['สีดำ', 'สีน้ำเงิน', 'สีแดง']),
-                  if (_selectedElement!.type == BarcodeElementType.text) ...[
-                    _propTextField('ข้อความ', _selectedElement!.content, (v) {
-                      setState(() => _selectedElement!.content = v);
+                  if (state.selectedElement!.type == BarcodeElementType.text) ...[
+                    _propTextField('ข้อความ', state.selectedElement!.content, (v) {
+                      controller.updateElementContent(v);
                     }),
-                    _propNumberField('ขนาด Font', _selectedElement!.fontSize,
+                    _propNumberField('ขนาด Font', state.selectedElement!.fontSize,
                         (v) {
-                      setState(() => _selectedElement!.fontSize = v);
+                      controller.updateElementFontSize(v);
                     }),
                     _propDropdown<BarcodeDataSource>(
                       'เชื่อมข้อมูล',
-                      _selectedElement!.dataSource,
+                      state.selectedElement!.dataSource,
                       BarcodeDataSource.values,
                       labelMapper: (v) {
                         switch (v) {
@@ -479,42 +433,39 @@ class _BarcodeDesignerScreenState extends State<BarcodeDesignerScreen> {
                         }
                       },
                       onChanged: (v) =>
-                          setState(() => _selectedElement!.dataSource = v!),
+                          controller.updateElementDataSource(v!),
                     ),
                   ],
-                  if (_selectedElement!.type == BarcodeElementType.barcode ||
-                      _selectedElement!.type == BarcodeElementType.qrCode) ...[
+                  if (state.selectedElement!.type == BarcodeElementType.barcode ||
+                      state.selectedElement!.type == BarcodeElementType.qrCode) ...[
                     _propDropdown<BarcodeDataSource>(
                       'เชื่อมข้อมูล',
-                      _selectedElement!.dataSource,
+                      state.selectedElement!.dataSource,
                       [BarcodeDataSource.none, BarcodeDataSource.barcode],
                       labelMapper: (v) => v == BarcodeDataSource.none
                           ? 'ไม่ลิ้งข้อมูล'
                           : 'บาร์โค้ด',
                       onChanged: (v) =>
-                          setState(() => _selectedElement!.dataSource = v!),
+                          controller.updateElementDataSource(v!),
                     ),
                   ],
                   const SizedBox(height: 16),
                   const Text('ตำแหน่งและขนาด (มม.)',
                       style: TextStyle(fontWeight: FontWeight.bold)),
-                  _propNumberField('X', _selectedElement!.x,
-                      (v) => setState(() => _selectedElement!.x = v)),
-                  _propNumberField('Y', _selectedElement!.y,
-                      (v) => setState(() => _selectedElement!.y = v)),
-                  _propNumberField('กว้าง', _selectedElement!.width,
-                      (v) => setState(() => _selectedElement!.width = v)),
-                  _propNumberField('สูง', _selectedElement!.height,
-                      (v) => setState(() => _selectedElement!.height = v)),
+                  _propNumberField('X', state.selectedElement!.x,
+                      (v) => controller.updateElementProperty(() => state.selectedElement!.x = v)),
+                  _propNumberField('Y', state.selectedElement!.y,
+                      (v) => controller.updateElementProperty(() => state.selectedElement!.y = v)),
+                  _propNumberField('กว้าง', state.selectedElement!.width,
+                      (v) => controller.updateElementProperty(() => state.selectedElement!.width = v)),
+                  _propNumberField('สูง', state.selectedElement!.height,
+                      (v) => controller.updateElementProperty(() => state.selectedElement!.height = v)),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: CustomButton(
                       onPressed: () {
-                        setState(() {
-                          _template.elements.remove(_selectedElement);
-                          _selectedElement = null;
-                        });
+                        controller.removeSelectedElement();
                       },
                       icon: Icons.delete,
                       label: 'ลบองค์ประกอบ',

@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 
 import '../../repositories/shift_repository.dart';
 import '../../services/printing/receipt_service.dart';
 import '../../services/alert_service.dart';
 import '../../state/auth_provider.dart';
 
-class CloseShiftDialog extends StatefulWidget {
+class CloseShiftDialog extends ConsumerStatefulWidget {
   const CloseShiftDialog({super.key});
 
   @override
-  State<CloseShiftDialog> createState() => _CloseShiftDialogState();
+  ConsumerState<CloseShiftDialog> createState() => _CloseShiftDialogState();
 }
 
-class _CloseShiftDialogState extends State<CloseShiftDialog> {
+class _CloseShiftDialogState extends ConsumerState<CloseShiftDialog> {
   final ShiftRepository _shiftRepo = ShiftRepository();
   final _currencyFormat = NumberFormat('#,##0.00');
   
@@ -96,7 +97,7 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
   }
 
   Future<void> _submitCloseShift() async {
-    final auth = context.read<AuthProvider>();
+    final auth = ref.read(authProvider);
     final user = auth.currentUser;
     
     // ยืนยันก่อนบันทึก

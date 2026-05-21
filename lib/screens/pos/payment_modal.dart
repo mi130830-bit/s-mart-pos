@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:decimal/decimal.dart';
 
 import 'pos_state_manager.dart';
@@ -18,16 +18,16 @@ import 'payment_modal/controllers/payment_modal_controller.dart';
 
 import '../../services/settings_service.dart';
 
-class PaymentModal extends StatefulWidget {
+class PaymentModal extends ConsumerStatefulWidget {
   final VoidCallback onPaymentSuccess;
 
   const PaymentModal({super.key, required this.onPaymentSuccess});
 
   @override
-  State<PaymentModal> createState() => _PaymentModalState();
+  ConsumerState<PaymentModal> createState() => _PaymentModalState();
 }
 
-class _PaymentModalState extends State<PaymentModal>
+class _PaymentModalState extends ConsumerState<PaymentModal>
     with
         CouponControllerMixin,
         SlipVerificationControllerMixin,
@@ -38,13 +38,13 @@ class _PaymentModalState extends State<PaymentModal>
     amountFocusNode.onKeyEvent = (node, event) {
       if (event is KeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.space) {
-          final posState = Provider.of<PosStateManager>(context, listen: false);
+          final posState = ref.read(posProvider.notifier);
           fillRemainingAmount(posState);
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.keyV &&
             HardwareKeyboard.instance.isControlPressed) {
-          final posState = Provider.of<PosStateManager>(context, listen: false);
+          final posState = ref.read(posProvider.notifier);
           handlePaste(posState);
           return KeyEventResult.handled;
         }
@@ -53,7 +53,7 @@ class _PaymentModalState extends State<PaymentModal>
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       amountFocusNode.requestFocus();
-      final posState = Provider.of<PosStateManager>(context, listen: false);
+      final posState = ref.read(posProvider.notifier);
       fillRemainingAmount(posState);
     });
   }
@@ -67,7 +67,8 @@ class _PaymentModalState extends State<PaymentModal>
 
   @override
   Widget build(BuildContext context) {
-    final posState = context.watch<PosStateManager>();
+    ref.watch(posProvider);
+    final posState = ref.read(posProvider.notifier);
     final Decimal grandTotal = Decimal.parse(posState.grandTotal.toString());
 
     final Decimal totalPaidInList = totalPaid;

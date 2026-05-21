@@ -11,7 +11,7 @@ import '../../../widgets/common/custom_buttons.dart';
 class PosEditItemDialog {
   static Future<void> show(
     BuildContext context, {
-    required PosStateManager posState,
+    required PosStateNotifier posState,
     required int index,
     required bool Function(String key, String actionName) checkPermission,
   }) async {

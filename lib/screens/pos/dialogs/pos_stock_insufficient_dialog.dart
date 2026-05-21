@@ -11,7 +11,7 @@ class PosStockInsufficientDialog {
     BuildContext context, {
     required String errorMsg,
     required Product product,
-    required PosStateManager posState,
+    required PosStateNotifier posState,
     double? overridePrice,
     String? overrideUnit,
     double? overrideConversionFactor,

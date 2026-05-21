@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../state/auth_provider.dart';
 import '../settings/initial_setup_screen.dart';
 import '../../services/alert_service.dart';
 import '../pos/pos_state_manager.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
-//import '../../services/telegram_service.dart'; // ✅ Added Import
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -29,9 +29,16 @@ class _LoginScreenState extends State<LoginScreen> {
     _loadCredentials();
   }
 
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadCredentials() async {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    final creds = await auth.loadSavedCredentials();
+    final creds = await ref.read(authProvider.notifier).loadSavedCredentials();
+    if (!mounted) return;
     if (creds['username']!.isNotEmpty) {
       setState(() {
         _usernameCtrl.text = creds['username']!;
@@ -43,9 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      // Pass rememberMe flag to login function
-      final success = await auth.login(
+      final success = await ref.read(authProvider.notifier).login(
         _usernameCtrl.text.trim(),
         _passwordCtrl.text.trim(),
         rememberMe: _rememberMe,
@@ -63,144 +68,142 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, auth, child) {
-        debugPrint('🔐 [LoginScreen] Building UI...');
-        final posState = Provider.of<PosStateManager>(context);
-        return Scaffold(
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Colors.indigo.shade800, Colors.indigo.shade400],
-              ),
+    final authState = ref.watch(authProvider);
+    final posState = ref.watch(posProvider);
+    debugPrint('🔐 [LoginScreen] Building UI...');
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.indigo.shade800, Colors.indigo.shade400],
+          ),
+        ),
+        child: Center(
+          child: Card(
+            elevation: 10,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            child: Center(
-              child: Card(
-                elevation: 10,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Container(
-                  width: 400,
-                  padding: const EdgeInsets.all(40),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+            child: Container(
+              width: 400,
+              padding: const EdgeInsets.all(40),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.store, size: 80, color: Colors.indigo),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'S_MartPOS',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'เข้าสู่ระบบ ${posState.shopName}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.indigo,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'เข้าสู่ระบบเพื่อใช้งาน',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 30),
+                    CustomTextField(
+                      controller: _usernameCtrl,
+                      label: 'ชื่อผู้ใช้',
+                      prefixIcon: Icons.person,
+                      validator: (v) =>
+                          v!.isEmpty ? 'กรุณากรอกชื่อผู้ใช้' : null,
+                      onSubmitted: (_) => _handleLogin(),
+                    ),
+                    const SizedBox(height: 20),
+                    CustomTextField(
+                      controller: _passwordCtrl,
+                      label: 'รหัสผ่าน',
+                      obscureText: _isObscure,
+                      prefixIcon: Icons.lock,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _isObscure
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () =>
+                            setState(() => _isObscure = !_isObscure),
+                      ),
+                      validator: (v) =>
+                          v!.isEmpty ? 'กรุณากรอกรหัสผ่าน' : null,
+                      onSubmitted: (_) => _handleLogin(),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
                       children: [
-                        const Icon(Icons.store, size: 80, color: Colors.indigo),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'S_MartPOS',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.indigo,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          'เข้าสู่ระบบ ${posState.shopName}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.indigo,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'เข้าสู่ระบบเพื่อใช้งาน',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 30),
-                        CustomTextField(
-                          controller: _usernameCtrl,
-                          label: 'ชื่อผู้ใช้',
-                          prefixIcon: Icons.person,
-                          validator: (v) =>
-                              v!.isEmpty ? 'กรุณากรอกชื่อผู้ใช้' : null,
-                          onSubmitted: (_) => _handleLogin(),
-                        ),
-                        const SizedBox(height: 20),
-                        CustomTextField(
-                          controller: _passwordCtrl,
-                          label: 'รหัสผ่าน',
-                          obscureText: _isObscure,
-                          prefixIcon: Icons.lock,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isObscure
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                            onPressed: () =>
-                                setState(() => _isObscure = !_isObscure),
-                          ),
-                          validator: (v) =>
-                              v!.isEmpty ? 'กรุณากรอกรหัสผ่าน' : null,
-                          onSubmitted: (_) => _handleLogin(),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: _rememberMe,
-                              onChanged: (val) {
-                                setState(() {
-                                  _rememberMe = val ?? false;
-                                });
-                              },
-                              activeColor: Colors.indigo,
-                            ),
-                            const Text('จดจำรหัสผ่าน'),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: CustomButton(
-                            label: 'เข้าสู่ระบบ',
-                            onPressed: auth.isLoading ? null : _handleLogin,
-                            isLoading: auth.isLoading,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextButton.icon(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const InitialSetupScreen(),
-                              ),
-                            );
+                        Checkbox(
+                          value: _rememberMe,
+                          onChanged: (val) {
+                            setState(() {
+                              _rememberMe = val ?? false;
+                            });
                           },
-                          icon: const Icon(
-                            Icons.settings,
-                            size: 16,
-                            color: Colors.grey,
-                          ),
-                          label: const Text(
-                            'ตั้งค่าการเชื่อมต่อ / แก้ไข IP (Connection Setup)',
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
+                          activeColor: Colors.indigo,
                         ),
+                        const Text('จดจำรหัสผ่าน'),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: CustomButton(
+                        label: 'เข้าสู่ระบบ',
+                        onPressed: authState.isLoading ? null : _handleLogin,
+                        isLoading: authState.isLoading,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const InitialSetupScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.settings,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                      label: const Text(
+                        'ตั้งค่าการเชื่อมต่อ / แก้ไข IP (Connection Setup)',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

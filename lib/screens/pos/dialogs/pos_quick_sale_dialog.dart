@@ -10,7 +10,7 @@ class PosQuickSaleDialog {
   static Future<void> show(
     BuildContext context, {
     required String barcode,
-    required PosStateManager posState,
+    required PosStateNotifier posState,
     required double qty,
     required VoidCallback onComplete,
   }) async {

@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/excel_export_service.dart';
 import '../../services/alert_service.dart';
@@ -12,6 +9,11 @@ import '../../services/integration/delivery_integration_service.dart';
 import '../../services/mysql_service.dart';
 import '../../services/firestore_rest_service.dart';
 import 'package:flutter/foundation.dart';
+
+import 'widgets/delivery_report/delivery_report_filter_bar.dart';
+import 'widgets/delivery_report/delivery_report_vehicle_chips.dart';
+import 'widgets/delivery_report/delivery_report_data_table.dart';
+import 'widgets/delivery_report/assign_vehicle_dialog.dart';
 
 class DeliveryReportScreen extends StatefulWidget {
   // ✅ Task 4: รับ Service แบบ Optional (Option B) — ไม่ต้องแต่ main.dart
@@ -42,8 +44,6 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
   );
   DateTime _endDate = DateTime.now();
 
-  final _dateFormat = DateFormat('dd/MM/yyyy');
-  final _moneyFormat = NumberFormat('#,##0.00');
 
   @override
   void initState() {
@@ -189,6 +189,7 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       }
     }
   }
+
   Future<void> _pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -320,60 +321,12 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
     }
   }
 
-  void _showAssignVehicleDialog(BuildContext context, Map<String, dynamic> record) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('เลือกรถ'),
-          content: SizedBox(
-            width: 320,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Current assignment
-                if ((record['vehiclePlate']?.toString() ?? '').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'รถปัจจุบัน: ${record['vehiclePlate']}',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                    ),
-                  ),
-                // Vehicle list
-                ..._allVehicles.map((v) {
-                  final plate = v['vehicle_plate']?.toString() ?? '';
-                  final name = v['vehicle_type']?.toString() ?? '';
-                  final label = name.isNotEmpty ? '$name ($plate)' : plate;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.directions_car, color: Colors.indigo),
-                    title: Text(label),
-                    subtitle: plate.isNotEmpty && name.isNotEmpty ? Text(plate, style: const TextStyle(fontSize: 12)) : null,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _updateVehiclePlate(record, plate);
-                    },
-                  );
-                }),
-                // Clear option
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.clear, color: Colors.red),
-                  title: const Text('ลบข้อมูลรถ'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _updateVehiclePlate(record, '');
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-          ],
-        );
-      },
+  void _handleAssignVehicle(Map<String, dynamic> record) {
+    showAssignVehicleDialog(
+      context,
+      record,
+      _allVehicles,
+      (String plate) => _updateVehiclePlate(record, plate),
     );
   }
 
@@ -495,309 +448,43 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       body: Column(
         children: [
           // ── Filter Bar ──────────────────────────────────────────
-          Container(
-            color: colorScheme.surfaceContainerHighest,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                const Icon(Icons.date_range, size: 20),
-                const SizedBox(width: 12),
-                const Text('เริ่ม:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _pickStartDate,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: Text(_dateFormat.format(_startDate), style: const TextStyle(fontSize: 15)),
-                ),
-                const SizedBox(width: 16),
-                const Text('ถึง:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _pickEndDate,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  child: Text(_dateFormat.format(_endDate), style: const TextStyle(fontSize: 15)),
-                ),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 250,
-                  height: 38,
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'ค้นหาชื่อลูกค้า, คนขับ...',
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 10),
-                      filled: true,
-                      fillColor: colorScheme.surface,
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value;
-                      });
-                    },
-                  ),
-                ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'ทั้งหมด ${_filteredRecords.length} งาน | ยอดขายรวม ฿${_moneyFormat.format(_totalAmount)}',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.primary),
-                    ),
-                    Text(
-                      'ต้นทุนน้ำมันรวม: ฿${_moneyFormat.format(_totalFuelCost)}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.red,
-                          fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          DeliveryReportFilterBar(
+            startDate: _startDate,
+            endDate: _endDate,
+            searchQuery: _searchQuery,
+            totalCount: _filteredRecords.length,
+            totalAmount: _totalAmount,
+            totalFuelCost: _totalFuelCost,
+            onPickStartDate: _pickStartDate,
+            onPickEndDate: _pickEndDate,
+            onSearchChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+              });
+            },
           ),
 
           // ── Vehicle Summary Chips ────────────────────────────────
           if (_countByVehicle.isNotEmpty && !_isLoading)
-            Container(
-              color: Colors.indigo.shade50,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                children: [
-                  const Text('รถ: ',
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: FilterChip(
-                              label: const Text('ทั้งหมด'),
-                              selected: _selectedVehicle == null,
-                              onSelected: (_) => setState(() => _selectedVehicle = null),
-                              selectedColor: colorScheme.primaryContainer,
-                              backgroundColor: Colors.indigo.shade50,
-                              checkmarkColor: colorScheme.primary,
-                            ),
-                          ),
-                          ..._countByVehicle.entries.map((e) {
-                            final plate = e.key;
-                            final count = e.value;
-                            String displayName = plate;
-                            if (plate != 'ไม่ระบุ') {
-                              final matched = _allVehicles.where((v) => (v['vehicle_plate']?.toString().trim().toUpperCase() ?? '') == plate).toList();
-                              if (matched.isNotEmpty) {
-                                final type = matched.first['vehicle_type']?.toString().trim() ?? '';
-                                if (type.isNotEmpty) displayName = '$type $plate';
-                              }
-                            }
-                            final isSelected = _selectedVehicle == plate;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
-                                label: Text('$displayName ($count)'),
-                                selected: isSelected,
-                                onSelected: (bool selected) {
-                                  setState(() {
-                                    _selectedVehicle = selected ? plate : null;
-                                  });
-                                },
-                                selectedColor: colorScheme.primaryContainer,
-                                backgroundColor: Colors.indigo.shade50,
-                                checkmarkColor: colorScheme.primary,
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            DeliveryReportVehicleChips(
+              countByVehicle: _countByVehicle,
+              allVehicles: _allVehicles,
+              selectedVehicle: _selectedVehicle,
+              onVehicleSelected: (plate) {
+                setState(() {
+                  _selectedVehicle = plate;
+                });
+              },
             ),
 
           // ── Data Table ─────────────────────────────────────────
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredRecords.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.local_shipping_outlined,
-                                size: 72, color: Colors.grey.shade300),
-                            const SizedBox(height: 16),
-                            const Text('ไม่พบข้อมูลการจัดส่งในช่วงที่เลือก',
-                                style: TextStyle(
-                                    color: Colors.grey, fontSize: 16)),
-                            const SizedBox(height: 10),
-                            OutlinedButton(
-                              onPressed: _pickStartDate,
-                              child: const Text('เปลี่ยนช่วงวันที่'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : SingleChildScrollView(
-                        // scrollDirection: Axis.vertical is default
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            headingRowColor: WidgetStateProperty.all(
-                                colorScheme.primary.withValues(alpha: 0.1)),
-                            columns: const [
-                              DataColumn(label: Text('วันที่')),
-                              DataColumn(label: Text('ลูกค้า')),
-                              DataColumn(label: Text('คนขับ')),
-                              DataColumn(label: Text('รถ')),
-                              DataColumn(label: Text('ยอดเงิน')),
-                              DataColumn(label: Text('ระยะทาง')),
-                              DataColumn(label: Text('ค่าน้ำมัน')),
-                              DataColumn(label: Text('พิกัด GPS')),
-                            ],
-                            rows: _filteredRecords.map((r) {
-                              final rawDate =
-                                  r['completedAt']?.toString() ?? '';
-                              String dateStr = '-';
-                              try {
-                                if (rawDate.isNotEmpty) {
-                                  final dt = DateTime.parse(rawDate);
-                                  dateStr = _dateFormat.format(dt); // วันที่เท่านั้น ไม่มีเวลา
-                                }
-                              } catch (_) {
-                                dateStr = rawDate;
-                              }
-                              final amount = double.tryParse(
-                                      r['totalAmount']?.toString() ?? '0') ??
-                                  0.0;
-                              return DataRow(cells: [
-                                DataCell(Text(dateStr)),
-                                DataCell(Text(
-                                    r['customerName']?.toString() ?? '-')),
-                                DataCell(Text(
-                                    r['driverName']?.toString() ?? '-')),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(r['vehiclePlate']?.toString().isNotEmpty == true
-                                          ? r['vehiclePlate'].toString()
-                                          : 'ไม่ระบุ'),
-                                      const SizedBox(width: 4),
-                                      InkWell(
-                                        onTap: () => _showAssignVehicleDialog(context, r),
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(4),
-                                          child: Icon(Icons.edit, size: 14, color: Colors.indigo),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                DataCell(Text(
-                                  '฿${_moneyFormat.format(amount)}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green),
-                                )),
-                                DataCell(
-                                  () {
-                                    final dist = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
-                                    final src = r['_distanceSource']?.toString() ?? '';
-                                    if (dist <= 0) {
-                                      return const Tooltip(
-                                        message: 'ยังไม่มีระยะทาง — กรอก "ระยะทางจัดส่ง" ในข้อมูลลูกค้า',
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
-                                            SizedBox(width: 4),
-                                            Text('ยังไม่กำหนด', style: TextStyle(color: Colors.orange, fontSize: 12)),
-                                          ],
-                                        ),
-                                      );
-                                    }
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text('${dist.toStringAsFixed(2)} กม.'),
-                                        if (src == 'customer') ...[
-                                          const SizedBox(width: 4),
-                                          Tooltip(
-                                            message: 'ระยะทางจากข้อมูลลูกค้า',
-                                            child: Icon(Icons.person_pin_circle_outlined, size: 13, color: Colors.blue.shade400),
-                                          ),
-                                        ],
-                                      ],
-                                    );
-                                  }(),
-                                ),
-                                DataCell(Text(
-                                  () {
-                                    final dist = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
-                                    final fuelRate = SettingsService().fuelCostPerKm;
-                                    final fuel = dist > 0 ? dist * fuelRate : 0.0;
-                                    return fuel > 0 ? '฿${_moneyFormat.format(fuel)}' : '-';
-                                  }(),
-                                  style: TextStyle(
-                                      color: (() {
-                                        final dist = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
-                                        return dist > 0 ? Colors.red : Colors.grey;
-                                      })(),
-                                      fontWeight: FontWeight.bold),
-                                )),
-                                DataCell(
-                                  r['locationUrl'] != null && r['locationUrl'].toString().isNotEmpty
-                                      ? Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(Icons.map, color: Colors.blue),
-                                              tooltip: 'เปิด Google Maps',
-                                              onPressed: () async {
-                                                final url = Uri.parse(r['locationUrl'].toString());
-                                                if (await canLaunchUrl(url)) {
-                                                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                                                } else {
-                                                  if (context.mounted) {
-                                                    AlertService.show(context: context, message: 'ไม่สามารถเปิดลิงก์ได้', type: 'error');
-                                                  }
-                                                }
-                                              },
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.copy, size: 18, color: Colors.grey),
-                                              tooltip: 'คัดลอกลิงก์',
-                                              onPressed: () {
-                                                Clipboard.setData(ClipboardData(text: r['locationUrl'].toString()));
-                                                AlertService.show(context: context, message: 'คัดลอกพิกัดลง Clipboard แล้ว', type: 'success');
-                                              },
-                                            ),
-                                          ],
-                                        )
-                                      : const Text('-'),
-                                ),
-                              ]);
-                            }).toList(),
-                          ),
-                        ),
-                      ),
+            child: DeliveryReportDataTable(
+              isLoading: _isLoading,
+              filteredRecords: _filteredRecords,
+              onEmptyAction: _pickStartDate,
+              onAssignVehicle: _handleAssignVehicle,
+            ),
           ),
         ],
       ),

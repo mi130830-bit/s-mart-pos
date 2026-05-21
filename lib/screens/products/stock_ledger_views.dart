@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../repositories/stock_repository.dart';
-import '../../widgets/common/custom_buttons.dart';
 import '../../services/alert_service.dart';
+import 'widgets/stock_ledger/stock_filter_panel.dart';
+import 'widgets/stock_ledger/stock_ledger_pagination.dart';
+import 'widgets/stock_ledger/stock_ledger_table.dart';
+import 'widgets/stock_ledger/stock_empty_state.dart';
 
 // ---------------------------------------------------------------------------
 // 1. หน้าประวัติการรับเข้าสินค้า
@@ -114,137 +117,39 @@ class _StockInPOHistoryListState extends State<StockInPOHistoryList> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
-
-    if (_orders.isEmpty) {
-      return const Center(child: Text('ไม่พบประวัติการรับสินค้า'));
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(8),
-            itemCount: _orders.length,
-            separatorBuilder: (ctx, i) => const SizedBox(height: 8),
-            itemBuilder: (ctx, i) {
-              final po = _orders[i];
-              final date = DateTime.tryParse(po['updatedAt'].toString()) ??
-                  DateTime.now(); // Use updatedAt for received time
-              final total = double.tryParse(po['totalAmount'].toString()) ?? 0;
-              final itemCount = po['itemCount'] ?? 0;
-              final supplier = po['supplierName'] ?? 'ไม่ระบุ Supplier';
-
-              return Card(
-                elevation: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: Colors.green,
-                    child: Icon(Icons.inventory_2, color: Colors.white),
-                  ),
-                  title: Text('PO #${po['id']} - $supplier',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                      'วันที่รับ: ${DateFormat('dd/MM/yyyy HH:mm').format(date)}\nเอกสาร: ${po['documentNo']} | จำนวน: $itemCount รายการ',
-                      style: TextStyle(color: Colors.grey[700])),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '฿${NumberFormat('#,##0.00').format(total)}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.green),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: _isLoading
+          ? const Center(
+              key: ValueKey('loading'),
+              child: CircularProgressIndicator(),
+            )
+          : _orders.isEmpty
+              ? const StockEmptyState(
+                  key: ValueKey('empty'),
+                  icon: Icons.receipt_long_outlined,
+                  title: 'ไม่พบประวัติการรับสินค้า',
+                  message: 'ยังไม่มีประวัติการออกเอกสารใบสั่งซื้อสินค้าในระบบ',
+                )
+              : Column(
+                  key: const ValueKey('content'),
+                  children: [
+                    Expanded(
+                      child: StockLedgerTable(
+                        orders: _orders,
+                        stockRepo: _repo,
+                        onDelete: _confirmDelete,
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _confirmDelete(po['id'], supplier),
-                      ),
-                    ],
-                  ),
-                  onTap: () async {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: Text('รายละเอียด PO #${po['id']}'),
-                        content: SizedBox(
-                          width: 400,
-                          height: 300,
-                          child: FutureBuilder(
-                            future: _repo.getPurchaseOrderItems(po['id']),
-                            builder: (ctx, snapshot) {
-                              if (!snapshot.hasData) {
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              }
-                              final items =
-                                  snapshot.data as List<Map<String, dynamic>>;
-                              if (items.isEmpty) {
-                                return const Center(
-                                    child: Text('ไม่มีรายการสินค้า'));
-                              }
-                              return ListView.separated(
-                                itemCount: items.length,
-                                separatorBuilder: (ctx, i) => const Divider(),
-                                itemBuilder: (ctx, i) {
-                                  final item = items[i];
-                                  final cost = double.tryParse(
-                                          item['costPrice'].toString()) ??
-                                      0;
-                                  final qty = double.tryParse(
-                                          item['quantity'].toString()) ??
-                                      0;
-                                  return ListTile(
-                                    title: Text(item['productName']),
-                                    subtitle: Text(
-                                        'ทุน: ${NumberFormat('#,##0.00').format(cost)}'),
-                                    trailing: Text(
-                                      '${NumberFormat('#,##0').format(qty)} ชิ้น',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('ปิด'),
-                          )
-                        ],
-                      ),
-                    );
-                  },
+                    ),
+                    StockLedgerPagination(
+                      currentPage: _currentPage,
+                      hasPrevious: _currentPage > 1,
+                      hasNext: _orders.length == _pageSize,
+                      onPrevious: () => _changePage(-1),
+                      onNext: () => _changePage(1),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
-        ),
-        // Simple Pagination
-        Container(
-          padding: const EdgeInsets.all(8),
-          color: Colors.grey[100],
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                  onPressed: _currentPage > 1 ? () => _changePage(-1) : null,
-                  icon: const Icon(Icons.chevron_left)),
-              Text('หน้า $_currentPage'),
-              IconButton(
-                  onPressed:
-                      _orders.length == _pageSize ? () => _changePage(1) : null,
-                  icon: const Icon(Icons.chevron_right)),
-            ],
-          ),
-        )
-      ],
     );
   }
 }
@@ -355,46 +260,45 @@ class _StockAdjustmentGroupedListState
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
-    if (_groups.isEmpty) {
-      return const Center(child: Text('ไม่พบประวัติการปรับปรุงสต็อก'));
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(8),
-            itemCount: _groups.length,
-            separatorBuilder: (ctx, i) => const SizedBox(height: 8),
-            itemBuilder: (ctx, i) {
-              return _GroupCard(
-                group: _groups[i],
-                onDelete: () => _confirmDeleteGroup(_groups[i]),
-              );
-            },
-          ),
-        ),
-        // Simple Pagination
-        Container(
-          padding: const EdgeInsets.all(8),
-          color: Colors.grey[100],
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                  onPressed: _currentPage > 1 ? () => _changePage(-1) : null,
-                  icon: const Icon(Icons.chevron_left)),
-              Text('หน้า $_currentPage'),
-              IconButton(
-                  onPressed: _flatItems.length == _pageSize
-                      ? () => _changePage(1)
-                      : null,
-                  icon: const Icon(Icons.chevron_right)),
-            ],
-          ),
-        )
-      ],
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: _isLoading
+          ? const Center(
+              key: ValueKey('loading'),
+              child: CircularProgressIndicator(),
+            )
+          : _groups.isEmpty
+              ? const StockEmptyState(
+                  key: ValueKey('empty'),
+                  icon: Icons.edit_note_outlined,
+                  title: 'ไม่พบประวัติการปรับปรุงสต็อก',
+                  message: 'ยังไม่มีประวัติการปรับยอดสินค้าในคลัง',
+                )
+              : Column(
+                  key: const ValueKey('content'),
+                  children: [
+                    Expanded(
+                      child: ListView.separated(
+                        padding: const EdgeInsets.all(8),
+                        itemCount: _groups.length,
+                        separatorBuilder: (ctx, i) => const SizedBox(height: 8),
+                        itemBuilder: (ctx, i) {
+                          return _GroupCard(
+                            group: _groups[i],
+                            onDelete: () => _confirmDeleteGroup(_groups[i]),
+                          );
+                        },
+                      ),
+                    ),
+                    StockLedgerPagination(
+                      currentPage: _currentPage,
+                      hasPrevious: _currentPage > 1,
+                      hasNext: _flatItems.length == _pageSize,
+                      onPrevious: () => _changePage(-1),
+                      onNext: () => _changePage(1),
+                    ),
+                  ],
+                ),
     );
   }
 
@@ -673,139 +577,93 @@ class _GenericStockHistoryListState extends State<GenericStockHistoryList> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 🔹 1. ส่วนหัวเลือกวันที่ (Date Picker Header)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Colors.grey[100],
-          child: Row(
-            children: [
-              const Icon(Icons.calendar_today, size: 20, color: Colors.indigo),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _dateRange == null
-                      ? 'แสดงทั้งหมด (ล่าสุด)'
-                      : '${DateFormat('dd/MM/yyyy').format(_dateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_dateRange!.end)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              if (_dateRange != null)
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.red),
-                  onPressed: _clearDateFilter,
-                  tooltip: 'ล้างตัวกรอง',
-                ),
-              CustomButton(
-                onPressed: _pickDateRange,
-                label: 'เลือกช่วงเวลา',
-                type: ButtonType.primary,
-              ),
-            ],
-          ),
+        StockFilterPanel(
+          dateRange: _dateRange,
+          onPickDateRange: _pickDateRange,
+          onClearFilter: _clearDateFilter,
         ),
         const Divider(height: 1),
 
         // 🔹 2. รายการสินค้า (List Content)
         Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _items.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.history,
-                              size: 64, color: Colors.grey[300]),
-                          const SizedBox(height: 16),
-                          const Text('ไม่พบประวัติรายการ',
-                              style: TextStyle(color: Colors.grey)),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: _items.length,
-                      separatorBuilder: (ctx, i) => const Divider(height: 1),
-                      itemBuilder: (ctx, i) {
-                        final item = _items[i];
-                        final date =
-                            DateTime.tryParse(item['createdAt'].toString()) ??
-                                DateTime.now();
-                        final qty = double.tryParse(
-                                item['quantityChange'].toString()) ??
-                            0;
-                        final type = item['transactionType'].toString();
-                        final productName = item['productName'] ??
-                            'สินค้า #${item['productId']}';
-                        final note = item['note'] ?? '';
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _isLoading
+                ? const Center(
+                    key: ValueKey('loading'),
+                    child: CircularProgressIndicator(),
+                  )
+                : _items.isEmpty
+                    ? const StockEmptyState(
+                        key: ValueKey('empty'),
+                        icon: Icons.history_toggle_off_outlined,
+                        title: 'ไม่พบประวัติความเคลื่อนไหวสินค้า',
+                        message: 'ไม่พบข้อมูลความเคลื่อนไหวของสินค้าตามช่วงเวลาที่เลือก',
+                      )
+                    : ListView.separated(
+                        key: const ValueKey('content'),
+                        itemCount: _items.length,
+                        separatorBuilder: (ctx, i) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final item = _items[i];
+                          final date =
+                              DateTime.tryParse(item['createdAt'].toString()) ??
+                                  DateTime.now();
+                          final qty = double.tryParse(
+                                  item['quantityChange'].toString()) ??
+                              0;
+                          final type = item['transactionType'].toString();
+                          final productName = item['productName'] ??
+                              'สินค้า #${item['productId']}';
+                          final note = item['note'] ?? '';
 
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor:
-                                _getTypeColor(type).withValues(alpha: 0.1),
-                            child: Icon(
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  _getTypeColor(type).withValues(alpha: 0.1),
+                              child: Icon(
+                                qty == 0
+                                    ? Icons.check_circle_outline
+                                    : (qty > 0
+                                        ? Icons.arrow_downward
+                                        : Icons.arrow_upward),
+                                color: _getTypeColor(type),
+                                size: 20,
+                              ),
+                            ),
+                            title: Text(productName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            subtitle: Text(
+                              '${_getTypeLabel(type)} | ${DateFormat('dd/MM/yyyy HH:mm').format(date)}\n$note',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            trailing: Text(
                               qty == 0
-                                  ? Icons.check_circle_outline
-                                  : (qty > 0
-                                      ? Icons.arrow_downward
-                                      : Icons.arrow_upward),
-                              color: _getTypeColor(type),
-                              size: 20,
+                                  ? 'OK'
+                                  : ((qty > 0 ? '+' : '') +
+                                      qty.toStringAsFixed(0)),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _getTypeColor(type),
+                              ),
                             ),
-                          ),
-                          title: Text(productName,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(
-                            '${_getTypeLabel(type)} | ${DateFormat('dd/MM/yyyy HH:mm').format(date)}\n$note',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: Text(
-                            qty == 0
-                                ? 'OK'
-                                : ((qty > 0 ? '+' : '') +
-                                    qty.toStringAsFixed(0)),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: _getTypeColor(type),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+          ),
         ),
 
         // 🔹 3. ตัวเปลี่ยนหน้า (Pagination Footer)
         if (_items.isNotEmpty || _currentPage > 1)
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2))
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  onPressed: _currentPage > 1
-                      ? () => _changePage(_currentPage - 1)
-                      : null,
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                Text('หน้า $_currentPage',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                IconButton(
-                  onPressed:
-                      _hasMore ? () => _changePage(_currentPage + 1) : null,
-                  icon: const Icon(Icons.chevron_right),
-                ),
-              ],
-            ),
+          StockLedgerPagination(
+            currentPage: _currentPage,
+            hasPrevious: _currentPage > 1,
+            hasNext: _hasMore,
+            onPrevious: () => _changePage(_currentPage - 1),
+            onNext: () => _changePage(_currentPage + 1),
+            useShadow: true,
           ),
       ],
     );

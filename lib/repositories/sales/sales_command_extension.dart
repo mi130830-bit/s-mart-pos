@@ -62,8 +62,7 @@ extension SalesCommandExtension on SalesRepository {
         final checkCid = await _dbService
             .query('SELECT id FROM customer WHERE id = :id', {'id': validCid});
         if (checkCid.isEmpty) {
-          debugPrint(
-              '⚠️ Customer ID $validCid not found in MySQL. Fallback to Walk-in (NULL).');
+          LoggerService.warning('SalesRepository', 'Customer ID $validCid not found in MySQL. Fallback to Walk-in (NULL).');
           validCid = null;
         }
       }
@@ -151,7 +150,7 @@ extension SalesCommandExtension on SalesRepository {
         // 🚀 Trigger Background Sync (Fire & Forget)
         SyncService().pushOrders();
       } catch (e) {
-        debugPrint('⚠️ Change to Isar Queue Failed: $e');
+        LoggerService.warning('SalesRepository', 'Change to Isar Queue Failed: $e');
         // Don't fail the order if queueing fails, but log it.
       }
 
@@ -164,7 +163,7 @@ extension SalesCommandExtension on SalesRepository {
       return orderId;
     } catch (e) {
       await _dbService.execute('ROLLBACK;');
-      debugPrint('Error saving order: $e');
+      LoggerService.error('SalesRepository', 'Error saving order', e);
 
       // 💡 ส่งสัญญาณให้ AI ทำท่าตกใจ/Error
       AIOfficeService.reportError(agentId: 'Dev_Agent');
@@ -394,7 +393,7 @@ extension SalesCommandExtension on SalesRepository {
       }
     } catch (e) {
       await _dbService.execute('ROLLBACK;');
-      debugPrint('Error voiding order: $e');
+      LoggerService.error('SalesRepository', 'Error voiding order', e);
       rethrow;
     }
   }
@@ -444,10 +443,10 @@ extension SalesCommandExtension on SalesRepository {
       );
 
       await _dbService.execute('COMMIT;');
-      debugPrint('Un-voided order #$orderId');
+      LoggerService.info('SalesRepository', 'Un-voided order #$orderId');
     } catch (e) {
       await _dbService.execute('ROLLBACK;');
-      debugPrint('Error un-voiding order: $e');
+      LoggerService.error('SalesRepository', 'Error un-voiding order', e);
       rethrow;
     }
   }

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/shortage_provider.dart';
 import '../widgets/stock_pagination_control.dart';
 
-class StockAlertLowStockTab extends StatefulWidget {
+class StockAlertLowStockTab extends ConsumerStatefulWidget {
   const StockAlertLowStockTab({super.key});
 
   @override
-  State<StockAlertLowStockTab> createState() => _StockAlertLowStockTabState();
+  ConsumerState<StockAlertLowStockTab> createState() => _StockAlertLowStockTabState();
 }
 
-class _StockAlertLowStockTabState extends State<StockAlertLowStockTab> {
+class _StockAlertLowStockTabState extends ConsumerState<StockAlertLowStockTab> {
   final _searchCtrl = TextEditingController();
   int _currentPage = 1;
   final int _itemsPerPage = 20;
@@ -23,7 +23,7 @@ class _StockAlertLowStockTabState extends State<StockAlertLowStockTab> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<ShortageProvider>(context);
+    final provider = ref.watch(shortageProvider);
     final q = _searchCtrl.text.trim().toLowerCase();
     final allProducts = provider.lowStockProducts
         .where((p) => q.isEmpty || p.name.toLowerCase().contains(q))

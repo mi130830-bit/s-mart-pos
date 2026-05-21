@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../state/auth_provider.dart';
 import '../../repositories/product_repository.dart';
 import '../../repositories/customer_repository.dart';
@@ -8,14 +9,14 @@ import '../../repositories/debtor_repository.dart';
 import '../../repositories/sales_repository.dart';
 import '../../services/alert_service.dart';
 
-class RecycleBinScreen extends StatefulWidget {
+class RecycleBinScreen extends ConsumerStatefulWidget {
   const RecycleBinScreen({super.key});
 
   @override
-  State<RecycleBinScreen> createState() => _RecycleBinScreenState();
+  ConsumerState<RecycleBinScreen> createState() => _RecycleBinScreenState();
 }
 
-class _RecycleBinScreenState extends State<RecycleBinScreen>
+class _RecycleBinScreenState extends ConsumerState<RecycleBinScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ProductRepository _productRepo = ProductRepository();
@@ -129,7 +130,7 @@ class _RecycleBinScreenState extends State<RecycleBinScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = Provider.of<AuthProvider>(context).isAdmin;
+    final isAdmin = ref.watch(authProvider).isAdmin;
 
     return Scaffold(
       appBar: AppBar(

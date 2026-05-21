@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../services/logger_service.dart';
 import '../services/mysql_service.dart';
 import '../services/telegram_service.dart';
 import '../services/settings_service.dart';
@@ -69,24 +69,24 @@ class SalesRepository {
             return http.Response('Timeout', 408);
           }).then((response) {
             if (response.statusCode != 200) {
-              debugPrint('⚠️ Line Receipt Push Failed: ${response.body}');
+              LoggerService.warning('SalesRepository', 'Line Receipt Push Failed: ${response.body}');
             } else {
-              debugPrint('✅ Line Receipt Triggered for Order #$orderId');
+              LoggerService.info('SalesRepository', 'Line Receipt Triggered for Order #$orderId');
             }
           }).catchError((e) {
-            debugPrint('⚠️ Line Receipt Connection Error: $e');
+            LoggerService.error('SalesRepository', 'Line Receipt Connection Error', e);
           });
         }
       }
     } catch (e) {
-      debugPrint('⚠️ Line Receipt Logic Error: $e');
+      LoggerService.error('SalesRepository', 'Line Receipt Logic Error', e);
     }
   }
 
   // ✅ Helper for Telegram Notification
   Future<void> _notifyTelegram(
       int orderId, double amount, String method, List<OrderItem> items) async {
-    debugPrint('🔔 Triggering Telegram Notify for Order #$orderId...');
+    LoggerService.info('SalesRepository', 'Triggering Telegram Notify for Order #$orderId...');
     try {
       if (await TelegramService()
           .shouldNotify(TelegramService.keyNotifyPayment)) {
@@ -115,7 +115,7 @@ class SalesRepository {
         TelegramService().sendMessage(msg);
       }
     } catch (e) {
-      debugPrint('⚠️ Telegram Notify Error: $e');
+      LoggerService.error('SalesRepository', 'Telegram Notify Error', e);
     }
   }
 }

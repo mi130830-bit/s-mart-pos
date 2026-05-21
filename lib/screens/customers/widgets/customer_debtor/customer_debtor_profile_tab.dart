@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../models/customer.dart';
-import '../../../models/debtor_transaction.dart';
-import '../../../models/member_tier.dart';
+import '../../../../models/customer.dart';
+import '../../../../models/debtor_transaction.dart';
+import '../../../../models/member_tier.dart';
 
 /// Tab แสดงข้อมูลโปรไฟล์ลูกค้า
 class CustomerDebtorProfileTab extends StatelessWidget {

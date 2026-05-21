@@ -53,7 +53,7 @@ extension SalesQueryExtension on SalesRepository {
         'end': end.toIso8601String(),
       });
     } catch (e) {
-      debugPrint('Error in getOrdersByDateRange: $e');
+      LoggerService.error('SalesRepository', 'Error in getOrdersByDateRange', e);
       return [];
     }
   }
@@ -106,7 +106,7 @@ extension SalesQueryExtension on SalesRepository {
         'returnedMap': returnedMap,
       };
     } catch (e) {
-      debugPrint('Error fetching order details: $e');
+      LoggerService.error('SalesRepository', 'Error fetching order details', e);
       return null;
     }
   }
@@ -133,7 +133,7 @@ extension SalesQueryExtension on SalesRepository {
       ''';
       return await _dbService.query(sql, {'pid': productId});
     } catch (e) {
-      debugPrint('Error finding orders by product: $e');
+      LoggerService.error('SalesRepository', 'Error finding orders by product', e);
       return [];
     }
   }
@@ -151,7 +151,7 @@ extension SalesQueryExtension on SalesRepository {
       ''';
       return await _dbService.query(sql, {'cid': customerId});
     } catch (e) {
-      debugPrint('Error in getOrdersByCustomer: $e');
+      LoggerService.error('SalesRepository', 'Error in getOrdersByCustomer', e);
       return [];
     }
   }
@@ -170,7 +170,7 @@ extension SalesQueryExtension on SalesRepository {
       ''';
       return await _dbService.query(sql);
     } catch (e) {
-      debugPrint('Error fetching voided orders: $e');
+      LoggerService.error('SalesRepository', 'Error fetching voided orders', e);
       return [];
     }
   }
@@ -200,7 +200,7 @@ extension SalesQueryExtension on SalesRepository {
         'items': itemsRes,
       };
     } catch (e) {
-      debugPrint('Error fetching order for delivery: $e');
+      LoggerService.error('SalesRepository', 'Error fetching order for delivery', e);
       return null;
     }
   }
@@ -270,7 +270,7 @@ extension SalesQueryExtension on SalesRepository {
         'pattern': searchPattern,
       });
     } catch (e) {
-      debugPrint('Error searching orders: $e');
+      LoggerService.error('SalesRepository', 'Error searching orders', e);
       return [];
     }
   }

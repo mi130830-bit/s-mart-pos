@@ -1,89 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../state/auth_provider.dart';
 import '../../../widgets/common/thai_aware_search_field.dart';
 import '../../../widgets/dialogs/close_shift_dialog.dart';
-import '../../../services/excel_export_service.dart';
-import '../../../services/alert_service.dart';
+import '../controllers/dashboard_controller.dart';
 import '../widgets/dashboard_orders_table.dart';
 
 /// แท็บ 1: "รายการวันนี้" — ตารางบิลพร้อมค้นหาและปุ่มจัดการ
-class DashboardDailyTab extends StatelessWidget {
-  final DateTime selectedDate;
-  final bool isToday;
-  final List<Map<String, dynamic>> orders;
-  final String searchQuery;
-  final bool isSearchLoading;
-  final TextEditingController searchCtrl;
-  final FocusNode searchFocus;
+class DashboardDailyTab extends ConsumerStatefulWidget {
+  const DashboardDailyTab({super.key});
 
-  // Date navigation
-  final VoidCallback onPrevDate;
-  final VoidCallback onNextDate;
-  final VoidCallback onPickDate;
-  final VoidCallback onRefresh;
+  @override
+  ConsumerState<DashboardDailyTab> createState() => _DashboardDailyTabState();
+}
 
-  // Table actions
-  final void Function(Map<String, dynamic> row) onViewDetails;
-  final void Function(Map<String, dynamic> row) onReprint;
-  final void Function(int orderId) onSendToDelivery;
-  final void Function(int orderId) onSendToBackShop;
-  final void Function(int orderId) onChangeCustomer;
-  final void Function(Map<String, dynamic> row) onDelete;
+class _DashboardDailyTabState extends ConsumerState<DashboardDailyTab> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
-  // Search
-  final void Function(String val) onSearch;
-  final VoidCallback onClearSearch;
-
-  const DashboardDailyTab({
-    super.key,
-    required this.selectedDate,
-    required this.isToday,
-    required this.orders,
-    required this.searchQuery,
-    required this.isSearchLoading,
-    required this.searchCtrl,
-    required this.searchFocus,
-    required this.onPrevDate,
-    required this.onNextDate,
-    required this.onPickDate,
-    required this.onRefresh,
-    required this.onViewDetails,
-    required this.onReprint,
-    required this.onSendToDelivery,
-    required this.onSendToBackShop,
-    required this.onChangeCustomer,
-    required this.onDelete,
-    required this.onSearch,
-    required this.onClearSearch,
-  });
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
+    final auth = ref.watch(authProvider);
+    final state = ref.watch(dashboardProvider);
+    final notifier = ref.read(dashboardProvider.notifier);
+
+    final orders = state.searchQuery.isNotEmpty 
+        ? state.searchResults 
+        : state.recentOrders;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(context),
+          _buildHeader(context, state, notifier),
           const SizedBox(height: 16),
-          _buildSearchBar(context),
+          _buildSearchBar(context, state, notifier),
           const SizedBox(height: 16),
           DashboardOrdersTable(
             orders: orders,
-            searchQuery: searchQuery,
-            isSearchLoading: isSearchLoading,
+            searchQuery: state.searchQuery,
+            isSearchLoading: state.isSearchLoading,
             auth: auth,
-            onViewDetails: onViewDetails,
-            onReprint: onReprint,
-            onSendToDelivery: onSendToDelivery,
-            onSendToBackShop: onSendToBackShop,
-            onChangeCustomer: onChangeCustomer,
-            onDelete: onDelete,
+            onViewDetails: (row) => notifier.viewDetails(context, row),
+            onReprint: (row) => notifier.reprintOrder(context, row),
+            onSendToDelivery: (id) => notifier.sendToDelivery(context, id),
+            onSendToBackShop: (id) => notifier.sendToBackShop(context, id),
+            onChangeCustomer: (id) => notifier.changeCustomer(context, id),
+            onDelete: (row) => notifier.deleteOrder(context, row),
           ),
         ],
       ),
@@ -92,7 +65,7 @@ class DashboardDailyTab extends StatelessWidget {
 
   // ── Header ──────────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, DashboardState state, DashboardNotifier notifier) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -102,7 +75,7 @@ class DashboardDailyTab extends StatelessWidget {
             const Text('รายการขาย',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             Text(
-                'วันที่: ${DateFormat('dd MMMM yyyy', 'th').format(selectedDate)}',
+                'วันที่: ${DateFormat('dd MMMM yyyy', 'th').format(state.selectedDate)}',
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
           ],
         ),
@@ -110,23 +83,25 @@ class DashboardDailyTab extends StatelessWidget {
           children: [
             IconButton(
               icon: const Icon(Icons.chevron_left),
-              onPressed: onPrevDate,
+              onPressed: () => notifier.prevDate(),
               tooltip: 'วันก่อนหน้า',
             ),
             TextButton.icon(
-              onPressed: onPickDate,
+              onPressed: () => notifier.pickDate(context),
               icon: const Icon(Icons.calendar_today, size: 16),
-              label: Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
+              label: Text(DateFormat('dd/MM/yyyy').format(state.selectedDate)),
             ),
             IconButton(
               icon: const Icon(Icons.chevron_right),
-              onPressed: isToday ? null : onNextDate,
+              onPressed: notifier.isSameDay(state.selectedDate, DateTime.now()) 
+                  ? null 
+                  : () => notifier.nextDate(),
               tooltip: 'วันถัดไป',
             ),
             const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: onRefresh,
+              onPressed: () => notifier.loadData(),
               tooltip: 'โหลดข้อมูลใหม่',
             ),
             const SizedBox(width: 8),
@@ -134,10 +109,9 @@ class DashboardDailyTab extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal,
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              onPressed: () => _exportDeliveryHistory(context),
+              onPressed: () => notifier.exportDeliveryHistory(context),
               icon: const Icon(Icons.local_shipping),
               label: const Text('Export ส่งของ',
                   style: TextStyle(fontWeight: FontWeight.bold)),
@@ -147,8 +121,7 @@ class DashboardDailyTab extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.indigo,
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               onPressed: () async {
                 final reloaded = await showDialog(
@@ -156,7 +129,7 @@ class DashboardDailyTab extends StatelessWidget {
                   barrierDismissible: false,
                   builder: (_) => const CloseShiftDialog(),
                 );
-                if (reloaded == true) onRefresh();
+                if (reloaded == true) notifier.loadData();
               },
               icon: const Icon(Icons.lock_clock),
               label: const Text('ปิดกะ (Close Shift)',
@@ -170,7 +143,7 @@ class DashboardDailyTab extends StatelessWidget {
 
   // ── Search Bar ───────────────────────────────────────────────────────────────
 
-  Widget _buildSearchBar(BuildContext context) {
+  Widget _buildSearchBar(BuildContext context, DashboardState state, DashboardNotifier notifier) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -189,13 +162,16 @@ class DashboardDailyTab extends StatelessWidget {
         children: [
           Expanded(
             child: ThaiAwareSearchField(
-              controller: searchCtrl,
-              focusNode: searchFocus,
+              controller: _searchCtrl,
+              focusNode: _searchFocus,
               label:
                   'ค้นหาเลขที่บิล, ชื่อลูกค้า หรือเบอร์โทรศัพท์ (พิมพ์แล้วกด Enter หรือคลิกปุ่มค้นหา)',
-              onSubmitted: onSearch,
+              onSubmitted: (val) => notifier.performSearch(val, context),
               onChanged: (val) {
-                if (val.isEmpty) onClearSearch();
+                if (val.isEmpty) {
+                  _searchCtrl.clear();
+                  notifier.clearSearch();
+                }
               },
             ),
           ),
@@ -204,71 +180,35 @@ class DashboardDailyTab extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.indigo,
               foregroundColor: Colors.white,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               elevation: 1,
             ),
-            onPressed: () => onSearch(searchCtrl.text),
+            onPressed: () => notifier.performSearch(_searchCtrl.text, context),
             icon: const Icon(Icons.search, size: 20),
             label: const Text('ค้นหาบิล',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           ),
-          if (searchCtrl.text.isNotEmpty) ...[
+          if (_searchCtrl.text.isNotEmpty) ...[
             const SizedBox(width: 8),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.grey.shade700,
                 side: BorderSide(color: Colors.grey.shade300),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: onClearSearch,
+              onPressed: () {
+                _searchCtrl.clear();
+                _searchFocus.unfocus();
+                notifier.clearSearch();
+              },
               icon: const Icon(Icons.clear, size: 20),
-              label:
-                  const Text('ล้างคำค้น', style: TextStyle(fontSize: 15)),
+              label: const Text('ล้างคำค้น', style: TextStyle(fontSize: 15)),
             ),
           ],
         ],
       ),
     );
-  }
-
-  // ── Export Helper ────────────────────────────────────────────────────────────
-
-  Future<void> _exportDeliveryHistory(BuildContext context) async {
-    final now = DateTime.now();
-    final dateRange = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: now,
-      initialDateRange: DateTimeRange(
-        start: DateTime(now.year, now.month, 1),
-        end: now,
-      ),
-    );
-
-    if (dateRange != null && context.mounted) {
-      final start = DateTime(dateRange.start.year, dateRange.start.month,
-          dateRange.start.day, 0, 0, 0);
-      final end = DateTime(dateRange.end.year, dateRange.end.month,
-          dateRange.end.day, 23, 59, 59);
-
-      final success =
-          await ExcelExportService().exportDeliveryHistory(start, end);
-
-      if (context.mounted) {
-        AlertService.show(
-          context: context,
-          message: success
-              ? 'สร้างไฟล์ Excel สรุปการจัดส่งสำเร็จ'
-              : 'ไม่พบข้อมูลในช่วงที่เลือก หรือมีข้อผิดพลาด',
-          type: success ? 'success' : 'error',
-        );
-      }
-    }
   }
 }

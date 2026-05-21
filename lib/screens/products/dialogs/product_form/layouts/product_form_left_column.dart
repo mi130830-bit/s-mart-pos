@@ -96,106 +96,27 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                   Row(
                     children: [
                       Expanded(
-                        child: LayoutBuilder(builder: (context, constraints) {
-                          return Autocomplete<ProductType>(
-                            key: _typeFieldKey, // ✅ Secure Key
-                            initialValue:
-                                TextEditingValue(text: _typeNameCtrl.text),
-                            optionsBuilder:
-                                (TextEditingValue textEditingValue) {
-                              if (textEditingValue.text.isEmpty) {
-                                return _productTypes;
-                              }
-                              return _productTypes.where((ProductType option) {
-                                return option.name.toLowerCase().contains(
-                                    textEditingValue.text.toLowerCase());
-                              });
-                            },
-                            displayStringForOption: (ProductType option) => option
-                                .name,
-                            onSelected: (ProductType selection) {
+                        child: ProductTypeAutocomplete(
+                          productTypes: _productTypes,
+                          controller: _typeNameCtrl,
+                          fieldKey: _typeFieldKey,
+                          onSelected: (selection) {
+                            setState(() {
+                              _selectedTypeId = selection.id;
+                              _typeNameCtrl.text = selection.name;
+                            });
+                          },
+                          onChanged: (val) {
+                            final match = _productTypes
+                                .where((t) => t.name.toLowerCase() == val.toLowerCase())
+                                .toList();
+                            if (match.isNotEmpty) {
                               setState(() {
-                                _selectedTypeId = selection.id;
-                                _typeNameCtrl.text = selection.name;
+                                _selectedTypeId = match.first.id;
                               });
-                            },
-                            fieldViewBuilder: (context, textEditingController,
-                                focusNode, onFieldSubmitted) {
-                              return CustomTextField(
-                                controller: textEditingController,
-                                focusNode: focusNode,
-                                label: 'ประเภทสินค้า *',
-                                selectAllOnFocus: true, // Auto-select text
-                                suffixIcon: const Icon(Icons.arrow_drop_down),
-                                onChanged: (val) {
-                                  // ✅ Auto-match Type ID
-                                  final match = _productTypes
-                                      .where((t) =>
-                                          t.name.toLowerCase() ==
-                                          val.toLowerCase())
-                                      .toList();
-                                  if (match.isNotEmpty) {
-                                    setState(() {
-                                      _selectedTypeId = match.first.id;
-                                    });
-                                  } else {
-                                    if (_selectedTypeId != 0) {
-                                      // setState(() => _selectedTypeId = null); // Optional: Force null if invalid
-                                    }
-                                  }
-                                },
-                                validator: (val) => _selectedTypeId == null
-                                    ? 'กรุณาเลือกประเภท'
-                                    : null,
-                              );
-                            },
-                            optionsViewBuilder: (context, onSelected, options) {
-                              return Align(
-                                alignment: Alignment.topLeft,
-                                child: Material(
-                                  elevation: 4.0,
-                                  child: SizedBox(
-                                    width: constraints.maxWidth,
-                                    height: 300,
-                                    child: Builder(builder: (listContext) {
-                                      final highlightedIndex =
-                                          AutocompleteHighlightedOption.of(
-                                              listContext);
-                                      return ListView.builder(
-                                        padding: EdgeInsets.zero,
-                                        itemCount: options.length,
-                                        itemBuilder:
-                                            (BuildContext context, int index) {
-                                          final ProductType option =
-                                              options.elementAt(index);
-                                          final bool isHighlighted =
-                                              index == highlightedIndex;
-                                          return ListTile(
-                                            tileColor: isHighlighted
-                                                ? Theme.of(context)
-                                                    .colorScheme
-                                                    .primary
-                                                    .withValues(alpha: 0.12)
-                                                : null,
-                                            title: Text(
-                                              option.name,
-                                              style: TextStyle(
-                                                fontWeight: isHighlighted
-                                                    ? FontWeight.bold
-                                                    : FontWeight.normal,
-                                              ),
-                                            ),
-                                            onTap: () => onSelected(option),
-                                          );
-                                        },
-                                      );
-                                    }),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        }),
+                            }
+                          },
+                        ),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
@@ -210,107 +131,29 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                   Row(
                     children: [
                       Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Autocomplete<Unit>(
-                              key: _unitFieldKey, // ✅ Secure Key
-                              initialValue:
-                                  TextEditingValue(text: _unitNameCtrl.text),
-                              optionsBuilder:
-                                  (TextEditingValue textEditingValue) {
-                                if (textEditingValue.text.isEmpty) {
-                                  return _units;
-                                }
-                                return _units.where((Unit option) {
-                                  return option.name.toLowerCase().contains(
-                                      textEditingValue.text.toLowerCase());
-                                });
-                              },
-                              displayStringForOption: (Unit option) =>
-                                  option.name,
-                              onSelected: (Unit selection) {
-                                setState(() {
-                                  _selectedUnitId = selection.id;
-                                  _unitNameCtrl.text = selection.name;
-                                });
-                              },
-                              fieldViewBuilder: (context, textEditingController,
-                                  focusNode, onFieldSubmitted) {
-                                return CustomTextField(
-                                  controller: textEditingController,
-                                  focusNode: focusNode,
-                                  label: 'หน่วยสินค้า *',
-                                  selectAllOnFocus: true, // Auto-select text
-                                  suffixIcon: const Icon(Icons.arrow_drop_down),
-                                  onChanged: (val) {
-                                    // ✅ Auto-match Unit ID
-                                    final match = _units
-                                        .where((u) =>
-                                            u.name.toLowerCase() ==
-                                            val.toLowerCase())
-                                        .toList();
-                                    if (match.isNotEmpty) {
-                                      setState(() {
-                                        _selectedUnitId = match.first.id;
-                                      });
-                                    } else {
-                                      if (_selectedUnitId != null) {
-                                        setState(() => _selectedUnitId = null);
-                                      }
-                                    }
-                                  },
-                                  validator: (val) => _selectedUnitId == null
-                                      ? 'กรุณาเลือกหน่วย'
-                                      : null,
-                                );
-                              },
-                              optionsViewBuilder:
-                                  (context, onSelected, options) {
-                                return Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Material(
-                                    elevation: 4.0,
-                                    child: SizedBox(
-                                      width: constraints.maxWidth,
-                                      height: 200,
-                                      child: Builder(builder: (listContext) {
-                                        final highlightedIndex =
-                                            AutocompleteHighlightedOption.of(
-                                                listContext);
-                                        return ListView.builder(
-                                          padding: EdgeInsets.zero,
-                                          itemCount: options.length,
-                                          itemBuilder: (BuildContext context,
-                                              int index) {
-                                            final Unit option =
-                                                options.elementAt(index);
-                                            final bool isHighlighted =
-                                                index == highlightedIndex;
-                                            return ListTile(
-                                              tileColor: isHighlighted
-                                                  ? Theme.of(context)
-                                                      .colorScheme
-                                                      .primary
-                                                      .withValues(alpha: 0.12)
-                                                  : null,
-                                              title: Text(
-                                                option.name,
-                                                style: TextStyle(
-                                                  fontWeight: isHighlighted
-                                                      ? FontWeight.bold
-                                                      : FontWeight.normal,
-                                                ),
-                                              ),
-                                              onTap: () => onSelected(option),
-                                            );
-                                          },
-                                        );
-                                      }),
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
+                        child: UnitAutocomplete(
+                          units: _units,
+                          controller: _unitNameCtrl,
+                          fieldKey: _unitFieldKey,
+                          onSelected: (selection) {
+                            setState(() {
+                              _selectedUnitId = selection.id;
+                              _unitNameCtrl.text = selection.name;
+                            });
+                          },
+                          onChanged: (val) {
+                            final match = _units
+                                .where((u) => u.name.toLowerCase() == val.toLowerCase())
+                                .toList();
+                            if (match.isNotEmpty) {
+                              setState(() {
+                                _selectedUnitId = match.first.id;
+                              });
+                            } else {
+                              if (_selectedUnitId != null) {
+                                setState(() => _selectedUnitId = null);
+                              }
+                            }
                           },
                         ),
                       ),
@@ -333,7 +176,7 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
 
         // Prices Section
         _buildSectionTitle('ราคาต้นทุน & ขาย'),
-        if (Provider.of<AuthProvider>(context).canViewCost) ...[
+        if (ref.watch(authProvider).canViewCost) ...[
           Row(
             children: [
               Expanded(
@@ -475,81 +318,17 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
               child: Row(
                 children: [
                   Expanded(
-                    child: LayoutBuilder(builder: (context, constraints) {
-                      return Autocomplete<String>(
-                        initialValue: TextEditingValue(text: _shelfCtrl.text),
-                        optionsBuilder: (TextEditingValue textEditingValue) {
-                          // ✅ MAP to Database Shelves
-                          final options = _shelves.map((e) => e.name).toList();
-                          if (textEditingValue.text.isEmpty) return options;
-                          return options.where((String option) {
-                            return option.contains(textEditingValue.text);
-                          });
-                        },
-                        onSelected: (String selection) {
-                          _shelfCtrl.text = selection;
-                        },
-                        fieldViewBuilder: (context, textEditingController,
-                            focusNode, onFieldSubmitted) {
-                          return CustomTextField(
-                            key: _shelfFieldKey, // Keep focus stable
-                            controller: textEditingController,
-                            focusNode: focusNode,
-                            label: 'ที่เก็บ / ชั้นวาง (Shelf)',
-                            selectAllOnFocus: true, // ✅ Auto-select
-                            suffixIcon: const Icon(Icons.arrow_drop_down),
-                            onChanged: (val) {
-                              _shelfCtrl.text = val;
-                            },
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4.0,
-                              child: SizedBox(
-                                width: constraints.maxWidth,
-                                height: 200,
-                                child: Builder(builder: (listContext) {
-                                  final highlightedIndex =
-                                      AutocompleteHighlightedOption.of(
-                                          listContext);
-                                  return ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: options.length,
-                                    itemBuilder:
-                                        (BuildContext context, int index) {
-                                      final String option =
-                                          options.elementAt(index);
-                                      final bool isHighlighted =
-                                          index == highlightedIndex;
-                                      return ListTile(
-                                        tileColor: isHighlighted
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                                .withValues(alpha: 0.12)
-                                            : null,
-                                        title: Text(
-                                          option,
-                                          style: TextStyle(
-                                            fontWeight: isHighlighted
-                                                ? FontWeight.bold
-                                                : FontWeight.normal,
-                                          ),
-                                        ),
-                                        onTap: () => onSelected(option),
-                                      );
-                                    },
-                                  );
-                                }),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    }),
+                    child: ShelfAutocomplete(
+                      shelves: _shelves.map((e) => e.name).toList(),
+                      controller: _shelfCtrl,
+                      fieldKey: _shelfFieldKey,
+                      onSelected: (selection) {
+                        _shelfCtrl.text = selection;
+                      },
+                      onChanged: (val) {
+                        _shelfCtrl.text = val;
+                      },
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.add_circle, color: Colors.blue),

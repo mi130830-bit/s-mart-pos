@@ -1,98 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
 import '../../models/barcode_template.dart';
 import '../../services/printing/barcode_print_service.dart';
 import 'barcode_designer_screen.dart';
 import '../../widgets/custom_radio_group.dart';
+import 'controllers/barcode_print_setup_controller.dart';
 
-class BarcodePrintSetupScreen extends StatefulWidget {
+class BarcodePrintSetupScreen extends ConsumerStatefulWidget {
   final BarcodeTemplate? template;
 
   const BarcodePrintSetupScreen({super.key, this.template});
 
   @override
-  State<BarcodePrintSetupScreen> createState() =>
-      _BarcodePrintSetupScreenState();
+  ConsumerState<BarcodePrintSetupScreen> createState() => _BarcodePrintSetupScreenState();
 }
 
-class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
-  final _service = BarcodePrintService();
-  late BarcodeTemplate _template;
-
-  final TextEditingController _nameCtrl = TextEditingController();
-  final TextEditingController _paperWidthCtrl = TextEditingController();
-  final TextEditingController _paperHeightCtrl = TextEditingController();
-  final TextEditingController _rowsCtrl = TextEditingController();
-  final TextEditingController _colsCtrl = TextEditingController();
-  final TextEditingController _marginTopCtrl = TextEditingController();
-  final TextEditingController _marginBottomCtrl = TextEditingController();
-  final TextEditingController _marginLeftCtrl = TextEditingController();
-  final TextEditingController _marginRightCtrl = TextEditingController();
-  final TextEditingController _labelWidthCtrl = TextEditingController();
-  final TextEditingController _labelHeightCtrl = TextEditingController();
-  final TextEditingController _hGapCtrl = TextEditingController();
-  final TextEditingController _vGapCtrl = TextEditingController();
-  final TextEditingController _borderWidthCtrl = TextEditingController();
-
-  bool _isRound = true;
-  bool _printBorder = false;
-  bool _printDebug = false;
-  bool _autoGap = false; // ✅
-
+class _BarcodePrintSetupScreenState extends ConsumerState<BarcodePrintSetupScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.template != null) {
-      _template = widget.template!;
-    } else {
-      _template = _service.createBarcode406x108();
-    }
-    _initControllers();
-  }
-
-  void _initControllers() {
-    _nameCtrl.text = _template.name;
-    _paperWidthCtrl.text = _template.paperWidth.toString();
-    _paperHeightCtrl.text = _template.paperHeight.toString();
-    _rowsCtrl.text = _template.rows.toString();
-    _colsCtrl.text = _template.columns.toString();
-    _marginTopCtrl.text = _template.marginTop.toString();
-    _marginBottomCtrl.text = _template.marginBottom.toString();
-    _marginLeftCtrl.text = _template.marginLeft.toString();
-    _marginRightCtrl.text = _template.marginRight.toString();
-    _labelWidthCtrl.text = _template.labelWidth.toString();
-    _labelHeightCtrl.text = _template.labelHeight.toString();
-    _hGapCtrl.text = _template.horizontalGap.toString();
-    _vGapCtrl.text = _template.verticalGap.toString();
-    _borderWidthCtrl.text = _template.borderWidth.toString();
-    _isRound = _template.shape == 'rounded';
-    _printBorder = _template.printBorder;
-    _printDebug = _template.printDebug; // ✅
-  }
-
-  void _updateTemplateFromUI() {
-    _template.name = _nameCtrl.text;
-    _template.paperWidth = double.tryParse(_paperWidthCtrl.text) ?? 100;
-    _template.paperHeight = double.tryParse(_paperHeightCtrl.text) ?? 30;
-    _template.rows = int.tryParse(_rowsCtrl.text) ?? 1;
-    _template.columns = int.tryParse(_colsCtrl.text) ?? 3;
-    _template.marginTop = double.tryParse(_marginTopCtrl.text) ?? 0;
-    _template.marginBottom = double.tryParse(_marginBottomCtrl.text) ?? 0;
-    _template.marginLeft = double.tryParse(_marginLeftCtrl.text) ?? 0;
-    _template.marginRight = double.tryParse(_marginRightCtrl.text) ?? 0;
-    _template.labelWidth = double.tryParse(_labelWidthCtrl.text) ?? 32;
-    _template.labelHeight = double.tryParse(_labelHeightCtrl.text) ?? 25;
-    _template.horizontalGap = double.tryParse(_hGapCtrl.text) ?? 2;
-    _template.verticalGap = double.tryParse(_vGapCtrl.text) ?? 0;
-    _template.borderWidth = double.tryParse(_borderWidthCtrl.text) ?? 1;
-    _template.shape = _isRound ? 'rounded' : 'rectangle';
-    _template.printBorder = _printBorder;
-    _template.printDebug = _printDebug; // ✅
+    Future.microtask(() {
+      final service = BarcodePrintService();
+      ref.read(barcodePrintSetupProvider.notifier).init(widget.template, service);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(barcodePrintSetupProvider);
+    final controller = ref.read(barcodePrintSetupProvider.notifier);
+
+    // Initial state handling
+    if (state.template == null) {
+      return const Dialog(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.all(40),
@@ -130,17 +77,17 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildField('ชื่อแม่แบบ', _nameCtrl),
+                          _buildField('ชื่อแม่แบบ', controller.nameCtrl),
                           const SizedBox(height: 16),
                           const Text('ขนาดกระดาษ',
                               style: TextStyle(fontWeight: FontWeight.bold)),
                           Row(
                             children: [
                               _buildInlineField(
-                                  'ความกว้าง', _paperWidthCtrl, 'มม'),
+                                  controller, 'ความกว้าง', controller.paperWidthCtrl, 'มม'),
                               const SizedBox(width: 8),
                               _buildInlineField(
-                                  'ความสูง', _paperHeightCtrl, 'มม'),
+                                  controller, 'ความสูง', controller.paperHeightCtrl, 'มม'),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -148,9 +95,9 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                               style: TextStyle(fontWeight: FontWeight.bold)),
                           Row(
                             children: [
-                              _buildInlineField('แถว', _rowsCtrl, ''),
+                              _buildInlineField(controller, 'แถว', controller.rowsCtrl, ''),
                               const SizedBox(width: 8),
-                              _buildInlineField('คอลัมน์', _colsCtrl, ''),
+                              _buildInlineField(controller, 'คอลัมน์', controller.colsCtrl, ''),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -158,17 +105,17 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                               style: TextStyle(fontWeight: FontWeight.bold)),
                           Row(
                             children: [
-                              _buildInlineField('บน', _marginTopCtrl, 'มม'),
+                              _buildInlineField(controller, 'บน', controller.marginTopCtrl, 'มม'),
                               const SizedBox(width: 8),
-                              _buildInlineField('ซ้าย', _marginLeftCtrl, 'มม'),
+                              _buildInlineField(controller, 'ซ้าย', controller.marginLeftCtrl, 'มม'),
                             ],
                           ),
                           Row(
                             children: [
                               _buildInlineField(
-                                  'ล่าง', _marginBottomCtrl, 'มม'),
+                                  controller, 'ล่าง', controller.marginBottomCtrl, 'มม'),
                               const SizedBox(width: 8),
-                              _buildInlineField('ขวา', _marginRightCtrl, 'มม'),
+                              _buildInlineField(controller, 'ขวา', controller.marginRightCtrl, 'มม'),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -180,18 +127,18 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                                       TextStyle(fontWeight: FontWeight.bold)),
                               ElevatedButton(
                                 onPressed: () async {
-                                  _updateTemplateFromUI();
+                                  controller.updateTemplateFromUI();
+                                  if (state.template == null) return;
+                                  
                                   final result =
                                       await showDialog<BarcodeTemplate>(
                                     context: context,
                                     builder: (ctx) => BarcodeDesignerScreen(
-                                      template: _template,
+                                      template: state.template!,
                                     ),
                                   );
                                   if (result != null) {
-                                    setState(() {
-                                      _template = result;
-                                    });
+                                    controller.updateTemplate(result);
                                   }
                                 },
                                 style: ElevatedButton.styleFrom(
@@ -204,9 +151,9 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                           ),
                           Row(
                             children: [
-                              _buildInlineField('กว้าง', _labelWidthCtrl, 'มม'),
+                              _buildInlineField(controller, 'กว้าง', controller.labelWidthCtrl, 'มม'),
                               const SizedBox(width: 8),
-                              _buildInlineField('สูง', _labelHeightCtrl, 'มม'),
+                              _buildInlineField(controller, 'สูง', controller.labelHeightCtrl, 'มม'),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -217,12 +164,9 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                                   style:
                                       TextStyle(fontWeight: FontWeight.bold)),
                               Checkbox(
-                                value: _autoGap,
+                                value: state.autoGap,
                                 onChanged: (v) {
-                                  setState(() {
-                                    _autoGap = v!;
-                                    if (_autoGap) _autoCalculateGaps();
-                                  });
+                                  controller.setAutoGap(v ?? false);
                                 },
                               ),
                               const Text('อัตโนมัติ',
@@ -230,9 +174,7 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                               const SizedBox(width: 8),
                               CustomButton(
                                 onPressed: () {
-                                  setState(() {
-                                    _autoCalculateGaps();
-                                  });
+                                  controller.autoCalculateGaps();
                                 },
                                 icon: Icons.calculate,
                                 label: 'คำนวณ',
@@ -242,19 +184,19 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                           ),
                           Row(
                             children: [
-                              _buildInlineField('แนวนอน', _hGapCtrl, 'มม',
-                                  enabled: !_autoGap),
+                              _buildInlineField(controller, 'แนวนอน', controller.hGapCtrl, 'มม',
+                                  enabled: !state.autoGap),
                               const SizedBox(width: 8),
-                              _buildInlineField('แนวตั้ง', _vGapCtrl, 'มม',
-                                  enabled: !_autoGap),
+                              _buildInlineField(controller, 'แนวตั้ง', controller.vGapCtrl, 'มม',
+                                  enabled: !state.autoGap),
                             ],
                           ),
                           const SizedBox(height: 16),
                           const Text('รูปทรง',
                               style: TextStyle(fontWeight: FontWeight.bold)),
                           CustomRadioGroup<bool>(
-                            groupValue: _isRound,
-                            onChanged: (v) => setState(() => _isRound = v!),
+                            groupValue: state.isRound,
+                            onChanged: (v) => controller.setTemplateShape(v ?? true),
                             child: Row(
                               children: [
                                 Radio<bool>(
@@ -273,10 +215,10 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                           const Text('การวางแนว (Orientation)',
                               style: TextStyle(fontWeight: FontWeight.bold)),
                           CustomRadioGroup<String>(
-                            groupValue: _template.orientation,
+                            groupValue: state.template?.orientation ?? 'landscape',
                             onChanged: (v) {
                               if (v != null) {
-                                setState(() => _template.orientation = v);
+                                controller.setOrientation(v);
                               }
                             },
                             child: Row(
@@ -299,14 +241,14 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                           Row(
                             children: [
                               Checkbox(
-                                value: _printBorder,
+                                value: state.printBorder,
                                 onChanged: (v) =>
-                                    setState(() => _printBorder = v!),
+                                    controller.setPrintBorder(v ?? false),
                               ),
                               const Text('พิมพ์เส้นขอบ'),
                               const SizedBox(width: 16),
                               _buildInlineField(
-                                  'ขนาดเส้น', _borderWidthCtrl, 'มม'),
+                                  controller, 'ขนาดเส้น', controller.borderWidthCtrl, 'มม'),
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -315,9 +257,9 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                           Row(
                             children: [
                               Checkbox(
-                                value: _printDebug,
+                                value: state.printDebug,
                                 onChanged: (v) =>
-                                    setState(() => _printDebug = v!),
+                                    controller.setPrintDebug(v ?? false),
                               ),
                               const Expanded(
                                 child: Text(
@@ -341,7 +283,7 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                       ),
                       child: Center(
                         child: SingleChildScrollView(
-                          child: _buildPreview(),
+                          child: _buildPreview(controller, state),
                         ),
                       ),
                     ),
@@ -358,10 +300,13 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                   height: 45,
                   child: CustomButton(
                     onPressed: () async {
-                      _updateTemplateFromUI();
-                      await _service.saveTemplate(_template);
-                      if (!context.mounted) return;
-                      Navigator.pop(context, _template);
+                      controller.updateTemplateFromUI();
+                      if (state.template != null) {
+                        final service = BarcodePrintService();
+                        await service.saveTemplate(state.template!);
+                        if (!context.mounted) return;
+                        Navigator.pop(context, state.template);
+                      }
                     },
                     icon: Icons.check,
                     label: 'บันทึก',
@@ -406,7 +351,7 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
   }
 
   Widget _buildInlineField(
-      String label, TextEditingController ctrl, String suffix,
+      BarcodePrintSetupController controller, String label, TextEditingController ctrl, String suffix,
       {bool enabled = true}) {
     return Expanded(
       child: Row(
@@ -424,12 +369,7 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
               label: label,
               filled: true,
               fillColor: enabled ? Colors.white : Colors.grey[200],
-              onChanged: (_) {
-                if (_autoGap) {
-                  _autoCalculateGaps();
-                }
-                setState(() {});
-              },
+              onChanged: (_) => controller.onFieldChanged(),
             ),
           ),
         ],
@@ -437,50 +377,15 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
     );
   }
 
-  void _autoCalculateGaps() {
-    double pw = double.tryParse(_paperWidthCtrl.text) ?? 100;
-    double ph = double.tryParse(_paperHeightCtrl.text) ?? 30;
-    int rows = int.tryParse(_rowsCtrl.text) ?? 1;
-    int cols = int.tryParse(_colsCtrl.text) ?? 3;
-    double mt = double.tryParse(_marginTopCtrl.text) ?? 0;
-    double mb = double.tryParse(_marginBottomCtrl.text) ?? 0;
-    double ml = double.tryParse(_marginLeftCtrl.text) ?? 0;
-    double mr = double.tryParse(_marginRightCtrl.text) ?? 0;
-    double lw = double.tryParse(_labelWidthCtrl.text) ?? 32;
-    double lh = double.tryParse(_labelHeightCtrl.text) ?? 25;
-
-    // Horizontal Gap
-    if (cols > 1) {
-      double availableW = pw - ml - mr;
-      double totalLabelsW = lw * cols;
-      double hGap = (availableW - totalLabelsW) / (cols - 1);
-      if (hGap < 0) hGap = 0;
-      _hGapCtrl.text = hGap.toStringAsFixed(2);
-    } else {
-      _hGapCtrl.text = '0';
-    }
-
-    // Vertical Gap
-    if (rows > 1) {
-      double availableH = ph - mt - mb;
-      double totalLabelsH = lh * rows;
-      double vGap = (availableH - totalLabelsH) / (rows - 1);
-      if (vGap < 0) vGap = 0;
-      _vGapCtrl.text = vGap.toStringAsFixed(2);
-    } else {
-      _vGapCtrl.text = '0';
-    }
-  }
-
-  Widget _buildPreview() {
-    double lw = double.tryParse(_labelWidthCtrl.text) ?? 32;
-    double lh = double.tryParse(_labelHeightCtrl.text) ?? 25;
-    int cols = int.tryParse(_colsCtrl.text) ?? 3;
-    int rows = int.tryParse(_rowsCtrl.text) ?? 1;
-    double hGap = double.tryParse(_hGapCtrl.text) ?? 2;
-    double vGap = double.tryParse(_vGapCtrl.text) ?? 0;
-    double paperWidthVal = double.tryParse(_paperWidthCtrl.text) ?? 100;
-    double paperHeightVal = double.tryParse(_paperHeightCtrl.text) ?? 30;
+  Widget _buildPreview(BarcodePrintSetupController controller, BarcodePrintSetupState state) {
+    double lw = double.tryParse(controller.labelWidthCtrl.text) ?? 32;
+    double lh = double.tryParse(controller.labelHeightCtrl.text) ?? 25;
+    int cols = int.tryParse(controller.colsCtrl.text) ?? 3;
+    int rows = int.tryParse(controller.rowsCtrl.text) ?? 1;
+    double hGap = double.tryParse(controller.hGapCtrl.text) ?? 2;
+    double vGap = double.tryParse(controller.vGapCtrl.text) ?? 0;
+    double paperWidthVal = double.tryParse(controller.paperWidthCtrl.text) ?? 100;
+    double paperHeightVal = double.tryParse(controller.paperHeightCtrl.text) ?? 30;
 
     // Scale for display (limited to fit within reasonable bounds)
     double maxPreviewWidth = 450.0;
@@ -514,10 +419,10 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
             children: [
               // Margins visualization (Subtle)
               Positioned(
-                left: (double.tryParse(_marginLeftCtrl.text) ?? 0) * scale,
-                top: (double.tryParse(_marginTopCtrl.text) ?? 0) * scale,
-                right: (double.tryParse(_marginRightCtrl.text) ?? 0) * scale,
-                bottom: (double.tryParse(_marginBottomCtrl.text) ?? 0) * scale,
+                left: (double.tryParse(controller.marginLeftCtrl.text) ?? 0) * scale,
+                top: (double.tryParse(controller.marginTopCtrl.text) ?? 0) * scale,
+                right: (double.tryParse(controller.marginRightCtrl.text) ?? 0) * scale,
+                bottom: (double.tryParse(controller.marginBottomCtrl.text) ?? 0) * scale,
                 child: Container(
                   decoration: BoxDecoration(
                     border: Border.all(
@@ -528,8 +433,8 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
               ),
               // Labels
               Positioned(
-                left: (double.tryParse(_marginLeftCtrl.text) ?? 0) * scale,
-                top: (double.tryParse(_marginTopCtrl.text) ?? 0) * scale,
+                left: (double.tryParse(controller.marginLeftCtrl.text) ?? 0) * scale,
+                top: (double.tryParse(controller.marginTopCtrl.text) ?? 0) * scale,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: List.generate(rows, (rIndex) {
@@ -547,7 +452,7 @@ class _BarcodePrintSetupScreenState extends State<BarcodePrintSetupScreen> {
                                     color: Colors.white,
                                     border:
                                         Border.all(color: Colors.grey[400]!),
-                                    borderRadius: _isRound
+                                    borderRadius: state.isRound
                                         ? BorderRadius.circular(
                                             lw * scale * 0.15)
                                         : null,

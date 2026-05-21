@@ -57,6 +57,9 @@
 - [x] **Excel Sheet Normalization**: หน้ารายงาน Excel รวมยอดสถิติรถแยกตาม Sheet ได้อย่างแม่นยำแม้ชื่อรถใน Job จะต่างกัน
 
 ### 8. 🛠️ Bug Fixes & Refinement
+- [x] **PO Item Quantity/Cost Discrepancy Fix**: แก้ไขปัญหายอดรวมและยอดรายการใน Purchase Order ไม่ตรงกันเมื่อมีการแก้ไขจำนวนรับเข้า โดย:
+  1. แก้ไขบั๊ก `double.tryParse` ใน `EditReceivedQtyDialog` และ `StockInCreatePage` ที่ทำให้ค่าตัวเลขที่มีเครื่องหมายลูกน้ำ (comma) กลายเป็น 0
+  2. เพิ่มการคำนวณ `totalAmount` ใหม่ในฟังก์ชัน `receivePartialPurchaseOrder` เพื่อไม่ให้ยอดรวมของบิลค้าง (Out of Sync) เมื่อราคาทุนหรือยอดเงินถูกเปลี่ยน
 - [x] **COD Debt Clearance Verification**: ตรวจสอบและยืนยันการทำงานของระบบตัดชำระหนี้ปลายทาง (COD) จาก S-Link เข้าสู่ระบบ POS Desktop ว่าทำงานถูกต้องตามหลักบัญชี 100% (ลดหนี้, อัปเดตสถานะบิล, และแสดงผลในประวัติการขายโดยไม่เบิ้ลยอด)
 - [x] **S-Link Driver Filter**: ยืนยันให้ดึงเฉพาะพนักงานที่มี Role เป็น 'driver' เท่านั้น (ถูกต้องตาม Business Logic แล้ว)
 - [ ] **S-Link Requester Visibility**: ตรวจสอบว่าพนักงานถูกตั้ง Role เป็น 'driver' ครบถ้วนหรือไม่ หากรายชื่อว่างเปล่าเลือกรถไม่ได้
@@ -82,38 +85,50 @@
 
 ### 🖥️ 2. Large UI Screens & Dialogs (Presentation Layer)
 *   [x] `lib/screens/products/stock_in/pages/stock_in_create_page.dart` (~1,132 lines) - **เร่งด่วน** (ดึง Widget ตารางและฟอร์มสร้างใบสั่งซื้อไปเป็น Sub-widgets เรียบร้อยแล้ว)
-*   [ ] `lib/screens/customers/debtor_list_screen.dart` (~964 lines) - (ควรแยก Tab ชำระหนี้ และ Tab แสดงรายการลูกหนี้)
-*   [ ] `lib/screens/reports/delivery_dashboard_screen.dart` (~940 lines) - (แยก Widget แผนที่ Google Maps, สรุปคนขับ และกราฟรายงาน)
-*   [ ] `lib/screens/products/widgets/quick_menu_dialog.dart` (~848 lines) - (แยกเมนูทางลัดปุ่มลัดออกเป็น Module)
-*   [ ] `lib/screens/products/stock_ledger_views.dart` (~813 lines) - (แยกส่วนตารางประวัติสินค้า และตัวกรอง Filter)
+*   [x] `lib/screens/customers/debtor_list_screen.dart` (~964 lines) - (แยก Widget บัญชี ยอดรวม ตาราง ค้นหาตัวกรอง และ Dialogs เรียบร้อยแล้ว)
+*   [x] `lib/screens/reports/delivery_dashboard_screen.dart` (~940 lines) - (แยก Widget แผนที่ Google Maps, สรุปคนขับ และกราฟรายงาน เรียบร้อยแล้ว)
+*   [x] `lib/screens/products/widgets/quick_menu_dialog.dart` (~848 lines) - (แยกเมนูทางลัดปุ่มลัดออกเป็น Module เรียบร้อยแล้ว)
+*   [x] `lib/screens/products/stock_ledger_views.dart` (~813 lines) - (แยกส่วนตารางประวัติสินค้า และตัวกรอง Filter เรียบร้อยแล้ว)
 *   [ ] `lib/screens/reports/delivery_report_screen.dart` (~806 lines)
 *   [ ] `lib/screens/settings/backup_settings_screen.dart` (~763 lines)
-*   [ ] `lib/screens/users/user_management_screen.dart` (~745 lines)
-*   [ ] `lib/screens/settings/connection_settings_screen.dart` (~714 lines)
-*   [ ] `lib/screens/promotions/reward_management_screen.dart` (~709 lines)
+*   [x] `lib/screens/users/user_management_screen.dart` (~745 lines) — ✅ Batch 1 Done (Controller + Dialogs extracted)
+*   [x] `lib/screens/settings/connection_settings_screen.dart` (~714 lines) — ✅ Batch 1 Done (Controller + 5 Cards extracted)
+*   [x] `lib/screens/promotions/reward_management_screen.dart` (~709 lines) — ✅ Batch 1 Done (Riverpod + UI Split)
 *   [ ] `lib/screens/products/stock_return_section.dart` (~697 lines)
-*   [ ] `lib/screens/products/barcode_printing_screen.dart` (~695 lines)
-*   [ ] `lib/screens/settings/fuel_management_screen.dart` (~670 lines)
-*   [ ] `lib/screens/promotions/promotion_list_screen.dart` (~649 lines)
+*   [x] `lib/screens/products/barcode_printing_screen.dart` (~695 lines)
+*   [x] `lib/screens/settings/fuel_management_screen.dart` (~670 lines) — ✅ Batch 1 Done (FuelPriceTab + VehicleSettingsTab extracted; *TODO: FuelManagementController in future*)
+*   [x] `lib/screens/promotions/promotion_list_screen.dart` (~649 lines) — ✅ Batch 1 Done (Riverpod + Edit Screen Extracted)
 *   [ ] `lib/screens/pos/pos_payment_panel.dart` (~639 lines)
 *   [ ] `lib/screens/products/stock_adjustment_section.dart` (~631 lines)
 *   [ ] `lib/screens/products/dialogs/product_form/layouts/product_form_left_column.dart` (~615 lines)
-*   [ ] `lib/screens/products/product_import_screen.dart` (~604 lines)
-*   [ ] `lib/screens/settings/barcode_designer_screen.dart` (~601 lines)
+*   [x] `lib/screens/products/product_import_screen.dart` (~604 lines)
+*   [x] `lib/screens/settings/barcode_designer_screen.dart` (~601 lines)
 *   [ ] `lib/screens/pos/payment_modal/controllers/payment_modal_controller.dart` (~590 lines)
-*   [ ] `lib/screens/products/master_data_management_screen.dart` (~590 lines)
-*   [ ] `lib/screens/settings/barcode_print_setup_screen.dart` (~586 lines)
+*   [x] `lib/screens/products/master_data_management_screen.dart` (~590 lines)
+*   [x] `lib/screens/settings/barcode_print_setup_screen.dart` (~586 lines)
 *   [ ] `lib/screens/dashboard/dashboard_screen.dart` (~576 lines)
 *   [ ] `lib/screens/pos/pos_checkout_screen.dart` (~575 lines)
-*   [ ] `lib/screens/customers/customer_form_dialog.dart` (~567 lines)
-*   [ ] `lib/screens/customers/create_billing_screen.dart` (~564 lines)
-*   [ ] `lib/screens/products/stock_in/tabs/purchase_order_history_tab.dart` (~560 lines)
+*   [x] `lib/screens/customers/customer_form_dialog.dart` (~567 lines)
+*   [x] `lib/screens/customers/create_billing_screen.dart` (~564 lines)
+*   [x] `lib/screens/products/stock_in/tabs/purchase_order_history_tab.dart` (~560 lines)
 *   [ ] `lib/screens/customer_display/customer_display_screen.dart` (~527 lines)
 *   [ ] `lib/screens/pos/pos_cart_list.dart` (~527 lines)
-*   [ ] `lib/screens/settings/initial_setup_screen.dart` (~502 lines)
+*   [x] `lib/screens/settings/initial_setup_screen.dart` (~502 lines) — ✅ Batch 1 Done (DbConfigStep + AdminSetupStep extracted)
 
 ### ⚙️ 3. Core Services & Integrations
-*   [ ] `lib/services/firebase_service.dart` (~1,022 lines) - **เร่งด่วน** (แยก Logic การเชื่อมต่อ Realtime Firestore และฟังก์ชันอัปเดต Token)
-*   [ ] `lib/services/mysql_service.dart` (~845 lines) - (ควรแยก SQL Queries และ Connection pooling ออกจากกัน)
-*   [ ] `lib/services/integration/delivery_integration_service.dart` (~657 lines) - (ควรแยกส่วน Cloud Functions และ Firestore sync)
+*   [x] `lib/services/firebase_service.dart` (~1,022 lines) - **เร่งด่วน** (แยก Logic Storage และ Messaging ย่อย เรียบร้อยแล้ว)
+*   [x] `lib/services/mysql_service.dart` (~845 lines) - (แยก SQL Queries และ Connection pooling เรียบร้อยแล้ว)
+*   [x] `lib/services/integration/delivery_integration_service.dart` (~657 lines) - (แยกส่วนคำนวณระยะทาง และ Auto Cleanup ย่อย เรียบร้อยแล้ว)
 *   [ ] `lib/services/firestore_rest_service.dart` (~623 lines)
+
+## 🔮 Future Architecture & Reliability Improvements (Pro Tips)
+- [ ] **Unit Testing for Service Layer**: เพิ่ม Unit Test เพื่อครอบคลุม `NotificationService` โดยจำลองสถานการณ์การส่ง LINE (Mocking HTTP Response) เพื่อให้แน่ใจว่าระบบส่งแจ้งเตือนทำงานได้แม่นยำ 99.9%
+- [x] **State Management Upgrade (Riverpod/Bloc)**: เมื่อระบบ Debtor มีความซับซ้อนขึ้นในอนาคต (เช่น การ sync แบบ real-time หรือ state แชร์ร่วมกันหลายหน้าจอ) ให้พิจารณาย้าย logic จาก `setState` ไปจัดกลุ่มการอัปเดต state ด้วย Riverpod หรือ Bloc
+- [ ] **Quick Menu Logic Migration**: ย้ายฟังก์ชันการโหลดสินค้า (`_loadPageData`) จาก `QuickMenuDialog` ไปอยู่ใน `QuickMenuService` เพื่อให้ Dialog กลายเป็น Pure UI Component คอยรับข้อมูลและแสดงผลตามหลักการ Clean Architecture อย่างแท้จริง
+- [ ] **FuelManagementController (Future)**: ดึงลอจิกการเปิด Dialog (เช่น `_showAddPriceDialog`, `_showVehicleDialog`) ออกจาก `fuel_management_screen.dart` ไปรวมไว้ใน `FuelManagementController` เพื่อให้หน้า UI เป็น Pure UI Widget 100% เหมือนกับที่ทำใน ConnectionSettingsController
+- [ ] **Stock Ledger - Pull-to-Refresh**: เพิ่ม `RefreshIndicator` ครอบในรายการ เพื่อให้สามารถดึงลงหรือสั่ง Refresh โหลดข้อมูลสินค้าล่าสุดใหม่ได้รวดเร็ว
+- [ ] **Stock Ledger - Date Range Quick Select**: เพิ่มตัวเลือกระบุช่วงเวลาด่วน (เช่น "7 วันล่าสุด", "เดือนนี้") ในหน้าจอตัวกรอง `StockFilterPanel` เพื่อความสะดวกในการวิเคราะห์สต็อกสินค้า
+- [ ] **Delivery Dashboard - State Management Migration**: ย้ายข้อมูลสถานะ เช่น `_records`, `_allVehicles` ออกจาก UI State ไปไว้ใน Provider (Riverpod หรือ Bloc) เพื่อให้การเปิดใช้งานและแชร์ข้อมูลระหว่างหลายหน้าจอเป็นไปได้อย่างลื่นไหลและไร้ที่ติ
+- [ ] **Delivery Dashboard - Offline-first Strategy**: เพิ่ม Logic ใน `DeliveryCoordinator` ให้ค้นหา/แสดงข้อมูลจาก Local Database (เช่น Isar หรือ SQLite) เป็น Fallback ก่อนดึงข้อมูลผ่าน Firestore/MySQL เมื่อออฟไลน์
+- [ ] **Logger Service - Crash Reporting**: เชื่อมต่อ `LoggerService.error` เข้ากับระบบคลาวด์ เช่น Sentry หรือ Firebase Crashlytics เพื่อรายงานปัญหาอัตโนมัติในฝั่ง Production
+- [ ] **Logger Service - Query Performance Monitoring**: เพิ่มการวัดความเร็ว (Execution Time) ใน `MySqlQueryExecutor` เพื่อตรวจจับ Query ที่ใช้เวลานานและบันทึกเป็น `LoggerService.debug`

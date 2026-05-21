@@ -27,7 +27,7 @@ extension SalesAnalyticsExtension on SalesRepository {
       }
       return {'amount': 0.0, 'count': 0};
     } catch (e) {
-      debugPrint('Error getting credit stats: $e');
+      LoggerService.error('SalesRepository', 'Error getting credit stats', e);
       return {'amount': 0.0, 'count': 0};
     }
   }
@@ -99,7 +99,7 @@ extension SalesAnalyticsExtension on SalesRepository {
 
       return merged.values.toList();
     } catch (e) {
-      debugPrint('Error getting sales stats: $e');
+      LoggerService.error('SalesRepository', 'Error getting sales stats', e);
       return [];
     }
   }
@@ -118,7 +118,7 @@ extension SalesAnalyticsExtension on SalesRepository {
       return await _dbService.query(sql,
           {'start': start.toIso8601String(), 'end': end.toIso8601String()});
     } catch (e) {
-      debugPrint('Error in getTopProductsByDateRange: $e');
+      LoggerService.error('SalesRepository', 'Error in getTopProductsByDateRange', e);
       return [];
     }
   }
@@ -137,7 +137,7 @@ extension SalesAnalyticsExtension on SalesRepository {
       return await _dbService.query(sql,
           {'start': start.toIso8601String(), 'end': end.toIso8601String()});
     } catch (e) {
-      debugPrint('Error in getDetailedOrdersForExport: $e');
+      LoggerService.error('SalesRepository', 'Error in getDetailedOrdersForExport', e);
       return [];
     }
   }
@@ -155,7 +155,7 @@ extension SalesAnalyticsExtension on SalesRepository {
       return await _dbService.query(sql,
           {'start': start.toIso8601String(), 'end': end.toIso8601String()});
     } catch (e) {
-      debugPrint('Error in getPaymentMethodStats: $e');
+      LoggerService.error('SalesRepository', 'Error in getPaymentMethodStats', e);
       return [];
     }
   }

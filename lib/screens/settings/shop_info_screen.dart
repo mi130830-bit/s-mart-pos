@@ -5,19 +5,19 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import '../../services/settings_service.dart';
 import '../../services/alert_service.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../pos/pos_state_manager.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
 
-class ShopInfoScreen extends StatefulWidget {
+class ShopInfoScreen extends ConsumerStatefulWidget {
   const ShopInfoScreen({super.key});
 
   @override
-  State<ShopInfoScreen> createState() => _ShopInfoScreenState();
+  ConsumerState<ShopInfoScreen> createState() => _ShopInfoScreenState();
 }
 
-class _ShopInfoScreenState extends State<ShopInfoScreen> {
+class _ShopInfoScreenState extends ConsumerState<ShopInfoScreen> {
   final TextEditingController _shopNameController = TextEditingController();
   final TextEditingController _shopAddressController = TextEditingController();
   final TextEditingController _shopTaxIdController = TextEditingController();
@@ -90,7 +90,7 @@ class _ShopInfoScreenState extends State<ShopInfoScreen> {
 
       if (mounted) {
         // Refresh provider if needed (though SettingsService handles memory cache)
-        context.read<PosStateManager>().refreshGeneralSettings();
+        ref.read(posProvider.notifier).refreshGeneralSettings();
       }
 
       if (!mounted) return;

@@ -1,40 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/customer.dart';
-import '../../models/billing_note.dart';
-import '../../models/billing_note_item.dart';
-import '../../repositories/customer_repository.dart';
-import '../../repositories/billing_repository.dart';
-import '../../repositories/debtor_repository.dart';
-import '../../models/outstanding_bill.dart';
-import '../../services/alert_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/customer.dart';
+import '../controllers/create_billing_controller.dart';
 
-class CreateBillingScreen extends StatefulWidget {
+class CreateBillingScreen extends ConsumerStatefulWidget {
   final Customer? preSelectedCustomer;
 
   const CreateBillingScreen({super.key, this.preSelectedCustomer});
 
   @override
-  State<CreateBillingScreen> createState() => _CreateBillingScreenState();
+  ConsumerState<CreateBillingScreen> createState() => _CreateBillingScreenState();
 }
 
-class _CreateBillingScreenState extends State<CreateBillingScreen> {
-  final CustomerRepository _customerRepo = CustomerRepository();
-  final BillingRepository _billingRepo = BillingRepository();
-  final DebtorRepository _debtorRepo = DebtorRepository();
-
-  // Data
-  List<Customer> _allCustomers = [];
-  Customer? _selectedCustomer;
-  List<OutstandingBill> _activeBills =
-      []; // List of bills currently in the table
-  bool _isLoading = false;
-
+class _CreateBillingScreenState extends ConsumerState<CreateBillingScreen> {
   // Controllers
-  final TextEditingController _searchBillCtrl =
-      TextEditingController(); // "Search Bill"
-  final TextEditingController _customerDisplayCtrl =
-      TextEditingController(); // "Debtor Name"
+  final TextEditingController _searchBillCtrl = TextEditingController();
+  final TextEditingController _customerDisplayCtrl = TextEditingController();
   final TextEditingController _noteCtrl = TextEditingController();
   final TextEditingController _dueDateCtrl = TextEditingController();
 
@@ -45,55 +27,29 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
   void initState() {
     super.initState();
     _dueDateCtrl.text = DateFormat('dd/MM/yyyy').format(_dueDate);
-    if (widget.preSelectedCustomer != null) {
-      _selectCustomer(widget.preSelectedCustomer!);
-    } else {
-      _loadCustomers();
-    }
-  }
 
-  Future<void> _loadCustomers() async {
-    final list = await _customerRepo.getAllCustomers();
-    if (mounted) {
-      setState(() {
-        _allCustomers = list;
-      });
-    }
-  }
-
-  void _selectCustomer(Customer c) {
-    setState(() {
-      _selectedCustomer = c;
-      _customerDisplayCtrl.text = '${c.firstName} ${c.lastName ?? ""}';
-    });
-    _loadPendingBills(c.id);
-  }
-
-  Future<void> _loadPendingBills(int customerId) async {
-    setState(() => _isLoading = true);
-    try {
-      final bills = await _debtorRepo.getPendingBills(customerId);
-      if (mounted) {
-        setState(() {
-          _activeBills = List.from(bills); // Copy all to active
-          _isLoading = false;
-        });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final controller = ref.read(createBillingProvider.notifier);
+      if (widget.preSelectedCustomer != null) {
+        _selectCustomer(widget.preSelectedCustomer!, controller);
+      } else {
+        controller.loadCustomers(context);
       }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _removeBill(int index) {
-    setState(() {
-      _activeBills.removeAt(index);
     });
   }
 
-  double get _totalAmount {
-    return _activeBills.fold(0.0, (sum, item) {
-      return sum + item.remaining;
-    });
+  @override
+  void dispose() {
+    _searchBillCtrl.dispose();
+    _customerDisplayCtrl.dispose();
+    _noteCtrl.dispose();
+    _dueDateCtrl.dispose();
+    super.dispose();
+  }
+
+  void _selectCustomer(Customer c, CreateBillingController controller) {
+    _customerDisplayCtrl.text = '${c.firstName} ${c.lastName ?? ""}';
+    controller.selectCustomer(context, c);
   }
 
   // Pick Date
@@ -113,11 +69,11 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
   }
 
   // Search Dialog
-  Future<void> _showCustomerSearchDialog() async {
+  Future<void> _showCustomerSearchDialog(CreateBillingState state, CreateBillingController controller) async {
     showDialog(
       context: context,
       builder: (context) {
-        List<Customer> filtered = List.from(_allCustomers);
+        List<Customer> filtered = List.from(state.allCustomers);
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -137,7 +93,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                       onChanged: (query) {
                         setDialogState(() {
                           final q = query.toLowerCase();
-                          filtered = _allCustomers.where((c) {
+                          filtered = state.allCustomers.where((c) {
                             return c.firstName.toLowerCase().contains(q) ||
                                 (c.lastName ?? '').toLowerCase().contains(q) ||
                                 (c.phone ?? '').contains(q);
@@ -162,7 +118,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                                 : null,
                             onTap: () {
                               Navigator.pop(context);
-                              _selectCustomer(c);
+                              _selectCustomer(c, controller);
                             },
                           );
                         },
@@ -184,61 +140,23 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
     );
   }
 
-  Future<void> _save() async {
-    if (_selectedCustomer == null) {
-      AlertService.show(
-        context: context,
-        message: 'กรุณาเลือกลูกหนี้',
-        type: 'warning',
-      );
-      return;
-    }
-    if (_activeBills.isEmpty) {
-      AlertService.show(
-        context: context,
-        message: 'ไม่มีรายการในใบวางบิล',
-        type: 'warning',
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final note = BillingNote(
-      customerId: _selectedCustomer!.id,
-      documentNo: 'INV-${DateTime.now().millisecondsSinceEpoch}', // Logic เดิม
+  Future<void> _save(CreateBillingController controller) async {
+    final success = await controller.saveBillingNote(
+      context,
       issueDate: _issueDate,
       dueDate: _dueDate,
-      totalAmount: _totalAmount,
       note: _noteCtrl.text,
-      status: 'PENDING',
     );
-
-    List<BillingNoteItem> items = [];
-    for (var b in _activeBills) {
-      final orderId = b.orderId;
-      final amount = b.remaining;
-      items.add(BillingNoteItem(orderId: orderId, amount: amount));
-    }
-
-    final success = await _billingRepo.createBillingNote(note, items);
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (success) {
-        Navigator.pop(context, true);
-      } else {
-        AlertService.show(
-          context: context,
-          message: 'บันทึกไม่สำเร็จ',
-          type: 'error',
-        );
-      }
+    if (success && mounted) {
+      Navigator.pop(context, true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(createBillingProvider);
+    final controller = ref.read(createBillingProvider.notifier);
+
     return Dialog(
       insetPadding: const EdgeInsets.all(20),
       child: Container(
@@ -273,7 +191,6 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: () {
-                    // Local filter logic implemented below in ListView
                     setState(() {});
                   },
                   icon: const Icon(Icons.search),
@@ -284,7 +201,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: _showCustomerSearchDialog,
+                  onPressed: () => _showCustomerSearchDialog(state, controller),
                   icon: const Icon(Icons.person_search),
                   label: const Text('ค้นหาจากสมาชิก'),
                   style: ElevatedButton.styleFrom(
@@ -354,28 +271,26 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
 
             // Table Body
             Expanded(
-              child: _isLoading
+              child: state.isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _activeBills.isEmpty
+                  : state.activeBills.isEmpty
                       ? Container(
                           color: Colors.grey.shade100,
                           width: double.infinity,
                           height: double.infinity) // Empty space
                       : ListView.builder(
-                          itemCount: _activeBills.length,
+                          itemCount: state.activeBills.length,
                           itemBuilder: (context, index) {
                             // Search Filter logic (Local)
-                            final item = _activeBills[index];
+                            final item = state.activeBills[index];
                             final orderId = item.orderId.toString();
                             if (_searchBillCtrl.text.isNotEmpty &&
                                 !orderId.contains(_searchBillCtrl.text)) {
-                              return const SizedBox
-                                  .shrink(); // Hide if not match local search
+                              return const SizedBox.shrink();
                             }
 
                             final dt = item.createdAt;
                             final remaining = item.remaining;
-                            // Note?
 
                             return Container(
                               decoration: BoxDecoration(
@@ -407,8 +322,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                                       child: Text(
                                           DateFormat('dd/MM/yyyy').format(
                                               dt.add(const Duration(days: 30))),
-                                          textAlign: TextAlign
-                                              .center)), // Est due date
+                                          textAlign: TextAlign.center)),
                                   Expanded(
                                       flex: 2,
                                       child: Text(
@@ -435,7 +349,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                                       child: IconButton(
                                         icon: const Icon(Icons.delete,
                                             color: Colors.red, size: 20),
-                                        onPressed: () => _removeBill(index),
+                                        onPressed: () => controller.removeBill(index),
                                       )),
                                 ],
                               ),
@@ -509,7 +423,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      Text('${_activeBills.length}',
+                      Text('${state.activeBills.length}',
                           style: const TextStyle(
                               fontSize: 32,
                               color: Colors.blue,
@@ -517,7 +431,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                       const Text('จำนวนบิล',
                           style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      Text(NumberFormat('#,##0.00').format(_totalAmount),
+                      Text(NumberFormat('#,##0.00').format(state.totalAmount),
                           style: const TextStyle(
                               fontSize: 32,
                               color: Colors.blue,
@@ -540,7 +454,7 @@ class _CreateBillingScreenState extends State<CreateBillingScreen> {
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(120, 45)),
-                  onPressed: _isLoading ? null : _save,
+                  onPressed: state.isLoading ? null : () => _save(controller),
                   icon: const Icon(Icons.save),
                   label: const Text('บันทึก'),
                 ),

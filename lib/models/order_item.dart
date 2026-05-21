@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import 'package:uuid/uuid.dart';
 import 'product.dart';
 
 class OrderItem {
@@ -20,6 +21,9 @@ class OrderItem {
   // Store original Product
   final Product? product;
 
+  // ✅ Unique ID สำหรับผูกกับ UI Key (ป้องกันปัญหาเวลามีสินค้าเดียวกันแยกหลายบรรทัด)
+  final String uiKey;
+
   OrderItem({
     this.id,
     required this.productId,
@@ -33,7 +37,9 @@ class OrderItem {
     this.conversionFactor = 1.0,
     this.isPriceOverridden = false,
     this.product,
-  })  : discount = discount ?? Decimal.zero,
+    String? uiKey,
+  })  : uiKey = uiKey ?? const Uuid().v4(),
+        discount = discount ?? Decimal.zero,
         costPrice = costPrice ?? Decimal.zero;
 
   // [Method] copyWith method
@@ -50,6 +56,7 @@ class OrderItem {
     double? conversionFactor,
     bool? isPriceOverridden,
     Product? product,
+    String? uiKey,
   }) {
     return OrderItem(
       id: id ?? this.id,
@@ -64,6 +71,7 @@ class OrderItem {
       conversionFactor: conversionFactor ?? this.conversionFactor,
       isPriceOverridden: isPriceOverridden ?? this.isPriceOverridden,
       product: product ?? this.product,
+      uiKey: uiKey ?? this.uiKey,
     );
   }
 
@@ -103,6 +111,7 @@ class OrderItem {
       product: json['product'] != null
           ? Product.fromJson(json['product'] as Map<String, dynamic>)
           : null,
+      uiKey: json['uiKey']?.toString(),
     );
   }
 
@@ -121,6 +130,7 @@ class OrderItem {
       'conversionFactor': conversionFactor,
       'isPriceOverridden': isPriceOverridden,
       'product': product?.toJson(),
+      'uiKey': uiKey,
     };
   }
 }

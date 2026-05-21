@@ -12,15 +12,15 @@ class PosNotFoundDialog {
   static Future<void> show(
     BuildContext context, {
     required String barcode,
-    required PosStateManager posState,
+    required PosStateNotifier posState,
     required double qty,
-    required Future<void> Function(String barcode, PosStateManager posState,
+    required Future<void> Function(String barcode, PosStateNotifier posState,
             double qty)
         onCreateProduct,
-    required void Function(String barcode, PosStateManager posState,
+    required void Function(String barcode, PosStateNotifier posState,
             double qty)
         onQuickSale,
-    required void Function(String newBarcode, PosStateManager posState)
+    required void Function(String newBarcode, PosStateNotifier posState)
         onBarcodeScanned,
     required bool Function(String key, String actionName) checkPermission,
   }) async {

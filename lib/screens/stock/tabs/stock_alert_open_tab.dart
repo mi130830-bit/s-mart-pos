@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/shortage_provider.dart';
 import '../../../models/shortage_log_model.dart';
 import '../../../services/alert_service.dart';
@@ -8,14 +8,14 @@ import '../widgets/stock_pagination_control.dart';
 import '../dialogs/stock_alert_confirm_dialog.dart';
 import '../utils/stock_date_utils.dart';
 
-class StockAlertOpenTab extends StatefulWidget {
+class StockAlertOpenTab extends ConsumerStatefulWidget {
   const StockAlertOpenTab({super.key});
 
   @override
-  State<StockAlertOpenTab> createState() => _StockAlertOpenTabState();
+  ConsumerState<StockAlertOpenTab> createState() => _StockAlertOpenTabState();
 }
 
-class _StockAlertOpenTabState extends State<StockAlertOpenTab> {
+class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
   final _searchCtrl = TextEditingController();
   int _currentPage = 1;
   final int _itemsPerPage = 20;
@@ -27,8 +27,7 @@ class _StockAlertOpenTabState extends State<StockAlertOpenTab> {
   }
 
   Future<void> _markAsOrdered(int id) async {
-    await Provider.of<ShortageProvider>(context, listen: false)
-        .markAsOrdered(id);
+    await ref.read(shortageProvider.notifier).markAsOrdered(id);
     if (mounted) {
       AlertService.show(
         context: context,
@@ -54,7 +53,7 @@ class _StockAlertOpenTabState extends State<StockAlertOpenTab> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<ShortageProvider>(context);
+    final provider = ref.watch(shortageProvider);
     final q = _searchCtrl.text.trim().toLowerCase();
     final lowStockNames = provider.lowStockProducts.map((p) => p.name.toLowerCase()).toSet();
 

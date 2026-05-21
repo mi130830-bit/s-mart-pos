@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/auth_provider.dart';
 import 'product_list_view.dart';
 import 'stock_ops_view.dart';
@@ -8,15 +8,15 @@ import 'product_import_screen.dart';
 import 'barcode_printing_screen.dart';
 import '../stock/stock_alert_screen.dart'; // ✅ Added import
 
-class ProductManagementScreen extends StatefulWidget {
+class ProductManagementScreen extends ConsumerStatefulWidget {
   const ProductManagementScreen({super.key});
 
   @override
-  State<ProductManagementScreen> createState() =>
+  ConsumerState<ProductManagementScreen> createState() =>
       _ProductManagementScreenState();
 }
 
-class _ProductManagementScreenState extends State<ProductManagementScreen> {
+class _ProductManagementScreenState extends ConsumerState<ProductManagementScreen> {
   String _currentView = 'MENU';
 
   // ชื่อ Title Bar เปลี่ยนตามหน้า
@@ -97,7 +97,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
   }
 
   Widget _buildMenu() {
-    final auth = Provider.of<AuthProvider>(context);
+    final auth = ref.watch(authProvider);
 
     // List of visible menu items
     final List<Widget> menuItems = [

@@ -7,13 +7,13 @@ import '../../models/debtor_transaction.dart';
 import '../../repositories/customer_repository.dart';
 import '../../repositories/sales_repository.dart';
 import '../../repositories/debtor_repository.dart';
-import 'create_billing_screen.dart';
+import 'billing/create_billing_screen.dart';
 import '../../services/alert_service.dart';
-import 'widgets/customer_debtor_order_detail_dialog.dart';
-import 'widgets/customer_debtor_payment_dialog.dart';
-import 'widgets/customer_debtor_profile_tab.dart';
-import 'widgets/customer_debtor_ledger_tab.dart';
-import 'widgets/customer_debtor_history_tab.dart';
+import 'dialogs/customer_debtor/customer_debtor_order_detail_dialog.dart';
+import 'dialogs/customer_debtor/customer_debtor_payment_dialog.dart';
+import 'widgets/customer_debtor/customer_debtor_profile_tab.dart';
+import 'widgets/customer_debtor/customer_debtor_ledger_tab.dart';
+import 'widgets/customer_debtor/customer_debtor_history_tab.dart';
 
 class CustomerDebtorScreen extends StatefulWidget {
   final Customer customer;

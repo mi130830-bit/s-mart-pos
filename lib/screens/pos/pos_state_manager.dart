@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf/pdf.dart';
 import '../../models/user.dart';
@@ -30,6 +31,7 @@ import '../../services/system/hardware_service.dart';
 import '../../repositories/product_repository.dart';
 import '../../repositories/reward_repository.dart';
 import '../../utils/barcode_utils.dart';
+import '../../services/logger_service.dart';
 
 export '../../services/sales/price_calculation_service.dart' show VatType;
 
@@ -49,18 +51,96 @@ class ScanResult {
   ScanResult({required this.status, this.product, this.matches, this.message});
 }
 
-class PosStateManager extends ChangeNotifier {
-  // Internal helper for extension methods (notifyListeners is @protected)
-  void _notify() => notifyListeners();
+class PosState {
+  final Customer? currentCustomer;
+  final List<HeldBill> heldBills;
+  final double billDiscount;
+  final bool isPercentDiscount;
+  final double extraBillDiscount;
+  final LastOrderInfo? lastOrder;
+  final PriceCalculationResult? calcCache;
+  final List<MemberTier> tiers;
+  final List<Promotion> activePromotions;
+  final Decimal promoDiscount;
+  final Promotion? appliedPromotion;
+  final int pointsToRedeem;
+  final double couponDiscountAmount;
+  final String? appliedCouponCode;
+  final int currentBranchId;
+  final String shopName;
+  final bool allowNegativeStock;
+  final String roundingMode;
+  final double vatRate;
+  final bool allowPriceEdit;
+  final User? authUser;
+  final VatType vatType;
+
+  PosState({
+    this.currentCustomer,
+    this.heldBills = const [],
+    this.billDiscount = 0.0,
+    this.isPercentDiscount = false,
+    this.extraBillDiscount = 0.0,
+    this.lastOrder,
+    this.calcCache,
+    this.tiers = const [],
+    this.activePromotions = const [],
+    required this.promoDiscount,
+    this.appliedPromotion,
+    this.pointsToRedeem = 0,
+    this.couponDiscountAmount = 0.0,
+    this.appliedCouponCode,
+    this.currentBranchId = 1,
+    this.shopName = '',
+    this.allowNegativeStock = true,
+    this.roundingMode = 'none',
+    this.vatRate = 7.0,
+    this.allowPriceEdit = false,
+    this.authUser,
+    this.vatType = VatType.none,
+  });
+}
+
+final posProvider = NotifierProvider.autoDispose<PosStateNotifier, PosState>(PosStateNotifier.new);
+
+class PosStateNotifier extends AutoDisposeNotifier<PosState> {
+  // Internal helper for extension methods
+  void _notify() {
+    state = PosState(
+      currentCustomer: _currentCustomer,
+      heldBills: List.unmodifiable(_heldBills),
+      billDiscount: _billDiscount,
+      isPercentDiscount: _isPercentDiscount,
+      extraBillDiscount: _extraBillDiscount,
+      lastOrder: _lastOrder,
+      calcCache: _calcCache,
+      tiers: List.unmodifiable(_tiers),
+      activePromotions: List.unmodifiable(_activePromotions),
+      promoDiscount: _promoDiscount,
+      appliedPromotion: _appliedPromotion,
+      pointsToRedeem: _pointsToRedeem,
+      couponDiscountAmount: _couponDiscountAmount,
+      appliedCouponCode: _appliedCouponCode,
+      currentBranchId: _currentBranchId,
+      shopName: _shopName,
+      allowNegativeStock: _allowNegativeStock,
+      roundingMode: _roundingMode,
+      vatRate: _vatRate,
+      allowPriceEdit: _allowPriceEdit,
+      authUser: _authUser,
+      vatType: _vatType,
+    );
+  }
 
   final FirebaseService _firebaseService = FirebaseService();
   final PriceCalculationService _priceCalcService = PriceCalculationService();
   final HardwareService _hardwareService = HardwareService();
-  late CartService _cartService;
   late DeliveryIntegrationService _deliveryService;
 
+
   Customer? _currentCustomer;
-  List<OrderItem> get cart => _cartService.cart;
+  CartNotifier get _cartService => ref.read(cartProvider.notifier);
+  List<OrderItem> get cart => ref.read(cartProvider).items;
 
   final HeldBillManager _heldBillManager = HeldBillManager();
   final SalesRepository _salesRepo = SalesRepository();
@@ -119,17 +199,17 @@ class PosStateManager extends ChangeNotifier {
   bool _allowPriceEdit = false;
   bool get allowPriceEdit => _allowPriceEdit;
 
-  PosStateManager() {
-    _cartService = CartService(MySQLService(), _priceCalcService);
+  @override
+  PosState build() {
     _deliveryService =
         DeliveryIntegrationService(MySQLService(), _firebaseService);
 
-    _cartService.addListener(() {
+    ref.listen(cartProvider, (prev, next) {
       _invalidateCalcCache();
       _calculatePromotions();
       _updateDisplay();
       _saveCartToPrefs();
-      notifyListeners();
+      _notify();
     });
 
     SettingsService().addListener(() {
@@ -137,11 +217,13 @@ class PosStateManager extends ChangeNotifier {
     });
 
     _init();
+    
+    return PosState(promoDiscount: Decimal.zero);
   }
 
   Future<void> _init() async {
     if (!await MySQLService().hasConfig()) {
-      debugPrint('⚠️ [PosState] No Database Config found. Skipping DB Init.');
+      LoggerService.warning('POS_State', 'No Database Config found. Skipping DB Init.');
       return;
     }
 
@@ -149,7 +231,7 @@ class PosStateManager extends ChangeNotifier {
       await _custRepo.initMemberTierTable();
       _tiers = await _custRepo.getAllTiers();
     } catch (e) {
-      debugPrint('❌ [PosState] Init Error: $e');
+      LoggerService.error('POS_State', 'Init Error', e);
     }
 
     await _promoRepo.initTable();
@@ -162,7 +244,7 @@ class PosStateManager extends ChangeNotifier {
     if (prefs.getBool('auto_open_customer_display') ?? false) {
       _hardwareService.openDisplay();
     }
-    notifyListeners();
+    _notify();
   }
 
   Future<void> refreshGeneralSettings() async {
@@ -183,10 +265,10 @@ class PosStateManager extends ChangeNotifier {
       _activePromotions = promos;
       _calculatePromotions();
       _invalidateCalcCache();
-      notifyListeners();
+      _notify();
     }));
 
-    notifyListeners();
+    _notify();
   }
 
   // --- Auth User ---
@@ -200,7 +282,7 @@ class PosStateManager extends ChangeNotifier {
       _clearStateMemory();
       _authUser = newUser;
       await _loadCartFromPrefs();
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -218,7 +300,7 @@ class PosStateManager extends ChangeNotifier {
   void setExtraBillDiscount(double val) {
     _extraBillDiscount = val;
     _invalidateCalcCache();
-    notifyListeners();
+    _notify();
   }
 
   // --- Active Cart Persistence ---
@@ -240,7 +322,7 @@ class PosStateManager extends ChangeNotifier {
       try {
         _currentCustomer = await _custRepo.getCustomerById(custId);
       } catch (e) {
-        debugPrint('⚠️ [PosState] _loadCartFromPrefs customer error: $e');
+        LoggerService.warning('POS_State', '_loadCartFromPrefs customer error: $e');
         _currentCustomer = null;
       }
     } else {
@@ -260,7 +342,7 @@ class PosStateManager extends ChangeNotifier {
     final bills = await _heldBillManager.loadHeldBills();
     _heldBills.clear();
     _heldBills.addAll(bills);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> holdCurrentBill({String note = ''}) async {
@@ -271,7 +353,7 @@ class PosStateManager extends ChangeNotifier {
       await clearCart(returnStock: false);
       await _loadHeldBillsFromDB();
     } catch (e) {
-      debugPrint('Error holding bill: $e');
+      LoggerService.error('POS_State', 'Error holding bill', e);
       rethrow;
     }
   }
@@ -298,7 +380,7 @@ class PosStateManager extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Error checking stock for held bill: $e');
+      LoggerService.error('POS_State', 'Error checking stock for held bill', e);
     }
 
     return warnings;
@@ -319,7 +401,7 @@ class PosStateManager extends ChangeNotifier {
     _extraBillDiscount = 0.0;
 
     _heldBills.removeAt(index);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> deleteHeldBill(int index) async {

@@ -1,6 +1,6 @@
 part of '../pos_state_manager.dart';
 
-extension PosCartExtension on PosStateManager {
+extension PosCartExtension on PosStateNotifier {
   Future<void> addProductToCart(Product product,
       {double quantity = 1.0,
       double? overridePrice,
@@ -12,8 +12,8 @@ extension PosCartExtension on PosStateManager {
       try {
         final fetched = await _productRepo.getProductById(product.id);
         if (fetched != null) freshProduct = fetched;
-      } catch (e) {
-        debugPrint('⚠️ [PosState] Could not re-fetch stock for ${product.name}: $e');
+      } catch (e, stackTrace) {
+        LoggerService.error('PosCart', 'Could not re-fetch stock for ${product.name}', e, stackTrace);
       }
     }
     await _cartService.addProduct(

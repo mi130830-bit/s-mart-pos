@@ -6,15 +6,17 @@ import 'package:decimal/decimal.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import '../../pos_state_manager.dart';
+import '../../../../services/logger_service.dart';
 
 mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
+  static final http.Client _client = http.Client();
   bool isVerifyingSlip = false;
   String? slipVerificationMsg;
   bool? slipVerificationSuccess;
 
   Future<void> verifySlipFromBytes({
     required Uint8List bytes,
-    required PosStateManager posState,
+    required PosStateNotifier posState,
     required Decimal receivedAmount,
     required Decimal totalPaid,
     required Function(Decimal) onValidAmountApplied,
@@ -39,7 +41,7 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
       final apiUrl =
           Uri.parse('http://localhost:8080/api/v1/payment/verify-slip');
 
-      final response = await http.post(
+      final response = await _client.post(
         apiUrl,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -66,7 +68,8 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
           slipVerificationMsg = 'Server Error: ${response.statusCode}';
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      LoggerService.error('PaymentModal', 'Verify Slip Error: $e', e, stackTrace);
       setState(() {
         slipVerificationSuccess = false;
         slipVerificationMsg = 'Error: $e';
@@ -77,7 +80,7 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> pickAndVerifySlip({
-    required PosStateManager posState,
+    required PosStateNotifier posState,
     required Decimal receivedAmount,
     required Decimal totalPaid,
     required Function(Decimal) onValidAmountApplied,
@@ -98,8 +101,8 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
           onValidAmountApplied: onValidAmountApplied,
         );
       }
-    } catch (e) {
-      debugPrint('Error picking file: $e');
+    } catch (e, stackTrace) {
+      LoggerService.error('PaymentModal', 'Error picking file: $e', e, stackTrace);
     }
   }
 }

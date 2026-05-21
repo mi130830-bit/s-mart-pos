@@ -6,7 +6,7 @@ import '../../repositories/unit_repository.dart';
 import '../../services/alert_service.dart';
 import 'dialogs/product_form/product_form_dialog.dart';
 
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/barcode_utils.dart';
 import '../../state/auth_provider.dart';
 import 'master_data_management_screen.dart';
@@ -33,14 +33,14 @@ enum VatType {
   }
 }
 
-class ProductListSection extends StatefulWidget {
+class ProductListSection extends ConsumerStatefulWidget {
   const ProductListSection({super.key});
 
   @override
-  State<ProductListSection> createState() => _ProductListSectionState();
+  ConsumerState<ProductListSection> createState() => _ProductListSectionState();
 }
 
-class _ProductListSectionState extends State<ProductListSection> {
+class _ProductListSectionState extends ConsumerState<ProductListSection> {
   final ProductRepository _productRepo = ProductRepository();
   final UnitRepository _unitRepo = UnitRepository();
 
@@ -260,8 +260,8 @@ class _ProductListSectionState extends State<ProductListSection> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final isAdmin = authProvider.isAdmin;
+    final auth = ref.watch(authProvider);
+    final isAdmin = auth.isAdmin;
 
     return Scaffold(
       floatingActionButton: isAdmin
@@ -304,7 +304,7 @@ class _ProductListSectionState extends State<ProductListSection> {
                       builder: (context) => const MasterDataManagementScreen()),
                 ).then((_) => _loadData());
               },
-              hasMasterDataPermission: authProvider.hasPermission('manage_master_data'),
+              hasMasterDataPermission: auth.hasPermission('manage_master_data'),
             ),
           ),
 

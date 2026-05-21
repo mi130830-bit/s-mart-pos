@@ -57,8 +57,8 @@ class _EditReceivedQtyDialogState extends State<EditReceivedQtyDialog> {
   double _calcSubtotal() {
     double total = 0.0;
     for (var i = 0; i < widget.items.length; i++) {
-      final qty = double.tryParse(_qtyControllers[i].text) ?? 0.0;
-      final cost = double.tryParse(_costControllers[i].text) ?? 0.0;
+      final qty = double.tryParse(_qtyControllers[i].text.replaceAll(',', '')) ?? 0.0;
+      final cost = double.tryParse(_costControllers[i].text.replaceAll(',', '')) ?? 0.0;
       total += qty * cost;
     }
     return total;
@@ -250,10 +250,10 @@ class _EditReceivedQtyDialogState extends State<EditReceivedQtyDialog> {
                             flex: 2,
                             child: Builder(builder: (_) {
                               final qty = double.tryParse(
-                                      _qtyControllers[index].text) ??
+                                      _qtyControllers[index].text.trim().replaceAll(',', '')) ??
                                   0.0;
                               final cost = double.tryParse(
-                                      _costControllers[index].text) ??
+                                      _costControllers[index].text.trim().replaceAll(',', '')) ??
                                   0.0;
                               return Text(
                                 NumberFormat('#,##0.00').format(qty * cost),
@@ -344,9 +344,9 @@ class _EditReceivedQtyDialogState extends State<EditReceivedQtyDialog> {
               for (var i = 0; i < widget.items.length; i++) {
                 final item = widget.items[i];
                 final qty =
-                    double.tryParse(_qtyControllers[i].text.trim()) ?? 0.0;
+                    double.tryParse(_qtyControllers[i].text.trim().replaceAll(',', '')) ?? 0.0;
                 final cost =
-                    double.tryParse(_costControllers[i].text.trim()) ?? 0.0;
+                    double.tryParse(_costControllers[i].text.trim().replaceAll(',', '')) ?? 0.0;
 
                 if (qty < 0 || cost < 0) {
                   AlertService.show(

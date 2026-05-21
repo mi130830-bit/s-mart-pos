@@ -12,7 +12,7 @@ mixin CouponControllerMixin<T extends StatefulWidget> on State<T> {
     couponCtrl.dispose();
   }
 
-  void clearCoupon(PosStateManager posState) {
+  void clearCoupon(PosStateNotifier posState) {
     setState(() {
       couponApplied = false;
       couponResult = null;
@@ -22,7 +22,7 @@ mixin CouponControllerMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> validateAndApplyCoupon(
-      PosStateManager posState, VoidCallback onUpdateRemainingAmount) async {
+      PosStateNotifier posState, VoidCallback onUpdateRemainingAmount) async {
     final code = couponCtrl.text.trim().toUpperCase();
     if (code.isEmpty) return;
 

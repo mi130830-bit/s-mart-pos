@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../repositories/delivery_history_repository.dart';
 import '../../services/mysql_service.dart';
-import '../../repositories/fuel_price_repository.dart';
-import '../../repositories/vehicle_settings_repository.dart';
 import '../../services/alert_service.dart';
 import '../../services/integration/delivery_integration_service.dart';
-import '../../services/firestore_rest_service.dart';
 import '../../repositories/sales_repository.dart';
 import '../../models/order_item.dart';
-import 'package:flutter/foundation.dart';
+import 'delivery_coordinator.dart';
+
+import 'widgets/delivery_dashboard/delivery_map_marker.dart';
+import 'widgets/delivery_dashboard/delivery_map_view.dart';
+import 'widgets/delivery_dashboard/delivery_summary_cards.dart';
+import 'widgets/delivery_dashboard/delivery_search_filter_bar.dart';
+import 'widgets/delivery_dashboard/delivery_records_table.dart';
 
 class DeliveryDashboardScreen extends StatefulWidget {
   final DeliveryIntegrationService? deliveryService;
@@ -24,9 +24,7 @@ class DeliveryDashboardScreen extends StatefulWidget {
 }
 
 class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
-  final DeliveryHistoryRepository _repo = DeliveryHistoryRepository();
-  final FuelPriceRepository _fuelRepo = FuelPriceRepository();
-  final VehicleSettingsRepository _vehicleRepo = VehicleSettingsRepository();
+  final DeliveryCoordinator _coordinator = DeliveryCoordinator();
 
   bool _isLoading = false;
   bool _isSyncing = false;
@@ -40,10 +38,6 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
   DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _endDate = DateTime.now();
 
-  final _dateFormat = DateFormat('dd/MM/yyyy');
-  final _timeFormat = DateFormat('HH:mm');
-  final _moneyFormat = NumberFormat('#,##0.00');
-
   @override
   void initState() {
     super.initState();
@@ -53,68 +47,13 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final start = DateTime(_startDate.year, _startDate.month, _startDate.day, 0, 0, 0);
-      final end = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
-
-      // ── 1. ดึงรถจาก MySQL vehicle_settings (Base) ──
-      final vehicleResult = await _vehicleRepo.getAllVehicles();
-      final Map<String, Map<String, dynamic>> vehicleMap = {};
-      for (final v in vehicleResult) {
-        final plate = v['vehicle_plate']?.toString().trim().toUpperCase() ?? '';
-        if (plate.isNotEmpty) vehicleMap[plate] = Map<String, dynamic>.from(v);
-      }
-
-      // ── 2. Merge กับ Firestore cars collection (Source of Truth) ──
-      try {
-        List<Map<String, dynamic>> carsData = [];
-        if (defaultTargetPlatform == TargetPlatform.windows) {
-          carsData = await FirestoreRestService.fetchCars();
-        } else {
-          final snapshot = await FirebaseFirestore.instance.collection('cars').orderBy('name').get();
-          carsData = snapshot.docs.map((d) => d.data()).toList();
-        }
-        
-        for (final data in carsData) {
-          final name = data['name']?.toString().trim() ?? '';
-          final plate = data['licensePlate']?.toString().trim().toUpperCase() ?? '';
-          if (plate.isEmpty && name.isEmpty) continue;
-
-          final key = plate.isNotEmpty ? plate : name.toUpperCase();
-          if (vehicleMap.containsKey(key)) {
-            if ((vehicleMap[key]!['vehicle_type']?.toString() ?? '').isEmpty && name.isNotEmpty) {
-              vehicleMap[key]!['vehicle_type'] = name;
-            }
-          } else {
-            vehicleMap[key] = {
-              'vehicle_plate': plate.isNotEmpty ? plate : name,
-              'vehicle_type': name,
-              'fuel_efficiency': 7.0,
-            };
-          }
-        }
-      } catch (e) {
-        debugPrint('⚠️ [DeliveryDashboard] Firestore cars load failed: $e');
-      }
-
-      final mergedVehicles = vehicleMap.values.toList()
-        ..sort((a, b) {
-          final pa = a['vehicle_plate']?.toString() ?? '';
-          final pb = b['vehicle_plate']?.toString() ?? '';
-          return pa.compareTo(pb);
-        });
-
-      final results = await Future.wait([
-        _repo.getHistoryByDateRange(start, end),
-        _fuelRepo.buildPriceLookup(start, end),
-        _vehicleRepo.getEfficiencyMap(),
-      ]);
-
+      final data = await _coordinator.loadDashboardData(_startDate, _endDate);
       if (mounted) {
         setState(() {
-          _records = results[0] as List<Map<String, dynamic>>;
-          _priceLookup = results[1] as Map<String, double>;
-          _efficiencyMap = results[2] as Map<String, double>;
-          _allVehicles = mergedVehicles;
+          _records = data.records;
+          _priceLookup = data.priceLookup;
+          _efficiencyMap = data.efficiencyMap;
+          _allVehicles = data.vehicles;
           _isLoading = false;
         });
       }
@@ -284,11 +223,11 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
     if (rawDate.isNotEmpty) {
       try {
         final dt = DateTime.parse(rawDate);
-        fuelPrice = FuelPriceRepository.resolvePriceFromLookup(_priceLookup, dt);
+        fuelPrice = DeliveryCoordinator.resolvePriceFromLookup(_priceLookup, dt);
       } catch (_) {}
     }
 
-    final eff = _efficiencyMap[plate] ?? VehicleSettingsRepository.defaultEfficiency;
+    final eff = _efficiencyMap[plate] ?? DeliveryCoordinator.defaultEfficiency;
     final liters = dist / eff;
     return liters * fuelPrice;
   }
@@ -360,10 +299,48 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
     );
   }
 
+  List<DeliveryMapMarker> get _mapMarkers {
+    final List<DeliveryMapMarker> list = [];
+    for (int i = 0; i < _filteredRecords.length; i++) {
+      final r = _filteredRecords[i];
+      final locationUrl = r['locationUrl']?.toString() ?? '';
+      final customerName = r['customerName']?.toString() ?? 'ลูกค้า';
+      final orderId = r['orderId']?.toString() ?? '';
+      final driverName = r['driverName']?.toString() ?? '';
+
+      // Try to parse coordinates from google maps url (e.g. ?q=lat,lng)
+      double lat = 13.7563;
+      double lng = 100.5018;
+      bool hasCoords = false;
+
+      if (locationUrl.isNotEmpty) {
+        try {
+          final uri = Uri.parse(locationUrl);
+          final q = uri.queryParameters['q'];
+          if (q != null && q.contains(',')) {
+            final parts = q.split(',');
+            lat = double.parse(parts[0].trim());
+            lng = double.parse(parts[1].trim());
+            hasCoords = true;
+          }
+        } catch (_) {}
+      }
+
+      if (hasCoords) {
+        list.add(DeliveryMapMarker(
+          id: 'marker_${r['id'] ?? i}',
+          latitude: lat,
+          longitude: lng,
+          title: customerName,
+          snippet: 'บิล #$orderId | คนขับ: $driverName',
+        ));
+      }
+    }
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('ติดตามงานส่งของ'),
@@ -380,7 +357,14 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
                   side: const BorderSide(color: Colors.white54),
                 ),
                 icon: _isSyncing
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.cloud_sync_outlined, size: 18),
                 label: Text(_isSyncing ? 'กำลัง Sync...' : 'ดึงข้อมูลจาก Cloud'),
               ),
@@ -390,547 +374,60 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Date Filter Bar ──────────────────────────────────────────
-          Container(
-            color: Colors.indigo.shade50,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                const Icon(Icons.date_range, size: 20, color: Colors.indigo),
-                const SizedBox(width: 8),
-                const Text('เริ่ม:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 6),
-                OutlinedButton(
-                  onPressed: () => _pickDate(isStart: true),
-                  child: Text(_dateFormat.format(_startDate), style: const TextStyle(fontSize: 14)),
-                ),
-                const SizedBox(width: 12),
-                const Text('ถึง:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 6),
-                OutlinedButton(
-                  onPressed: () => _pickDate(isStart: false),
-                  child: Text(_dateFormat.format(_endDate), style: const TextStyle(fontSize: 14)),
-                ),
-              ],
-            ),
+          // ── Map View ──
+          DeliveryMapView(
+            markers: _mapMarkers,
+            onMarkerTap: (marker) async {
+              final matchedRecord = _filteredRecords.firstWhere(
+                (r) =>
+                    'marker_${r['id'] ?? ''}' == marker.id ||
+                    _filteredRecords.indexOf(r).toString() ==
+                        marker.id.replaceAll('marker_', ''),
+                orElse: () => {},
+              );
+              final urlStr = matchedRecord['locationUrl']?.toString() ?? '';
+              if (urlStr.isNotEmpty) {
+                final url = Uri.parse(urlStr);
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              }
+            },
           ),
 
-          // ── Summary Cards ────────────────────────────────────────────
+          // ── Date & Vehicle Filter Bar ──
+          DeliverySearchFilterBar(
+            startDate: _startDate,
+            endDate: _endDate,
+            selectedVehicle: _selectedVehicle,
+            countByVehicle: _countByVehicle,
+            allVehicles: _allVehicles,
+            onPickStartDate: () => _pickDate(isStart: true),
+            onPickEndDate: () => _pickDate(isStart: false),
+            onVehicleSelected: (vehicle) =>
+                setState(() => _selectedVehicle = vehicle),
+          ),
+
+          // ── Summary Cards ──
           if (!_isLoading)
-            Container(
-              color: cs.surfaceContainerHighest,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  _summaryCard(
-                    label: 'งานทั้งหมด',
-                    value: '${_filteredRecords.length} งาน',
-                    icon: Icons.local_shipping_outlined,
-                    color: Colors.indigo,
-                  ),
-                  const SizedBox(width: 10),
-                  _summaryCard(
-                    label: 'ระยะทางรวม',
-                    value: '${_moneyFormat.format(_totalDistance)} กม.',
-                    icon: Icons.route_outlined,
-                    color: Colors.blue,
-                    subtitle: '* จากข้อมูลลูกค้าในระบบ',
-                  ),
-                  const SizedBox(width: 10),
-                  _summaryCard(
-                    label: 'ยอดเงินรวม',
-                    value: '฿${_moneyFormat.format(_totalAmount)}',
-                    icon: Icons.payments_outlined,
-                    color: Colors.green,
-                    large: true,
-                  ),
-                  const SizedBox(width: 10),
-                  _summaryCard(
-                    label: 'ค่าน้ำมันรวม',
-                    value: '฿${_moneyFormat.format(_totalFuelCost)}',
-                    icon: Icons.local_gas_station_outlined,
-                    color: Colors.orange,
-                  ),
-                  if (_missingDistanceCount > 0) ...[
-                    const SizedBox(width: 10),
-                    _summaryCard(
-                      label: 'ไม่มีระยะทาง',
-                      value: '$_missingDistanceCount รายการ',
-                      icon: Icons.warning_amber_rounded,
-                      color: Colors.red,
-                      subtitle: 'กรอกระยะทางในข้อมูลลูกค้า',
-                    ),
-                  ],
-                ],
-              ),
+            DeliverySummaryCards(
+              totalJobs: _filteredRecords.length,
+              totalDistance: _totalDistance,
+              totalAmount: _totalAmount,
+              totalFuelCost: _totalFuelCost,
+              missingDistanceCount: _missingDistanceCount,
             ),
 
-          // ── Vehicle Filter Chips ─────────────────────────────────────
-          if (_countByVehicle.isNotEmpty && !_isLoading)
-            Container(
-              color: Colors.indigo.shade50,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  const Text('รถ: ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: FilterChip(
-                              label: const Text('ทั้งหมด'),
-                              selected: _selectedVehicle == null,
-                              onSelected: (_) => setState(() => _selectedVehicle = null),
-                              selectedColor: Colors.indigo.shade100,
-                              checkmarkColor: Colors.indigo,
-                            ),
-                          ),
-                          ..._countByVehicle.entries.map((e) {
-                            final plate = e.key;
-                            final count = e.value;
-                            // Find display name
-                            String displayName = plate;
-                            if (plate != 'ไม่ระบุ') {
-                              final matched = _allVehicles.where((v) => (v['vehicle_plate']?.toString().trim().toUpperCase() ?? '') == plate).toList();
-                              if (matched.isNotEmpty) {
-                                final type = matched.first['vehicle_type']?.toString().trim() ?? '';
-                                if (type.isNotEmpty) displayName = '$type $plate';
-                              }
-                            }
-                            final isSelected = _selectedVehicle == plate;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
-                                label: Text('$displayName ($count)'),
-                                selected: isSelected,
-                                onSelected: (v) => setState(() => _selectedVehicle = v ? plate : null),
-                                selectedColor: Colors.indigo.shade100,
-                                checkmarkColor: Colors.indigo,
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // ── Job Cards ─────────────────────────────────────────────────
+          // ── Job Cards / Records Table ──
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredRecords.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.local_shipping_outlined, size: 72, color: Colors.grey.shade300),
-                            const SizedBox(height: 16),
-                            const Text('ไม่พบข้อมูลในช่วงที่เลือก', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                            const SizedBox(height: 8),
-                            OutlinedButton(
-                              onPressed: () => _pickDate(isStart: true),
-                              child: const Text('เปลี่ยนช่วงวันที่'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _filteredRecords.length,
-                        itemBuilder: (context, index) => _buildJobCard(_filteredRecords[index], cs),
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Summary Card (style เดียวกับ fuel_summary_screen) ───────────────
-  Widget _summaryCard({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
-    bool large = false,
-    String? subtitle,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(color: color, fontSize: 12)),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: large ? 18 : 15,
-                      color: color.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  if (subtitle != null)
-                    Text(subtitle, style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.6))),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Job Card ─────────────────────────────────────────────────────────
-  Widget _buildJobCard(Map<String, dynamic> r, ColorScheme cs) {
-    final rawDate = r['completedAt']?.toString() ?? '';
-    String dateStr = '-';
-    String timeStr = '';
-    try {
-      if (rawDate.isNotEmpty) {
-        final dt = DateTime.parse(rawDate);
-        dateStr = _dateFormat.format(dt);
-        timeStr = _timeFormat.format(dt);
-      }
-    } catch (_) {}
-
-    final amount = double.tryParse(r['totalAmount']?.toString() ?? '0') ?? 0.0;
-    final distKm = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
-    final fuelCost = _calculateJobFuelCost(r);
-    final orderId = int.tryParse(r['orderId']?.toString() ?? '0') ?? 0;
-
-    final driverName = r['driverName']?.toString() ?? '-';
-    final vehiclePlate = r['vehiclePlate']?.toString().trim() ?? '';
-    final customerName = r['customerName']?.toString() ?? '-';
-    final customerPhone = r['customerPhone']?.toString() ?? '';
-    final customerAddress = r['customerAddress']?.toString() ?? '';
-    final locationUrl = r['locationUrl']?.toString() ?? '';
-    final note = r['note']?.toString() ?? '';
-    final jobType = r['jobType']?.toString() ?? 'delivery';
-    final status = r['status']?.toString() ?? '';
-
-    final bool missingDistance = distKm == 0.0;
-    final bool isDelivery = jobType == 'delivery';
-    final statusColor = status == 'completed' ? Colors.green : Colors.orange;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: missingDistance
-            ? BorderSide(color: Colors.orange.shade300, width: 1.5)
-            : BorderSide.none,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header: Date + Status ─────────────────────────────
-            Row(
-              children: [
-                Icon(
-                  isDelivery ? Icons.local_shipping_outlined : Icons.store_mall_directory_outlined,
-                  color: isDelivery ? Colors.indigo : Colors.teal,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(dateStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(width: 8),
-                Text(timeStr, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                const Spacer(),
-                // Missing distance warning badge
-                if (missingDistance)
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.orange.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning_amber_rounded, size: 12, color: Colors.orange.shade700),
-                        const SizedBox(width: 4),
-                        Text('ยังไม่มีระยะทาง', style: TextStyle(fontSize: 11, color: Colors.orange.shade700, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.4)),
-                  ),
-                  child: Text(
-                    status == 'completed' ? '✅ เสร็จสิ้น' : status,
-                    style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 14),
-
-            // ── Customer & Driver ─────────────────────────────────
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _infoRow(Icons.person_outline, 'ลูกค้า', customerName, bold: true),
-                      if (customerPhone.isNotEmpty)
-                        _infoRow(Icons.phone_outlined, 'เบอร์โทร', customerPhone),
-                      if (customerAddress.isNotEmpty)
-                        _infoRow(Icons.location_on_outlined, 'ที่อยู่', customerAddress),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _infoRow(Icons.person_search_outlined, 'คนขับ', driverName.isEmpty ? '-' : driverName),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.directions_car_outlined, size: 14, color: Colors.grey.shade500),
-                            const SizedBox(width: 5),
-                            Text('รถ: ', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                            Expanded(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      vehiclePlate.isEmpty ? 'ไม่ระบุ' : vehiclePlate,
-                                      style: const TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  InkWell(
-                                    onTap: () => _showAssignVehicleDialog(context, r),
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(4),
-                                      child: Icon(Icons.edit, size: 14, color: Colors.indigo),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-
-            // ── Stats Row ─────────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: _statChip(
-                    icon: Icons.payments_outlined,
-                    label: 'ยอดเงิน',
-                    value: '฿${_moneyFormat.format(amount)}',
-                    color: Colors.green.shade700,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _statChip(
-                    icon: Icons.route_outlined,
-                    label: 'ระยะทาง (จากลูกค้า)',
-                    value: distKm > 0 ? '${distKm.toStringAsFixed(2)} กม.' : '— ยังไม่กำหนด',
-                    color: distKm > 0 ? Colors.blue.shade700 : Colors.orange.shade700,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _statChip(
-                    icon: Icons.local_gas_station_outlined,
-                    label: 'ค่าน้ำมัน',
-                    value: fuelCost > 0 ? '฿${_moneyFormat.format(fuelCost)}' : '-',
-                    color: Colors.orange.shade700,
-                  ),
-                ),
-              ],
-            ),
-
-            // ── GPS Link & Bill ──────────────────────────────────────
-            if (locationUrl.isNotEmpty || orderId > 0) ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  if (locationUrl.isNotEmpty)
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade100),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.map_outlined, size: 16, color: Colors.blue.shade700),
-                            const SizedBox(width: 8),
-                            const Text('พิกัด GPS:', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                            const SizedBox(width: 6),
-                            InkWell(
-                              onTap: () async {
-                                final url = Uri.parse(locationUrl);
-                                if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
-                              },
-                              child: Text(
-                                'เปิด Google Maps',
-                                style: TextStyle(color: Colors.blue.shade700, fontSize: 13, decoration: TextDecoration.underline),
-                              ),
-                            ),
-                            const Spacer(),
-                            InkWell(
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: locationUrl));
-                                AlertService.show(context: context, message: 'คัดลอกลิงก์แล้ว', type: 'success');
-                              },
-                              child: Row(
-                                children: [
-                                  Icon(Icons.copy_outlined, size: 14, color: Colors.grey.shade500),
-                                  const SizedBox(width: 4),
-                                  Text('คัดลอก', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  if (locationUrl.isNotEmpty && orderId > 0)
-                    const SizedBox(width: 8),
-                  if (orderId > 0)
-                    OutlinedButton.icon(
-                      onPressed: () => _showOrderDetail(orderId),
-                      icon: const Icon(Icons.receipt_long, size: 16, color: Colors.teal),
-                      label: const Text('ดูบิลขาย', style: TextStyle(color: Colors.teal)),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.teal.shade200),
-                        backgroundColor: Colors.teal.shade50,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-
-            // ── Note ──────────────────────────────────────────────
-            if (note.isNotEmpty && note != '-') ...[
-              const SizedBox(height: 6),
-              _infoRow(Icons.notes_outlined, 'หมายเหตุ', note),
-            ],
-
-            // ── Hint for missing distance ─────────────────────────
-            if (missingDistance) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 14, color: Colors.orange.shade700),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'ยังไม่มีระยะทาง — กรุณากรอก "ระยะทางจัดส่ง" ในหน้าแก้ไขข้อมูลลูกค้า "$customerName"',
-                        style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _infoRow(IconData icon, String label, String value, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 14, color: Colors.grey.shade500),
-          const SizedBox(width: 5),
-          Text('$label: ', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : FontWeight.normal),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statChip({required IconData icon, required String label, required String value, required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color), overflow: TextOverflow.ellipsis),
-              ],
+            child: DeliveryRecordsTable(
+              records: _filteredRecords,
+              isLoading: _isLoading,
+              onChangeDateRange: () => _pickDate(isStart: true),
+              onAssignVehicle: (record) =>
+                  _showAssignVehicleDialog(context, record),
+              onViewOrderDetails: (orderId) => _showOrderDetail(orderId),
+              onCalculateFuelCost: (record) => _calculateJobFuelCost(record),
             ),
           ),
         ],

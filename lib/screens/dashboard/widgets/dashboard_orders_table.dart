@@ -10,7 +10,7 @@ class DashboardOrdersTable extends StatelessWidget {
   final List<Map<String, dynamic>> orders;
   final String searchQuery;
   final bool isSearchLoading;
-  final AuthProvider auth;
+  final AuthState auth;
 
   // Callbacks
   final void Function(Map<String, dynamic> row) onViewDetails;

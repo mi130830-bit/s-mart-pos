@@ -1,6 +1,6 @@
 part of '../pos_state_manager.dart';
 
-extension PosPricingExtension on PosStateManager {
+extension PosPricingExtension on PosStateNotifier {
   void setVatType(VatType type) {
     _vatType = type;
     _invalidateCalcCache();

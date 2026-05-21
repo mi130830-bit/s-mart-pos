@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/auth_provider.dart';
 import '../../../state/shortage_provider.dart';
 import '../../../services/alert_service.dart';
 import '../../../models/shortage_log_model.dart';
 
-class StockAlertEntryForm extends StatefulWidget {
+class StockAlertEntryForm extends ConsumerStatefulWidget {
   const StockAlertEntryForm({super.key});
 
   @override
-  State<StockAlertEntryForm> createState() => _StockAlertEntryFormState();
+  ConsumerState<StockAlertEntryForm> createState() => _StockAlertEntryFormState();
 }
 
-class _StockAlertEntryFormState extends State<StockAlertEntryForm> {
+class _StockAlertEntryFormState extends ConsumerState<StockAlertEntryForm> {
   final _itemController = TextEditingController();
   final List<String> _pendingItems = [];
   bool _isSubmitting = false;
@@ -38,8 +38,9 @@ class _StockAlertEntryFormState extends State<StockAlertEntryForm> {
         return;
       }
 
-      final provider = Provider.of<ShortageProvider>(context, listen: false);
-      final isAlreadyOpen = provider.openShortages.any((alert) {
+
+      final shortageState = ref.read(shortageProvider);
+      final isAlreadyOpen = shortageState.openShortages.any((alert) {
         final alertCleanName = alert.itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim().toLowerCase();
         return alertCleanName == cleanText;
       });
@@ -72,8 +73,8 @@ class _StockAlertEntryFormState extends State<StockAlertEntryForm> {
 
     setState(() => _isSubmitting = true);
     try {
-      final provider = Provider.of<ShortageProvider>(context, listen: false);
-      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final provider = ref.read(shortageProvider.notifier);
+      final auth = ref.read(authProvider);
       final user = auth.currentUser;
 
       final futures =
@@ -105,7 +106,6 @@ class _StockAlertEntryFormState extends State<StockAlertEntryForm> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<ShortageProvider>(context);
     return Container(
       padding: const EdgeInsets.all(16),
       color: Colors.white,
@@ -117,7 +117,7 @@ class _StockAlertEntryFormState extends State<StockAlertEntryForm> {
               if (textEditingValue.text.isEmpty) {
                 return const Iterable<ProductSearchResult>.empty();
               }
-              return await provider.searchProducts(textEditingValue.text);
+              return await ref.read(shortageProvider.notifier).searchProducts(textEditingValue.text);
             },
             displayStringForOption: (option) => option.toString(),
             onSelected: (selection) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../state/auth_provider.dart';
 
@@ -18,7 +19,7 @@ import 'activity_log_screen.dart';
 import 'fuel_management_screen.dart';
 import '../promotions/reward_management_screen.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   // --------------------------------------------------------
@@ -49,10 +50,10 @@ class SettingsScreen extends StatefulWidget {
   // --------------------------------------------------------
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -64,7 +65,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(20),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final auth = Provider.of<AuthProvider>(context);
+              final auth = ref.watch(authProvider);
 
               // Define all menu items
               final List<Widget> menuItems = [];

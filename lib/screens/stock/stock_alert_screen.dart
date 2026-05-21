@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/shortage_provider.dart';
 import 'widgets/stock_alert_entry_form.dart';
 import 'tabs/stock_alert_open_tab.dart';
 import 'tabs/stock_alert_low_stock_tab.dart';
 import 'tabs/stock_alert_ordered_tab.dart';
 
-class StockAlertScreen extends StatefulWidget {
+class StockAlertScreen extends ConsumerStatefulWidget {
   const StockAlertScreen({super.key});
 
   @override
-  State<StockAlertScreen> createState() => _StockAlertScreenState();
+  ConsumerState<StockAlertScreen> createState() => _StockAlertScreenState();
 }
 
-class _StockAlertScreenState extends State<StockAlertScreen>
+class _StockAlertScreenState extends ConsumerState<StockAlertScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -23,7 +23,7 @@ class _StockAlertScreenState extends State<StockAlertScreen>
     _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Provider.of<ShortageProvider>(context, listen: false).loadShortages();
+        ref.read(shortageProvider.notifier).loadShortages();
       }
     });
   }
@@ -36,9 +36,8 @@ class _StockAlertScreenState extends State<StockAlertScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ShortageProvider>(
-      builder: (context, provider, child) {
-        return Scaffold(
+    final shortage = ref.watch(shortageProvider);
+    return Scaffold(
           appBar: AppBar(
             title: const Text('แจ้งของหมด / แจ้งซ่อม'),
             backgroundColor: Colors.teal,
@@ -55,7 +54,7 @@ class _StockAlertScreenState extends State<StockAlertScreen>
                     children: [
                       const Icon(Icons.pending_actions, size: 18),
                       const SizedBox(width: 6),
-                      Text('รอจัดการ (${provider.openShortages.length})'),
+                      Text('รอจัดการ (${shortage.openShortages.length})'),
                     ],
                   ),
                 ),
@@ -65,7 +64,7 @@ class _StockAlertScreenState extends State<StockAlertScreen>
                     children: [
                       const Icon(Icons.inventory_2_outlined, size: 18),
                       const SizedBox(width: 6),
-                      Text('ของหมด (${provider.lowStockProducts.length})'),
+                      Text('ของหมด (${shortage.lowStockProducts.length})'),
                     ],
                   ),
                 ),
@@ -75,7 +74,7 @@ class _StockAlertScreenState extends State<StockAlertScreen>
                     children: [
                       const Icon(Icons.check_circle_outline, size: 18),
                       const SizedBox(width: 6),
-                      Text('สั่งแล้ว (${provider.orderedShortages.length})'),
+                      Text('สั่งแล้ว (${shortage.orderedShortages.length})'),
                     ],
                   ),
                 ),
@@ -99,7 +98,5 @@ class _StockAlertScreenState extends State<StockAlertScreen>
             ],
           ),
         );
-      },
-    );
   }
 }

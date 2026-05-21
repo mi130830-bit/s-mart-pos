@@ -1,6 +1,6 @@
 part of '../pos_state_manager.dart';
 
-extension PosOrderExtension on PosStateManager {
+extension PosOrderExtension on PosStateNotifier {
   Future<bool> shouldAutoPrint() async {
     final localSettings = LocalSettingsService();
     final pm = lastPaymentMethod.toUpperCase();

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:provider/provider.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import '../../state/auth_provider.dart';
 
 // import หน้าจออื่นๆ
@@ -23,14 +22,14 @@ import '../pos/pos_state_manager.dart';
 import 'package:auto_updater/auto_updater.dart';
 import '../../services/alert_service.dart';
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen>
+class _MainScreenState extends ConsumerState<MainScreen>
     with WindowListener, TickerProviderStateMixin {
   int _selectedIndex = 0;
   Key _refreshKey = UniqueKey(); // ✅ Key สำหรับบังคับ Rebuild
@@ -109,13 +108,13 @@ class _MainScreenState extends State<MainScreen>
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-    final user = auth.currentUser;
+    final authState = ref.watch(authProvider);
+    final user = authState.currentUser;
 
     if (user == null) {
       // This block is for when the user is not logged in.
       // The user's requested change seems to be intended for this state.
-      final posState = Provider.of<PosStateManager>(context);
+      final posState = ref.watch(posProvider);
       return Scaffold(
         body: Center(
           child: Column(
@@ -146,18 +145,18 @@ class _MainScreenState extends State<MainScreen>
     }
 
     final bool isUserAdmin = user.role == 'ADMIN';
-    final bool isSignedIn = auth.isAuthenticated;
+    final bool isSignedIn = authState.isAuthenticated;
 
     final bool showDashboard = user.canViewProfit ||
         isUserAdmin ||
-        auth.hasPermission('view_sales_history');
+        authState.hasPermission('view_sales_history');
     final bool showProductStock = isSignedIn;
 
     final bool canAccessSettings =
-        isUserAdmin || auth.hasPermission('access_settings_menu');
+        isUserAdmin || authState.hasPermission('access_settings_menu');
     
     final bool canViewDeliveryReport =
-        isUserAdmin || auth.hasPermission('view_delivery_report');
+        isUserAdmin || authState.hasPermission('view_delivery_report');
 
     // ✅ 1. เรียงลำดับหน้าจอ (Screens) ใหม่ตามคำขอ
     final List<Widget> screens = [
@@ -215,7 +214,7 @@ class _MainScreenState extends State<MainScreen>
       _selectedIndex = 0;
     }
 
-    final posState = Provider.of<PosStateManager>(context);
+    final posState = ref.watch(posProvider);
 
     return Scaffold(
       body: Row(
@@ -312,7 +311,7 @@ class _MainScreenState extends State<MainScreen>
                               Future.delayed(
                                 const Duration(milliseconds: 10),
                                 () {
-                                  auth.logout();
+                                  ref.read(authProvider.notifier).logout();
                                 },
                               );
                             },

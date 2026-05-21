@@ -18,6 +18,18 @@ import '../dialogs/partial_receive_dialog.dart';
 import 'widgets/stock_in_table_row.dart';
 import 'widgets/stock_in_settings_panel.dart';
 import 'widgets/stock_in_summary_panel.dart';
+class StockInTotals {
+  final double subtotal;
+  final double vatAmount;
+  final double grandTotal;
+
+  StockInTotals({
+    required this.subtotal,
+    required this.vatAmount,
+    required this.grandTotal,
+  });
+}
+
 class StockInCreatePage extends StatefulWidget {
   final int? existingPoId;
   const StockInCreatePage({super.key, this.existingPoId});
@@ -33,8 +45,12 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   final UnitRepository _unitRepo = UnitRepository();
 
   final List<StockInItem> _stockInItems = [];
-  final List<Map<String, TextEditingController>> _itemControllers = [];
+  final Map<int, Map<String, TextEditingController>> _itemControllers = {};
   final TextEditingController _docNoCtrl = TextEditingController();
+  final ValueNotifier<StockInTotals> _totalsNotifier = ValueNotifier(
+    StockInTotals(subtotal: 0.0, vatAmount: 0.0, grandTotal: 0.0),
+  );
+  int _nextTempProductId = -1;
 
   List<Supplier> _suppliers = [];
   List<Unit> _units = [];
@@ -57,20 +73,45 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     };
   }
 
+  void _updateTotals() {
+    double subtotal = _stockInItems.fold(0.0, (sum, item) => sum + item.total);
+    double vatAmount = 0.0;
+    if (_vatType == 1) {
+      // Excluded
+      vatAmount = subtotal * 0.07;
+    } else if (_vatType == 0) {
+      // Included
+      vatAmount = subtotal * 7 / 107;
+    }
+
+    double grandTotal = subtotal;
+    if (_vatType == 1) {
+      // Excluded: Add 7%
+      grandTotal = subtotal * 1.07;
+    }
+
+    _totalsNotifier.value = StockInTotals(
+      subtotal: subtotal,
+      vatAmount: vatAmount,
+      grandTotal: grandTotal,
+    );
+  }
+
   void _calculateTotals() {
-    setState(() {
-      for (int i = 0; i < _stockInItems.length; i++) {
-        final item = _stockInItems[i];
-        final qtyCtrl = _itemControllers[i]['qty'];
-        final costCtrl = _itemControllers[i]['cost'];
+    for (var item in _stockInItems) {
+      final ctrls = _itemControllers[item.product.id];
+      if (ctrls != null) {
+        final qtyCtrl = ctrls['qty'];
+        final costCtrl = ctrls['cost'];
         if (qtyCtrl != null) {
-          item.quantity = double.tryParse(qtyCtrl.text) ?? 0.0;
+          item.quantity = double.tryParse(qtyCtrl.text.replaceAll(',', '')) ?? 0.0;
         }
         if (costCtrl != null) {
-          item.costPrice = double.tryParse(costCtrl.text) ?? 0.0;
+          item.costPrice = double.tryParse(costCtrl.text.replaceAll(',', '')) ?? 0.0;
         }
       }
-    });
+    }
+    _updateTotals();
   }
 
   @override
@@ -82,11 +123,12 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   @override
   void dispose() {
     _docNoCtrl.dispose();
-    for (var ctrls in _itemControllers) {
+    for (var ctrls in _itemControllers.values) {
       ctrls['qty']?.dispose();
       ctrls['cost']?.dispose();
     }
     _itemControllers.clear();
+    _totalsNotifier.dispose();
     super.dispose();
   }
 
@@ -97,17 +139,13 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     if (widget.existingPoId != null) {
       await _loadPoData(widget.existingPoId!);
     }
-    // else {
-    //   if (s.isNotEmpty) {
-    //     _selectedSupplierId = s.first.id;
-    //   }
-    // }
 
     if (!mounted) return;
     setState(() {
       _suppliers = s;
       _units = u;
     });
+    _updateTotals();
   }
 
   Future<void> _loadPoData(int poId) async {
@@ -156,7 +194,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               receivedQuantity: received, // ✅ Added
             );
             _stockInItems.add(newItem);
-            _itemControllers.add(_createControllersForItem(newItem));
+            _itemControllers[p.id] = _createControllersForItem(newItem);
           } else {
             // ✅ Fallback for Deleted Product
             final dummyProduct = Product(
@@ -178,7 +216,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               receivedQuantity: received, // ✅ Added
             );
             _stockInItems.add(newItem);
-            _itemControllers.add(_createControllersForItem(newItem));
+            _itemControllers[dummyProduct.id] = _createControllersForItem(newItem);
           }
         }
       }
@@ -208,7 +246,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
           if (existingIndex >= 0) {
             _stockInItems[existingIndex].quantity += 1;
             final newQty = _stockInItems[existingIndex].quantity;
-            _itemControllers[existingIndex]['qty']?.text = newQty > 0
+            _itemControllers[picked.id]?['qty']?.text = newQty > 0
                 ? newQty.toString().replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "")
                 : "";
           } else {
@@ -219,10 +257,11 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               vatType: picked.vatType,
             );
             _stockInItems.add(newItem);
-            _itemControllers.add(_createControllersForItem(newItem));
+            _itemControllers[picked.id] = _createControllersForItem(newItem);
           }
         }
       });
+      _updateTotals();
     }
   }
 
@@ -237,16 +276,18 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     );
 
     if (newProduct != null && mounted) {
+      final assignedProduct = newProduct.copyWith(id: _nextTempProductId--);
       setState(() {
         final newItem = StockInItem(
-          product: newProduct,
+          product: assignedProduct,
           quantity: 1,
-          costPrice: newProduct.costPrice,
-          vatType: newProduct.vatType,
+          costPrice: assignedProduct.costPrice,
+          vatType: assignedProduct.vatType,
         );
         _stockInItems.add(newItem);
-        _itemControllers.add(_createControllersForItem(newItem));
+        _itemControllers[assignedProduct.id] = _createControllersForItem(newItem);
       });
+      _updateTotals();
     }
   }
 
@@ -261,26 +302,29 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
 
     if (updatedProduct != null && mounted) {
       setState(() {
+        final oldId = item.product.id;
+        final newId = updatedProduct.id;
+
         // Find all items with this product ID and update them
-        // (In case added multiple times, though usually unique here)
         for (var i = 0; i < _stockInItems.length; i++) {
-          if (_stockInItems[i].product.id == updatedProduct.id) {
-            // Re-create item with new product data but keep qty/cost
-            // Actually simplest is to just update the 'product' field if it was mutable,
-            // but it is final. So replace the StockInItem.
+          if (_stockInItems[i].product.id == oldId) {
             final oldItem = _stockInItems[i];
             _stockInItems[i] = StockInItem(
               product: updatedProduct,
               quantity: oldItem.quantity,
-              costPrice: oldItem.costPrice, // Keep trip cost or update? Usually keep trip cost.
+              costPrice: oldItem.costPrice,
               vatType: updatedProduct.vatType,
             );
+            if (oldId != newId) {
+              final controllers = _itemControllers.remove(oldId);
+              if (controllers != null) {
+                _itemControllers[newId] = controllers;
+              }
+            }
           }
         }
       });
-      // Tip: Cost Price in Master Data might have changed too,
-      // but here we usually preserve the "Transaction Cost" entered by user.
-      // If user WANTS to update cost to match new master, they can re-type.
+      _updateTotals();
     }
   }
 
@@ -290,8 +334,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     final discountCtrl = TextEditingController(text: "0");
 
     double calculateCostPerUnit() {
-      double t = double.tryParse(totalCtrl.text) ?? 0.0;
-      double d = double.tryParse(discountCtrl.text) ?? 0.0;
+      double t = double.tryParse(totalCtrl.text.replaceAll(',', '')) ?? 0.0;
+      double d = double.tryParse(discountCtrl.text.replaceAll(',', '')) ?? 0.0;
       double qty = item.quantity;
       if (qty == 0) return 0.0;
       return (t - d) / qty;
@@ -354,13 +398,10 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                   onPressed: () {
                     setState(() {
                       item.costPrice = calculateCostPerUnit();
-                      final idx = _stockInItems.indexOf(item);
-                      if (idx >= 0) {
-                        _itemControllers[idx]['cost']?.text = item.costPrice
-                            .toStringAsFixed(4)
-                            .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
-                      }
-                      _calculateTotals();
+                      _itemControllers[item.product.id]?['cost']?.text = item.costPrice
+                          .toStringAsFixed(4)
+                          .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
+                      _updateTotals();
                     });
                     Navigator.pop(context);
                   },
@@ -388,18 +429,25 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     }
 
     // ✅ 0. Auto-Save Pending Products (Delayed Save)
-    // Find items with ID = 0 and save them now
-    final pendingItems = _stockInItems.where((i) => i.product.id == 0).toList();
+    // Find items with ID <= 0 and save them now
+    final pendingItems = _stockInItems.where((i) => i.product.id <= 0).toList();
     if (pendingItems.isNotEmpty) {
       setState(() => _isLoading = true);
 
       try {
         for (var item in pendingItems) {
+          final oldId = item.product.id;
           int newId = await _productRepo.saveProduct(item.product);
           if (newId > 0) {
             // Update item with new ID
             setState(() {
               item.product = item.product.copyWith(id: newId);
+              if (oldId != newId) {
+                final controllers = _itemControllers.remove(oldId);
+                if (controllers != null) {
+                  _itemControllers[newId] = controllers;
+                }
+              }
             });
           }
         }
@@ -594,14 +642,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     }
   }
 
-  double get _totalCost {
-    double sum = _stockInItems.fold(0.0, (sum, item) => sum + item.total);
-    if (_vatType == 1) {
-      // Excluded: Add 7%
-      return sum * 1.07;
-    }
-    return sum;
-  }
+  double get _totalCost => _totalsNotifier.value.grandTotal;
 
   String _getThaiStatus(String status) {
     switch (status) {
@@ -749,27 +790,39 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                                             orElse: () => Unit(id: 0, name: '-'),
                                           )
                                           .name;
+                                      final ctrls = _itemControllers.putIfAbsent(
+                                        item.product.id,
+                                        () => _createControllersForItem(item),
+                                      );
+                                      final qtyCtrl = ctrls['qty']!;
+                                      final costCtrl = ctrls['cost']!;
 
                                       return StockInTableRow(
                                         item: item,
                                         index: index,
                                         unitName: unitName,
                                         poStatus: _poStatus,
-                                        qtyCtrl: _itemControllers[index]['qty']!,
-                                        costCtrl: _itemControllers[index]['cost']!,
+                                        qtyCtrl: qtyCtrl,
+                                        costCtrl: costCtrl,
                                         onEdit: () => _editProductDetail(item),
                                         onCalculate: () => _showCostCalculator(item),
                                         onDelete: () {
                                           setState(() {
-                                            _itemControllers[index]['qty']?.dispose();
-                                            _itemControllers[index]['cost']?.dispose();
-                                            _itemControllers.removeAt(index);
+                                            final deletedCtrls = _itemControllers.remove(item.product.id);
+                                            deletedCtrls?['qty']?.dispose();
+                                            deletedCtrls?['cost']?.dispose();
                                             _stockInItems.removeAt(index);
                                             _calculateTotals();
                                           });
                                         },
-                                        onQtyChanged: (val) => _calculateTotals(),
-                                        onCostChanged: (val) => _calculateTotals(),
+                                        onQtyChanged: (val) {
+                                          item.quantity = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                                          _updateTotals();
+                                        },
+                                        onCostChanged: (val) {
+                                          item.costPrice = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                                          _updateTotals();
+                                        },
                                       );
                                     },
                                   ),
@@ -798,6 +851,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                     onVatChanged: (val) {
                       if (val != null) {
                         setState(() => _vatType = val);
+                        _updateTotals();
                       }
                     },
                     onPaymentToggle: () => setState(() => _isPaid = !_isPaid),
@@ -805,29 +859,21 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                   const SizedBox(height: 10),
 
                   // ✅ VAT Calculation Display
-                  Builder(builder: (context) {
-                    final double subtotal =
-                        _stockInItems.fold(0.0, (sum, item) => sum + item.total);
-                    double vatAmount = 0.0;
-                    if (_vatType == 1) {
-                      // Excluded
-                      vatAmount = subtotal * 0.07;
-                    } else if (_vatType == 0) {
-                      // Included
-                      vatAmount = subtotal * 7 / 107;
-                    }
-
-                    return StockInSummaryPanel(
-                      subtotal: subtotal,
-                      vatAmount: vatAmount,
-                      grandTotal: _totalCost,
-                      vatType: _vatType,
-                      poStatus: _poStatus,
-                      hasItems: _stockInItems.isNotEmpty,
-                      onSaveOrder: () => _processAction('ORDERED'),
-                      onReceiveStock: () => _processAction('RECEIVED'),
-                    );
-                  }),
+                  ValueListenableBuilder<StockInTotals>(
+                    valueListenable: _totalsNotifier,
+                    builder: (context, totals, child) {
+                      return StockInSummaryPanel(
+                        subtotal: totals.subtotal,
+                        vatAmount: totals.vatAmount,
+                        grandTotal: totals.grandTotal,
+                        vatType: _vatType,
+                        poStatus: _poStatus,
+                        hasItems: _stockInItems.isNotEmpty,
+                        onSaveOrder: () => _processAction('ORDERED'),
+                        onReceiveStock: () => _processAction('RECEIVED'),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),

@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../state/theme_provider.dart';
 import '../../screens/pos/pos_state_manager.dart'; // ✅ Added
 import '../../services/customer_display_service.dart';
 import '../../services/alert_service.dart';
 
-class DisplaySettingsScreen extends StatefulWidget {
+class DisplaySettingsScreen extends ConsumerStatefulWidget {
   const DisplaySettingsScreen({super.key});
 
   @override
-  State<DisplaySettingsScreen> createState() => _DisplaySettingsScreenState();
+  ConsumerState<DisplaySettingsScreen> createState() => _DisplaySettingsScreenState();
 }
 
-class _DisplaySettingsScreenState extends State<DisplaySettingsScreen> {
+class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
   bool _darkMode = false;
   bool _autoOpenDisplay = false;
   bool _isLoading = true;
@@ -52,7 +53,7 @@ class _DisplaySettingsScreenState extends State<DisplaySettingsScreen> {
     if (!mounted) return;
 
     // ✅ Sync current cart state to display
-    context.read<PosStateManager>().resetDisplay();
+    ref.read(posProvider.notifier).resetDisplay();
 
     AlertService.show(
       context: context,
@@ -86,8 +87,9 @@ class _DisplaySettingsScreenState extends State<DisplaySettingsScreen> {
                           _saveSettings();
                         },
                       ),
-                      Consumer<ThemeProvider>(
-                        builder: (context, theme, _) {
+                      Builder(
+                        builder: (context) {
+                          final theme = ref.watch(themeProvider);
                           return ListTile(
                             leading: const Icon(Icons.font_download,
                                 color: Colors.purple),
@@ -111,7 +113,7 @@ class _DisplaySettingsScreenState extends State<DisplaySettingsScreen> {
                               ],
                               onChanged: (String? newValue) {
                                 if (newValue != null) {
-                                  theme.setFontFamily(newValue);
+                                  ref.read(themeProvider.notifier).setFontFamily(newValue);
                                 }
                               },
                             ),

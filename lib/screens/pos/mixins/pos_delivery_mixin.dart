@@ -1,6 +1,6 @@
 part of '../pos_state_manager.dart';
 
-extension PosDeliveryExtension on PosStateManager {
+extension PosDeliveryExtension on PosStateNotifier {
   Future<void> sendToDeliveryFromHistory(int orderId,
       {String jobType = 'delivery'}) async {
     final data = await _salesRepo.getOrderForDelivery(orderId);

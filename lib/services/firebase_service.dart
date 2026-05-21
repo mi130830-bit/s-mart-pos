@@ -2,36 +2,21 @@ import 'package:flutter/foundation.dart';
 import 'firestore_rest_service.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import '../models/customer.dart';
 import '../models/order_item.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../services/settings_service.dart';
 import 'mysql_service.dart';
-import '../repositories/notification_repository.dart';
-import '../repositories/sales_repository.dart';
-import '../services/printing/receipt_service.dart';
+import 'logger_service.dart';
+import 'firebase/firebase_storage_service.dart';
+import 'firebase/firebase_messaging_service.dart';
 
 class FirebaseService {
-  // 0. Upload Bill Image to Storage
+  final FirebaseStorageService _storageService = FirebaseStorageService();
+  final FirebaseMessagingService _messagingService = FirebaseMessagingService();
+
+  // 0. Upload Bill Image to Storage (Delegated)
   Future<String?> uploadBillImage(Uint8List imageData, String jobId) async {
-    try {
-      final String fileName =
-          'bills/${jobId}_${DateTime.now().millisecondsSinceEpoch}.png';
-      final storageRef = FirebaseStorage.instance.ref().child(fileName);
-
-      final uploadTask = storageRef.putData(
-        imageData,
-        SettableMetadata(contentType: 'image/png'),
-      );
-
-      final snapshot = await uploadTask.whenComplete(() {});
-      return await snapshot.ref.getDownloadURL();
-    } catch (e) {
-      debugPrint('⚠️ Failed to upload Bill Image: $e');
-      return null;
-    }
+    return await _storageService.uploadBillImage(imageData, jobId);
   }
 
   // Use a getter to avoid throwing 'core/no-app' if Firebase isn't initialized yet
@@ -39,7 +24,7 @@ class FirebaseService {
     try {
       return FirebaseFirestore.instance;
     } catch (e) {
-      debugPrint('⚠️ FirebaseFirestore not ready: $e');
+      LoggerService.error('FirebaseService', 'FirebaseFirestore not ready', e);
       rethrow;
     }
   }
@@ -69,9 +54,9 @@ class FirebaseService {
           'lastUpdated': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
-      debugPrint('☁️ Synced points for $firebaseUid: $newTotalPoints');
+      LoggerService.info('FirebaseService', 'Synced points for $firebaseUid: $newTotalPoints');
     } catch (e) {
-      debugPrint('⚠️ Failed to sync points to Firebase: $e');
+      LoggerService.error('FirebaseService', 'Failed to sync points to Firebase', e);
     }
   }
 
@@ -114,7 +99,7 @@ class FirebaseService {
                 res.map((r) => int.parse(r['id'].toString())).toSet();
           }
         } catch (e) {
-          debugPrint('⚠️ Failed to fetch warehouse flags from MySQL: $e');
+          LoggerService.error('FirebaseService', 'Failed to fetch warehouse flags from MySQL', e);
           // Fallback to item property if DB fails
           warehouseProductIds = items
               .where((i) => i.product?.isWarehouseItem == true)
@@ -163,7 +148,6 @@ class FirebaseService {
             '\n📦 มีของหน้าร้าน ${items.length - jobItems.length} จำนวนรายการ';
       }
 
-      // ✅ แทรกหมายเหตุ (เช่น "จ่ายเงินแล้ว") ไว้ด้านบนสุด
       // ✅ แทรกหมายเหตุ (เช่น "จ่ายเงินแล้ว") ไว้ด้านบนสุด
       if (note != null && note.isNotEmpty) {
         details = '$note\n━━━━━━━━━━━━━━━━━━\n$details';
@@ -214,10 +198,10 @@ class FirebaseService {
         docId = docRef.id;
       }
 
-      debugPrint('☁️ Created Cloud Job: $docId for Cust: $firebaseUid');
+      LoggerService.info('FirebaseService', 'Created Cloud Job: $docId for Cust: $firebaseUid');
       return docId;
     } catch (e) {
-      debugPrint('⚠️ Failed to create Cloud Job: $e');
+      LoggerService.error('FirebaseService', 'Failed to create Cloud Job', e);
       return null;
     }
   }
@@ -230,9 +214,9 @@ class FirebaseService {
       } else {
         await _firestore.collection('jobs').doc(jobId).update(updates);
       }
-      debugPrint('☁️ Updated Cloud Job: $jobId');
+      LoggerService.info('FirebaseService', 'Updated Cloud Job: $jobId');
     } catch (e) {
-      debugPrint('⚠️ Failed to update Cloud Job: $e');
+      LoggerService.error('FirebaseService', 'Failed to update Cloud Job', e);
     }
   }
 
@@ -263,7 +247,7 @@ class FirebaseService {
         return data;
       }).toList();
     } catch (e) {
-      debugPrint('⚠️ Fetch Cloud Jobs Error: $e');
+      LoggerService.error('FirebaseService', 'Fetch Cloud Jobs Error', e);
       return [];
     }
   }
@@ -297,7 +281,7 @@ class FirebaseService {
         return data;
       }).toList();
     } catch (e) {
-      debugPrint('⚠️ Fetch Shop Work Logs Error: $e');
+      LoggerService.error('FirebaseService', 'Fetch Shop Work Logs Error', e);
       return [];
     }
   }
@@ -307,11 +291,6 @@ class FirebaseService {
       Customer customer, MySQLService dbService) async {
     // 1. ถ้ามี ID เดิมอยู่แล้ว ให้ใช้เลย (0 Read)
     if (customer.firebaseUid != null && customer.firebaseUid!.isNotEmpty) {
-      // ✅ Update Line User ID if missing in Firestore (Healing)
-      /* 
-      // Implementation Detail: We could check and update firestore here if lineUserId is missing there but present in customer.
-      // But to save reads, we assume it's synced or will be synced by next logic.
-      */
       return customer.firebaseUid!;
     }
 
@@ -338,14 +317,11 @@ class FirebaseService {
 
       if (docId != null) {
         // 3. เจอในระบบ -> ดึง ID มาใช้ และบันทึกลง Local MySQL
-        debugPrint('🔍 Found existing customer on cloud: $docId');
+        LoggerService.info('FirebaseService', 'Found existing customer on cloud: $docId');
 
         await _updateLocalCustomerFirebaseUid(
             dbService, customer.id, docId); // Save to Local
 
-        // ✅ Check if Line User ID needs sync (Local -> Cloud)
-        // To simplify, we just always update Line ID on Windows if missing.
-        // Actually, we could use REST to update if lineUserId is set.
         if (customer.lineUserId != null) {
           if (defaultTargetPlatform == TargetPlatform.windows) {
             await FirestoreRestService.updateDocument('customers', docId, {
@@ -360,7 +336,7 @@ class FirebaseService {
               'line_picture_url': customer.linePictureUrl
             });
           }
-          debugPrint('🔄 Synced Line User ID to Cloud Customer');
+          LoggerService.info('FirebaseService', 'Synced Line User ID to Cloud Customer');
         }
 
         return docId;
@@ -369,7 +345,7 @@ class FirebaseService {
         return _createNewFirestoreCustomer(customer, dbService);
       }
     } catch (e) {
-      debugPrint('⚠️ Find Customer Error: $e');
+      LoggerService.error('FirebaseService', 'Find Customer Error', e);
       return _createNewFirestoreCustomer(customer, dbService);
     }
   }
@@ -400,14 +376,14 @@ class FirebaseService {
 
       if (docId == null) throw Exception('Failed to create customer');
 
-      debugPrint('✨ Created new customer on cloud: $docId');
+      LoggerService.info('FirebaseService', 'Created new customer on cloud: $docId');
 
       // Save ID back to Local MySQL
       await _updateLocalCustomerFirebaseUid(dbService, customer.id, docId);
 
       return docId;
     } catch (e) {
-      debugPrint('⚠️ Create Customer Error: $e');
+      LoggerService.error('FirebaseService', 'Create Customer Error', e);
       return 'POS_TEMP_${DateTime.now().millisecondsSinceEpoch}'; // Fallback ID
     }
   }
@@ -419,422 +395,61 @@ class FirebaseService {
         'UPDATE customer SET firebaseUid = :uid WHERE id = :id',
         {'uid': firebaseUid, 'id': localId},
       );
-      debugPrint(
-          '💾 Updated Local Customer #$localId with firebaseUid: $firebaseUid');
+      LoggerService.info('FirebaseService', 'Saved local customer #$localId with firebaseUid: $firebaseUid');
     } catch (e) {
-      debugPrint('❌ Failed to update local customer firebaseUid: $e');
+      LoggerService.error('FirebaseService', 'Failed to update local customer firebaseUid', e);
     }
   }
 
   // 3. Listen to Job Status Changes (MIGRATED to Cloud Functions)
-  // ⚠️ Line Notifications for Stage 2 & 3 are now handled by Firebase Cloud Functions
-  // See: functions/index.js for implementation
   void startJobStatusListener(MySQLService localDb) {
-    debugPrint('⚠️ Firebase Job Listener is DISABLED.');
-    debugPrint(
-        '   Line Notifications (Stage 2/3) are handled by Cloud Functions.');
-
-    /* DISABLED: Migrated to Cloud Functions
-    debugPrint(
-        '🎧 Initializing Firebase Job Listener (Line Notification Mode)...');
-
-    try {
-      // ยกเลิกตัวเก่าก่อน (Clean up)
-      _jobSubscription?.cancel();
-
-      // เริ่มฟังข้อมูล
-      _jobSubscription = _firestore.collection('jobs').snapshots().listen(
-        (snapshot) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            () async {
-              for (var change in snapshot.docChanges) {
-                // ✅ Fix: Handle 'added' types too!
-                if (change.type == DocumentChangeType.modified ||
-                    change.type == DocumentChangeType.added) {
-                  final data = change.doc.data();
-                  if (data == null) continue;
-
-                  debugPrint(
-                      '🔥 Cloud Change Detected: ${change.doc.id}, Status: ${data['status']}, Approved: ${data['is_departure_approved']}');
-
-                  final int? localOrderId = data['localOrderId'];
-                  final String? status = data['status'];
-                  final bool isDepartureApproved =
-                      data['is_departure_approved'] == true;
-
-                  // --- Logic แจ้งเตือน Line (Stages 2 & 3) ---
-                  try {
-                    if (localOrderId != null) {
-                      // 1. ดึงสถานะปัจจุบันจาก Local DB (เพื่อกันส่งซ้ำ)
-                      String currentLocalStatus = '';
-                      final localJob = await localDb.query(
-                          'SELECT status FROM delivery_jobs WHERE orderId = :oid',
-                          {'oid': localOrderId});
-
-                      if (localJob.isNotEmpty) {
-                        currentLocalStatus =
-                            localJob.first['status'].toString().toUpperCase();
-                      }
-
-                      // --- Stage 2: Shipping (ปล่อยรถ) ---
-                      // Trigger: Cloud says 'SHIPPING' or 'APPROVED' (and not completed)
-                      final s = status?.toLowerCase();
-                      final bool isCloudShipping = (s == 'shipping' ||
-                              s == 'enroute' ||
-                              s == 'en_route' ||
-                              isDepartureApproved) &&
-                          s != 'completed';
-
-                      if (isCloudShipping &&
-                          currentLocalStatus != 'SHIPPING' &&
-                          currentLocalStatus != 'COMPLETED') {
-                        debugPrint(
-                            '🚀 Stage 2 Trigger: Cloud=$status, Local=$currentLocalStatus');
-
-                        // A. Send Notification
-                        final msg =
-                            '🚚 สินค้าของท่านกำลังเดินทางจัดส่งครับ\\nรอรับสายจากพนักงานได้เลยครับ!';
-                        await sendLineNotification(localDb, localOrderId, msg);
-                        debugPrint('☁️ Sent Line Notification for Stage 2');
-
-                        // B. Update Local State (Upsert)
-                        if (localJob.isNotEmpty) {
-                          await localDb.execute(
-                              'UPDATE delivery_jobs SET status = "SHIPPING" WHERE orderId = :oid',
-                              {'oid': localOrderId});
-                        } else {
-                          await localDb.execute(
-                              'INSERT INTO delivery_jobs (orderId, firebaseJobId, status) VALUES (:oid, :fid, :status)',
-                              {
-                                'oid': localOrderId,
-                                'fid': change.doc.id,
-                                'status': 'SHIPPING'
-                              });
-                        }
-                      }
-
-                      // --- Stage 3: Completed (ส่งเสร็จ) ---
-                      // Trigger: Cloud says 'COMPLETED'
-                      if (status?.toLowerCase() == 'completed' &&
-                          currentLocalStatus != 'COMPLETED') {
-                        debugPrint(
-                            '🚀 Stage 3 Trigger: Cloud=$status, Local=$currentLocalStatus');
-
-                        // A. Send Notification
-                        final msg =
-                            'สินค้าจัดส่งถึงมือท่านเรียบร้อยแล้ว 📦 ขอบคุณที่ไว้วางใจใช้บริการ ส.บริการ ท่าข้าม ครับ 🙏 โอกาสหน้าเชิญใหม่นะครับ';
-                        await sendLineNotification(localDb, localOrderId, msg);
-                        debugPrint('☁️ Sent Line Notification for Stage 3');
-
-                        // B. Update Local State (Upsert)
-                        if (localJob.isNotEmpty) {
-                          await localDb.execute(
-                              'UPDATE delivery_jobs SET status = "COMPLETED" WHERE orderId = :oid',
-                              {'oid': localOrderId});
-                        } else {
-                          await localDb.execute(
-                              'INSERT INTO delivery_jobs (orderId, firebaseJobId, status) VALUES (:oid, :fid, :status)',
-                              {
-                                'oid': localOrderId,
-                                'fid': change.doc.id,
-                                'status': 'COMPLETED'
-                              });
-                        }
-
-                        // C. Update Main Order Status
-                        await localDb.execute(
-                            'UPDATE `order` SET status = "COMPLETED" WHERE id = :oid',
-                            {'oid': localOrderId});
-                      }
-                    }
-                  } catch (e) {
-                    debugPrint('⚠️ Process Job Change Error: $e');
-                  }
-                }
-              }
-            }();
-          });
-        },
-        onError: (e) {
-          debugPrint('🔥 Firebase Listener Error: $e');
-        },
-      );
-
-      debugPrint('🎧 Firebase Job Listener Attached Successfully.');
-    } catch (e) {
-      debugPrint('🔥 CRITICAL ERROR attaching listener: $e');
-    }
-    */
+    LoggerService.warning('FirebaseService', 'Firebase Job Listener is DISABLED. Handled by Cloud Functions.');
   }
 
-  Future<bool> sendLineNotification(
-      MySQLService db, int orderId, String message) async {
-    // 1. Resolve Line User ID
-    String? lineUserId;
-    try {
-      final res = await db.query('''
-          SELECT c.line_user_id 
-          FROM `order` o
-          JOIN customer c ON o.customerId = c.id
-          WHERE o.id = :oid
-        ''', {'oid': orderId});
-      if (res.isNotEmpty) {
-        lineUserId = res.first['line_user_id']?.toString();
-      }
-    } catch (e) {
-      debugPrint('⚠️ Failed to resolve Line User ID: $e');
-      return false;
-    }
-
-    if (lineUserId == null || lineUserId.isEmpty) return false;
-
-    // 2. Prepare Payload
-    final apiUrl = SettingsService().apiUrl;
-    final Uri url = Uri.parse('$apiUrl/line/push-message');
-    final body = jsonEncode({
-      'lineUserId': lineUserId,
-      'message': message,
-    });
-
-    // 3. Send with Retry & Log (Future<bool>)
-    return await _sendWithRetry(
-      db: db,
-      orderId: orderId,
-      lineUserId: lineUserId,
-      messageType: 'TEXT',
-      content: message,
-      url: url,
-      body: body,
-    );
+  // LINE and messaging notification wrappers (Delegated)
+  Future<bool> sendLineNotification(MySQLService db, int orderId, String message) async {
+    return await _messagingService.sendLineNotification(db, orderId, message);
   }
 
-  Future<bool> sendLineImageNotification(
-      MySQLService db, int orderId, String filename) async {
-    // 1. Resolve Line User ID
-    String? lineUserId;
-    try {
-      final res = await db.query('''
-          SELECT c.line_user_id 
-          FROM `order` o
-          JOIN customer c ON o.customerId = c.id
-          WHERE o.id = :oid
-        ''', {'oid': orderId});
-      if (res.isNotEmpty) {
-        lineUserId = res.first['line_user_id']?.toString();
-      }
-    } catch (e) {
-      debugPrint('⚠️ Failed to resolve Line User ID: $e');
-      return false;
-    }
-
-    if (lineUserId == null || lineUserId.isEmpty) return false;
-
-    // 2. Prepare Payload
-    final apiUrl = SettingsService().apiUrl;
-    final Uri url = Uri.parse('$apiUrl/line/push-image');
-    final body = jsonEncode({
-      'lineUserId': lineUserId,
-      'filename': filename,
-    });
-
-    // 3. Send with Retry & Log
-    return await _sendWithRetry(
-      db: db,
-      orderId: orderId,
-      lineUserId: lineUserId,
-      messageType: 'IMAGE',
-      content: filename,
-      url: url,
-      body: body,
-    );
+  Future<bool> sendLineImageNotification(MySQLService db, int orderId, String filename) async {
+    return await _messagingService.sendLineImageNotification(db, orderId, filename);
   }
 
-  /// Private Helper: Send HTTP Request with Persistent Retry & Logging
-  Future<bool> _sendWithRetry({
+  Future<void> processPendingNotifications(MySQLService db) async {
+    await _messagingService.processPendingNotifications(db);
+  }
+
+  Future<bool> sendLineNotificationDirect({
     required MySQLService db,
     required int orderId,
     required String lineUserId,
-    required String messageType,
-    required String content,
-    required Uri url,
-    required String body,
-    int? existingLogId, // ✅ Support resuming existing log
-    Duration timeout = const Duration(seconds: 8), // ✅ Configurable timeout
+    required String message,
   }) async {
-    // A. Init Repository & Table (Lazy Init)
-    final repo = NotificationRepository(db);
-    // Ensure table exists (cached check inside repo usually, but valid here too)
-    await repo.initTable();
-
-    int logId;
-    if (existingLogId != null) {
-      logId = existingLogId;
-    } else {
-      // B. Create Initial Log if new
-      logId = await repo.createLog(
-        orderId: orderId,
-        lineUserId: lineUserId,
-        messageType: messageType,
-        content: content,
-      );
-    }
-
-    // Try sending immediately (1 attempt)
-    // We do ONE attempt here. If failed, the Queue Processor will pick it up later.
-    // Or we can do a short loop. Let's do 1 immediate try to not block UI too long.
-    try {
-      debugPrint(
-          '🚀 [Line] Sending $messageType -> $lineUserId (LogID: $logId)');
-
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: body,
-          )
-          .timeout(timeout); // ✅ Use configurable timeout
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        // Success
-        debugPrint('✅ [Line] Send Success!');
-        await repo.markAsSuccess(logId);
-        return true;
-      } else {
-        throw Exception('HTTP ${response.statusCode}: ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('⚠️ [Line] Immediate Send Failed: $e');
-
-      // Update log to Failed/Retrying
-      repo.updateLog(logId,
-          status: 'RETRYING',
-          errorMessage: e.toString()); // Fire & Forget DB update
-
-      return false; // Failed immediately
-    }
+    return await _messagingService.sendLineNotificationDirect(
+      db: db,
+      orderId: orderId,
+      lineUserId: lineUserId,
+      message: message,
+    );
   }
 
-  /// ✅ New Method: Process Pending Notifications (Background Job)
-  Future<void> processPendingNotifications(MySQLService db) async {
-    final repo = NotificationRepository(db);
-    final pendingLogs = await repo.getPendingLogs();
-
-    if (pendingLogs.isEmpty) return;
-
-    debugPrint(
-        '🔄 [Line] Processing ${pendingLogs.length} pending notifications...');
-
-    for (final log in pendingLogs) {
-      try {
-        final int id = int.tryParse(log['id'].toString()) ?? 0;
-        final int attempts =
-            int.tryParse(log['attempt_count']?.toString() ?? '0') ?? 0;
-        final String lineUserId = log['line_user_id']?.toString() ?? '';
-        final String type = log['message_type']?.toString() ?? 'TEXT';
-        final String content = log['content']?.toString() ?? '';
-
-        // Stop retrying after many attempts (e.g., 10)
-        if (attempts > 10) {
-          await repo.markAsFailed(id, "Max attempts reached");
-          continue;
-        }
-
-        // ✅ RECEIPT_IMAGE Retry Logic (Dynamically recreate PDF)
-        if (type == 'RECEIPT_IMAGE') {
-          try {
-            final orderId = int.tryParse(log['order_id']?.toString() ?? '0') ?? 0;
-            if (orderId == 0) throw Exception("Invalid Order ID");
-
-            final salesRepo = SalesRepository();
-            final orderResult = await salesRepo.getOrderWithItems(orderId);
-            if (orderResult == null) throw Exception("Order not found");
-
-            final order = orderResult['order'] as Map<String, dynamic>;
-            final items = (orderResult['items'] as List<OrderItem>?) ?? [];
-            final customer = Customer.fromJson({
-              'id': int.tryParse(order['customerId'].toString()) ?? 0,
-              'firstName': order['firstName'] ?? '',
-              'lastName': order['lastName'] ?? '',
-              'phone': order['phone'] ?? '',
-            });
-
-            final double total = double.tryParse(order['total']?.toString() ?? '0') ?? 0;
-            final double grandTotal = double.tryParse(order['grandTotal']?.toString() ?? '0') ?? 0;
-            final double received = double.tryParse(order['received']?.toString() ?? '0') ?? 0;
-            final double changeAmount = double.tryParse(order['changeAmount']?.toString() ?? '0') ?? 0;
-
-            final imageBytes = await ReceiptService().captureReceiptImage(
-              orderId: orderId,
-              items: items,
-              total: total,
-              grandTotal: grandTotal,
-              received: received,
-              change: changeAmount,
-              customer: customer,
-            );
-
-            if (imageBytes == null) throw Exception("Failed to generate receipt image");
-
-            final base64Image = base64Encode(imageBytes);
-            
-            final apiUrl = SettingsService().apiUrl;
-            final url = Uri.parse('$apiUrl/api/v1/line/push-receipt-image');
-            final body = jsonEncode({
-              'lineUserId': lineUserId,
-              'orderId': orderId.toString(),
-              'imageBase64': base64Image,
-              'amount': grandTotal.toStringAsFixed(2)
-            });
-
-            await _sendWithRetry(
-              db: db,
-              orderId: orderId,
-              lineUserId: lineUserId,
-              messageType: type,
-              content: content,
-              url: url,
-              body: body,
-              existingLogId: id,
-            );
-            
-            continue; // Move to next log after handling Image
-          } catch (e) {
-            await repo.markAsFailed(id, 'Failed to recreate receipt: $e');
-            continue;
-          }
-        }
-
-        // Reconstruct Payload
-        final apiUrl = SettingsService().apiUrl;
-        Uri url;
-        String body;
-
-        if (type == 'IMAGE') {
-          url = Uri.parse('$apiUrl/line/push-image');
-          body = jsonEncode({'lineUserId': lineUserId, 'filename': content});
-        } else {
-          url = Uri.parse('$apiUrl/line/push-message');
-          body = jsonEncode({'lineUserId': lineUserId, 'message': content});
-        }
-
-        // Send (Reuse logic)
-        await _sendWithRetry(
-          db: db,
-          orderId: int.tryParse(log['order_id']?.toString() ?? '0') ?? 0,
-          lineUserId: lineUserId,
-          messageType: type,
-          content: content,
-          url: url,
-          body: body,
-          existingLogId: id, // ✅ Pass existing ID
-        );
-      } catch (e) {
-        debugPrint('⚠️ Error processing pending log: $e');
-      }
-    }
+  Future<bool> sendLineReceiptImageDirect({
+    required MySQLService db,
+    required int orderId,
+    required String lineUserId,
+    required Uri url,
+    required String base64Image,
+  }) async {
+    return await _messagingService.sendLineReceiptImageDirect(
+      db: db,
+      orderId: orderId,
+      lineUserId: lineUserId,
+      url: url,
+      base64Image: base64Image,
+    );
   }
 
-  // ✅ New Method: Fetch Expired Pickup Jobs (for Auto-Cleanup)
+  // Expired jobs auto-cleanup
   Future<List<String>> fetchExpiredPickupJobs(int minutesOld) async {
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return await FirestoreRestService.fetchExpiredPickupJobs(minutesOld);
@@ -852,15 +467,15 @@ class FirebaseService {
       return query.docs.map((doc) => doc.id).toList();
     } catch (e) {
       if (e.toString().contains('permission-denied')) {
-        debugPrint('⚠️ [Firebase] Permission Denied for Expired Jobs. Check Firestore Rules.');
+        LoggerService.warning('FirebaseService', '[Firebase] Permission Denied for Expired Jobs. Check Firestore Rules.');
       } else {
-        debugPrint('⚠️ [Firebase] Fetch Expired Jobs Error: $e');
+        LoggerService.error('FirebaseService', '[Firebase] Fetch Expired Jobs Error', e);
       }
       return [];
     }
   }
 
-  // ✅ New Method: Fetch Active (Pending/Shipping) Jobs
+  // Active (Pending/Shipping) Jobs
   Future<List<Map<String, dynamic>>> fetchActiveDeliveryJobs() async {
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return await FirestoreRestService.fetchActiveDeliveryJobs();
@@ -881,7 +496,6 @@ class FirebaseService {
         return data;
       }).toList();
 
-      // Sort locally by created_at descending to avoid needing a composite index
       results.sort((a, b) {
         final dateA = a['created_at'] as DateTime?;
         final dateB = b['created_at'] as DateTime?;
@@ -893,35 +507,29 @@ class FirebaseService {
 
       return results;
     } catch (e) {
-      debugPrint('⚠️ Fetch Active Jobs Error: $e');
+      LoggerService.error('FirebaseService', 'Fetch Active Jobs Error', e);
       return [];
     }
   }
 
-  // ✅ New Method: Fetch Archivable Jobs (for MySQL Archiving)
+  // Archivable Jobs
   Future<List<Map<String, dynamic>>> fetchArchivableJobs() async {
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return await FirestoreRestService.fetchArchivableJobs();
     }
     
     try {
-      // 🔥 SMOKE TEST: Try to fetch a single job with NO filters first
-      // This helps determine if the issue is Rules (general) or Query (index required)
       try {
         final smoke = await _firestore.collection('jobs').limit(1).get();
-        debugPrint('🔍 [Firebase] Smoke Test: Found ${smoke.docs.length} jobs (General Access OK)');
+        LoggerService.info('FirebaseService', '[Firebase] Smoke Test: Found ${smoke.docs.length} jobs (General Access OK)');
       } catch (e) {
-        debugPrint('❌ [Firebase] Smoke Test FAILED: $e');
-        if (e.toString().contains('permission-denied')) {
-          debugPrint('💡 [Suggestion] Your Firestore Rules are still blocking access. Make sure you pressed "Publish".');
-        }
+        LoggerService.error('FirebaseService', '[Firebase] Smoke Test FAILED', e);
       }
 
-      // ✅ Fetch jobs that are completed
       final query = await _firestore
           .collection('jobs')
           .where('status', isEqualTo: 'completed')
-          .limit(500) // ✅ Increase limit to 500 to catch up with backlog
+          .limit(500)
           .get();
 
       return query.docs.map((doc) {
@@ -937,12 +545,12 @@ class FirebaseService {
         return data;
       }).toList();
     } catch (e) {
-      debugPrint('⚠️ Fetch Archivable Jobs Error: $e');
+      LoggerService.error('FirebaseService', 'Fetch Archivable Jobs Error', e);
       return [];
     }
   }
 
-  // ✅ New Method:  // ✅ Delete Job (Cleanup)
+  // Delete Job (Cleanup)
   Future<void> deleteJob(String jobId) async {
     try {
       if (defaultTargetPlatform == TargetPlatform.windows) {
@@ -950,73 +558,15 @@ class FirebaseService {
       } else {
         await _firestore.collection('jobs').doc(jobId).delete();
       }
-      debugPrint('🗑️ [Firebase] Deleted Job: $jobId');
+      LoggerService.info('FirebaseService', '[Firebase] Deleted Job: $jobId');
     } catch (e) {
-      debugPrint('⚠️ [Firebase] Failed to delete Job $jobId: $e');
+      LoggerService.error('FirebaseService', '[Firebase] Failed to delete Job $jobId', e);
     }
   }
 
-  /// ✅ ส่งข้อความ Text โดยตรง (มี lineUserId แล้ว) + บันทึก Log
-  Future<bool> sendLineNotificationDirect({
-    required MySQLService db,
-    required int orderId,
-    required String lineUserId,
-    required String message,
-  }) async {
-    final apiUrl = SettingsService().apiUrl;
-    final Uri url = Uri.parse('$apiUrl/line/push-message');
-    final body = jsonEncode({'lineUserId': lineUserId, 'message': message});
-
-    return await _sendWithRetry(
-      db: db,
-      orderId: orderId,
-      lineUserId: lineUserId,
-      messageType: 'TEXT',
-      content: message,
-      url: url,
-      body: body,
-    );
-  }
-
-  /// ✅ ส่งรูปบิล Base64 โดยตรง + บันทึก Log
-  Future<bool> sendLineReceiptImageDirect({
-    required MySQLService db,
-    required int orderId,
-    required String lineUserId,
-    required Uri url,
-    required String base64Image,
-  }) async {
-    // ✅ ส่ง baseUrl ไปด้วย เพื่อให้ backend สร้าง HTTPS public URL ได้ถูกต้อง
-    // (X-Forwarded headers จาก Cloudflare ไม่ถูก forward มายัง localhost)
-    String baseUrl = SettingsService().apiUrl;
-    if (baseUrl.endsWith('/api/v1')) {
-      baseUrl = baseUrl.substring(0, baseUrl.length - 7);
-    } else if (baseUrl.endsWith('/')) {
-      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-    }
-
-    final body = jsonEncode({
-      'lineUserId': lineUserId,
-      'orderId': orderId.toString(),
-      'image': base64Image,
-      'baseUrl': baseUrl, // ✅ เช่น https://api.namecheap.work
-    });
-
-    return await _sendWithRetry(
-      db: db,
-      orderId: orderId,
-      lineUserId: lineUserId,
-      messageType: 'RECEIPT_IMAGE',
-      content: 'receipt_image_order_$orderId', // Log content (ไม่เก็บ base64)
-      url: url,
-      body: body,
-      timeout: const Duration(seconds: 30), // ✅ รูปใหญ่ต้องการเวลามากกว่า
-    );
-  }
-
-  // ฟังก์ชันหยุดฟัง (ควรเรียกตอน Logout)
+  // Stop listening
   void stopListener() {
     _jobSubscription?.cancel();
-    debugPrint('🛑 Firebase Listener Stopped');
+    LoggerService.info('FirebaseService', 'Firebase Listener Stopped');
   }
 }

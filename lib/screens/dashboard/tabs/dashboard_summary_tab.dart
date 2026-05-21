@@ -1,60 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../screens/reports/fuel_summary_screen.dart';
+import '../controllers/dashboard_controller.dart';
 import '../widgets/dashboard_stat_cards.dart';
 import '../widgets/dashboard_credit_table.dart';
 import '../widgets/dashboard_time_stats.dart';
 
 /// แท็บ 2: "สรุปยอดขาย" — การ์ดสถิติ, กราฟช่วงเวลา, ยอดเชื่อ, ช่วงเดือน/ปี
-class DashboardSummaryTab extends StatelessWidget {
-  final DateTime selectedDate;
-  final bool isToday;
-  final double todaySales;
-  final double todayProfit;
-  final int todayOrders;
-  final Map<String, dynamic> creditStatsToday;
-  final Map<String, dynamic> creditStatsWeek;
-  final Map<String, dynamic> creditStatsMonth;
-  final Map<String, dynamic> creditStatsYear;
-  final Map<int, double> hourlySales;
-  final Map<String, double> timeOfDaySales;
-  final double rangeSales;
-  final double rangeProfit;
-  final int rangeOrders;
-  final String selectedPeriod;
-
-  // Callbacks
-  final VoidCallback onPrevDate;
-  final VoidCallback onNextDate;
-  final VoidCallback onPickDate;
-  final void Function(String period) onPeriodChanged;
-
-  const DashboardSummaryTab({
-    super.key,
-    required this.selectedDate,
-    required this.isToday,
-    required this.todaySales,
-    required this.todayProfit,
-    required this.todayOrders,
-    required this.creditStatsToday,
-    required this.creditStatsWeek,
-    required this.creditStatsMonth,
-    required this.creditStatsYear,
-    required this.hourlySales,
-    required this.timeOfDaySales,
-    required this.rangeSales,
-    required this.rangeProfit,
-    required this.rangeOrders,
-    required this.selectedPeriod,
-    required this.onPrevDate,
-    required this.onNextDate,
-    required this.onPickDate,
-    required this.onPeriodChanged,
-  });
+class DashboardSummaryTab extends ConsumerWidget {
+  const DashboardSummaryTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(dashboardProvider);
+    final notifier = ref.read(dashboardProvider.notifier);
     final moneyFmt = NumberFormat('#,##0.00');
 
     return SingleChildScrollView(
@@ -67,25 +28,27 @@ class DashboardSummaryTab extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                  'สรุปยอดขายวันที่ ${DateFormat('dd/MM/yyyy').format(selectedDate)}',
+                  'สรุปยอดขายวันที่ ${DateFormat('dd/MM/yyyy').format(state.selectedDate)}',
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold)),
               Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left),
-                    onPressed: onPrevDate,
+                    onPressed: () => notifier.prevDate(),
                     tooltip: 'วันก่อนหน้า',
                   ),
                   TextButton.icon(
-                    onPressed: onPickDate,
+                    onPressed: () => notifier.pickDate(context),
                     icon: const Icon(Icons.calendar_today, size: 16),
                     label:
-                        Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
+                        Text(DateFormat('dd/MM/yyyy').format(state.selectedDate)),
                   ),
                   IconButton(
                     icon: const Icon(Icons.chevron_right),
-                    onPressed: isToday ? null : onNextDate,
+                    onPressed: notifier.isSameDay(state.selectedDate, DateTime.now()) 
+                        ? null 
+                        : () => notifier.nextDate(),
                     tooltip: 'วันถัดไป',
                   ),
                 ],
@@ -100,7 +63,7 @@ class DashboardSummaryTab extends StatelessWidget {
               Expanded(
                 child: DashboardStatCard(
                   title: 'ยอดขายวันนี้',
-                  value: '฿${moneyFmt.format(todaySales)}',
+                  value: '฿${moneyFmt.format(state.todaySales)}',
                   color: Colors.blue,
                   icon: Icons.monetization_on,
                 ),
@@ -109,7 +72,7 @@ class DashboardSummaryTab extends StatelessWidget {
               Expanded(
                 child: DashboardStatCard(
                   title: 'บิลวันนี้',
-                  value: '$todayOrders ใบ',
+                  value: '${state.todayOrders} ใบ',
                   color: Colors.orange,
                   icon: Icons.receipt,
                 ),
@@ -118,7 +81,7 @@ class DashboardSummaryTab extends StatelessWidget {
               Expanded(
                 child: DashboardStatCard(
                   title: 'กำไร (Gross)',
-                  value: '฿${moneyFmt.format(todayProfit)}',
+                  value: '฿${moneyFmt.format(state.todayProfit)}',
                   color: Colors.green,
                   icon: Icons.trending_up,
                   subtitle: 'ยอดขาย - ต้นทุนสินค้า',
@@ -151,8 +114,8 @@ class DashboardSummaryTab extends StatelessWidget {
 
           // ── Hourly / Time of Day Stats ───────────────────────────────────────
           DashboardTimeStatsSection(
-            hourlySales: hourlySales,
-            timeOfDaySales: timeOfDaySales,
+            hourlySales: state.hourlySales,
+            timeOfDaySales: state.timeOfDaySales,
           ),
           const SizedBox(height: 32),
 
@@ -161,10 +124,10 @@ class DashboardSummaryTab extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           DashboardCreditTable(
-            creditStatsToday: creditStatsToday,
-            creditStatsWeek: creditStatsWeek,
-            creditStatsMonth: creditStatsMonth,
-            creditStatsYear: creditStatsYear,
+            creditStatsToday: state.creditStatsToday,
+            creditStatsWeek: state.creditStatsWeek,
+            creditStatsMonth: state.creditStatsMonth,
+            creditStatsYear: state.creditStatsYear,
           ),
           const SizedBox(height: 32),
 
@@ -176,16 +139,16 @@ class DashboardSummaryTab extends StatelessWidget {
                   style:
                       TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               _PeriodSelector(
-                selectedPeriod: selectedPeriod,
-                onChanged: onPeriodChanged,
+                selectedPeriod: state.selectedPeriod,
+                onChanged: (p) => notifier.changePeriod(p),
               ),
             ],
           ),
           const SizedBox(height: 16),
           DashboardRangeSummaryCards(
-            rangeSales: rangeSales,
-            rangeProfit: rangeProfit,
-            rangeOrders: rangeOrders,
+            rangeSales: state.rangeSales,
+            rangeProfit: state.rangeProfit,
+            rangeOrders: state.rangeOrders,
           ),
           const SizedBox(height: 24),
           Container(

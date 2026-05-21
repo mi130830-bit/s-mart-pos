@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'firestore_rest_service.dart';
+import 'mysql_service.dart';
 
 import '../repositories/sales_repository.dart';
 import 'printing/receipt_service.dart';
@@ -59,49 +59,58 @@ class CommandService {
 
     stopListening(); // Ensure clean start
 
-    // Use polling every 3 seconds instead of .snapshots().listen()
-    // This prevents [ERROR:flutter/shell/common/shell.cc(1183)] and abort() on Windows
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      try {
-        if (defaultTargetPlatform == TargetPlatform.windows) {
-          // [Windows] Use REST API Polling
-          final pendingCmds =
-              await FirestoreRestService.fetchPendingCommands(devId);
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      // [Windows] Use Local MySQL Polling (Free, Fast, No Firebase Reads)
+      _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+        try {
+          final mysql = MySQLService();
+          if (!mysql.isConnected()) return;
+
+          final query = '''
+            SELECT * FROM pos_commands 
+            WHERE status = 'PENDING' 
+              AND (target_device_id = :devId OR target_device_id = 'POS_MASTER')
+              AND created_at >= NOW() - INTERVAL 5 MINUTE
+            LIMIT 10
+          ''';
+          
+          final pendingCmds = await mysql.query(query, {'devId': devId});
+          
           for (var cmdData in pendingCmds) {
             debugPrint(
-                '⚡ [POS] Received REST Command: ${cmdData['command']} (ID: ${cmdData['id']})');
-            await _processCommandRest(cmdData);
+                '⚡ [POS] Received Local Command: ${cmdData['command']} (ID: ${cmdData['id']})');
+            await _processCommandRest(Map<String, dynamic>.from(cmdData));
           }
-        } else {
-          // [Mobile] Use Firestore SDK Polling (Already safe on mobile)
-          // [Query 1] Specific Device ID
-          final directQuery = await _firestore
-              .collection('commands')
-              .where('target_device_id', isEqualTo: devId)
-              .where('status', isEqualTo: 'PENDING')
-              .get();
-
-          for (var doc in directQuery.docs) {
-            debugPrint('[CMD] Received Direct Command: ${doc.id}');
-            await _processCommand(doc);
-          }
-
-          // [Query 2] POS_MASTER Broadcast
-          final masterQuery = await _firestore
-              .collection('commands')
-              .where('target_device_id', isEqualTo: 'POS_MASTER')
-              .where('status', isEqualTo: 'PENDING')
-              .get();
-
-          for (var doc in masterQuery.docs) {
-            debugPrint('[CMD] Received MASTER Command: ${doc.id}');
-            await _processCommand(doc);
-          }
+        } catch (e) {
+          debugPrint('[ERROR] Windows Command Polling Error: $e');
         }
-      } catch (e) {
-        debugPrint('[ERROR] Command Polling Error: $e');
-      }
-    });
+      });
+    } else {
+      // [Mobile] Use Firestore SDK Snapshots (Real-time Sockets = NO Polling = Very Low Cost)
+      _commandSubscription = _firestore
+          .collection('commands')
+          .where('target_device_id', isEqualTo: devId)
+          .where('status', isEqualTo: 'PENDING')
+          .snapshots()
+          .listen((snapshot) async {
+        for (var doc in snapshot.docs) {
+          debugPrint('[CMD] Received Direct Command: ${doc.id}');
+          await _processCommand(doc);
+        }
+      }, onError: (e) => debugPrint('[ERROR] Direct Command Stream Error: $e'));
+
+      _masterCommandSubscription = _firestore
+          .collection('commands')
+          .where('target_device_id', isEqualTo: 'POS_MASTER')
+          .where('status', isEqualTo: 'PENDING')
+          .snapshots()
+          .listen((snapshot) async {
+        for (var doc in snapshot.docs) {
+          debugPrint('[CMD] Received MASTER Command: ${doc.id}');
+          await _processCommand(doc);
+        }
+      }, onError: (e) => debugPrint('[ERROR] Master Command Stream Error: $e'));
+    }
   }
 
   void stopListening() {
@@ -312,14 +321,20 @@ class CommandService {
   Future<void> _updateCommandStatus(
       String docId, String status, String? message) async {
     try {
-      final updates = {
-        'status': status,
-        'result_message': message,
-        'executed_at': DateTime.now(),
-      };
-
       if (defaultTargetPlatform == TargetPlatform.windows) {
-        await FirestoreRestService.updateDocument('commands', docId, updates);
+        final mysql = MySQLService();
+        await mysql.execute(
+          '''
+          UPDATE pos_commands 
+          SET status = :status, result_message = :msg, executed_at = NOW() 
+          WHERE id = :id
+          ''',
+          {
+            'status': status, 
+            'msg': message, 
+            'id': docId
+          }
+        );
       } else {
         await _firestore.collection('commands').doc(docId).update({
           'status': status,
@@ -332,19 +347,38 @@ class CommandService {
     }
   }
 
-  // ✅ New Method for Windows REST processing
+  // ✅ New Method for Windows Local MySQL processing
   Future<void> _processCommandRest(Map<String, dynamic> data) async {
-    final String docId = data['id'];
+    final String docId = data['id'].toString();
     final String cmd = data['command'] ?? 'UNKNOWN';
 
-    // Claim Lock via REST (Patch)
+    // Parse payload if it's a JSON string from MySQL
+    if (data['payload'] is String) {
+      try {
+        data['payload'] = jsonDecode(data['payload']);
+      } catch (e) {
+        data['payload'] = {};
+      }
+    }
+
+    // Claim Lock via Local MySQL (Atomic UPDATE)
     try {
-      await FirestoreRestService.updateDocument('commands', docId, {
-        'status': 'PROCESSING',
-        'claimed_at': DateTime.now(),
-      });
+      final mysql = MySQLService();
+      final result = await mysql.execute(
+        '''
+        UPDATE pos_commands 
+        SET status = 'PROCESSING', claimed_at = NOW() 
+        WHERE id = :id AND status = 'PENDING'
+        ''',
+        {'id': docId}
+      );
+      
+      if (result.affectedRows == BigInt.zero) {
+        debugPrint('[WARN] Could not claim local command $docId (already claimed)');
+        return;
+      }
     } catch (e) {
-      debugPrint('[WARN] Could not claim REST command $docId: $e');
+      debugPrint('[WARN] Error claiming local command $docId: $e');
       return;
     }
 

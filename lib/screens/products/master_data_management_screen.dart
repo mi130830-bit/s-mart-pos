@@ -1,130 +1,101 @@
 import 'package:flutter/material.dart';
-import '../../models/unit.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../models/product_type.dart';
-import '../../models/shelf.dart'; // Add Shelf model
-import '../../repositories/unit_repository.dart';
-import '../../repositories/product_type_repository.dart';
-import '../../repositories/shelf_repository.dart'; // Add Shelf repository
+import '../../models/shelf.dart';
+import '../../models/unit.dart';
 import '../../services/alert_service.dart';
 import '../../widgets/common/custom_buttons.dart';
-import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/confirm_dialog.dart';
+import 'controllers/master_data_controller.dart';
+import 'dialogs/master_data_dialogs.dart';
 
-class MasterDataManagementScreen extends StatefulWidget {
+class MasterDataManagementScreen extends ConsumerStatefulWidget {
   const MasterDataManagementScreen({super.key});
 
   @override
-  State<MasterDataManagementScreen> createState() =>
+  ConsumerState<MasterDataManagementScreen> createState() =>
       _MasterDataManagementScreenState();
 }
 
-class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
+class _MasterDataManagementScreenState extends ConsumerState<MasterDataManagementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  final UnitRepository _unitRepo = UnitRepository();
-  final ProductTypeRepository _typeRepo = ProductTypeRepository();
-  final ShelfRepository _shelfRepo = ShelfRepository(); // Initialize repository
-
-  List<Unit> _units = [];
-  List<ProductType> _productTypes = [];
-  List<Shelf> _shelves = []; // Store shelves
-  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); // Change to 3 tabs
-    _loadData();
+    _tabController = TabController(length: 3, vsync: this);
+    Future.microtask(() {
+      if (mounted) {
+        ref.read(masterDataProvider.notifier).loadData();
+      }
+    });
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    await Future.wait([
-      _loadUnits(),
-      _loadProductTypes(),
-      _loadShelves(), // Load shelves
-    ]);
-    setState(() => _isLoading = false);
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadUnits() async {
-    final res = await _unitRepo.getAllUnits();
-    setState(() => _units = res);
-  }
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(masterDataProvider);
 
-  Future<void> _loadProductTypes() async {
-    final res = await _typeRepo.getAllProductTypes();
-    setState(() => _productTypes = res);
-  }
-
-  Future<void> _loadShelves() async {
-    final res = await _shelfRepo.getAllShelves();
-    setState(() => _shelves = res);
-  }
-
-  // --- CRUD Units ---
-  Future<void> _showUnitDialog({Unit? unit}) async {
-    final isEditing = unit != null;
-    final ctrl = TextEditingController(text: isEditing ? unit.name : '');
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEditing ? 'แก้ไขหน่วยนับ' : 'เพิ่มหน่วยนับใหม่'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomTextField(
-              controller: ctrl,
-              label: 'ชื่อหน่วยนับ (เช่น ชิ้น, กล่อง)',
-              autofocus: true,
-            ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('จัดการข้อมูลหลัก (Master Data Management)'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.straighten), text: 'หน่วยนับ (Units)'),
+            Tab(icon: Icon(Icons.category), text: 'ประเภทสินค้า (Types)'),
+            Tab(icon: Icon(Icons.shelves), text: 'ชั้นวาง (Shelves)'),
           ],
         ),
-        actions: [
-          CustomButton(
-            label: 'ยกเลิก',
-            type: ButtonType.secondary,
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          CustomButton(
-            label: 'บันทึก',
-            onPressed: () async {
-              if (ctrl.text.trim().isEmpty) return;
-              final navigator = Navigator.of(ctx);
-              bool success = false;
-
-              if (isEditing) {
-                success = await _unitRepo.updateUnit(unit.id, ctrl.text.trim());
-              } else {
-                final id = await _unitRepo.saveUnit(ctrl.text.trim());
-                success = id > 0;
-              }
-
-              if (success && mounted) {
-                navigator.pop();
-                _loadUnits(); // Reload
-                AlertService.show(
-                  context: context, // Use parent context
-                  message: 'บันทึกข้อมูลเรียบร้อย',
-                  type: 'success',
-                );
-              } else if (mounted) {
-                AlertService.show(
-                  context: context,
-                  message: 'เกิดข้อผิดพลาด หรือชื่อซ้ำ',
-                  type: 'error',
-                );
-              }
-            },
-          ),
-        ],
       ),
+      body: state.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: const [
+                _UnitListTab(),
+                _TypeListTab(),
+                _ShelfListTab(),
+              ],
+            ),
     );
   }
+}
 
-  Future<void> _deleteUnit(Unit unit) async {
+class _UnitListTab extends ConsumerWidget {
+  const _UnitListTab();
+
+  Future<void> _showUnitDialog(BuildContext context, WidgetRef ref, {Unit? unit}) async {
+    final controller = ref.read(masterDataProvider.notifier);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => MasterDataUnitDialog(unit: unit),
+    );
+
+    if (result != null) {
+      if (!context.mounted) return;
+      final success = await controller.saveUnit(unit?.id ?? 0, result);
+      if (success) {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context, message: 'บันทึกเรียบร้อย', type: 'success');
+      } else {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context, message: 'เกิดข้อผิดพลาด/ชื่อซ้ำ', type: 'error');
+      }
+    }
+  }
+
+  Future<void> _deleteUnit(BuildContext context, WidgetRef ref, Unit unit) async {
+    final controller = ref.read(masterDataProvider.notifier);
     final confirm = await ConfirmDialog.show(
       context,
       title: 'ยืนยันการลบ',
@@ -134,272 +105,21 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
     );
 
     if (confirm == true) {
-      final success = await _unitRepo.deleteUnit(unit.id);
-      if (success) {
-        _loadUnits();
-      } else {
-        if (mounted) {
-          AlertService.show(
+      if (!context.mounted) return;
+      final success = await controller.deleteUnit(unit.id);
+      if (!success) {
+        if (!context.mounted) return;
+        AlertService.show(
             context: context,
-            message: 'ไม่สามารถลบได้ (อาจมีการใช้งานอยู่)',
-            type: 'error',
-          );
-        }
-      }
-    }
-  }
-
-  // --- CRUD Product Types ---
-  Future<void> _showTypeDialog({ProductType? type}) async {
-    final isEditing = type != null;
-    final nameCtrl = TextEditingController(text: isEditing ? type.name : '');
-    bool isWeighing = isEditing ? type.isWeighing : false;
-
-    // Check if system default (ID 0 or 1)
-    final bool isSystemDefault =
-        isEditing && (type.id == 0 || type.id == 1); // 0=General, 1=Weighing
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          return AlertDialog(
-            title: Text(isEditing ? 'แก้ไขประเภทสินค้า' : 'เพิ่มประเภทสินค้า'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CustomTextField(
-                  controller: nameCtrl,
-                  label: 'ชื่อประเภท (เช่น ผัก, เครื่องดื่ม)',
-                  autofocus: true,
-                ),
-                const SizedBox(height: 15),
-                CheckboxListTile(
-                  title: const Text('ต้องชั่งน้ำหนัก (Weighing Required)'),
-                  subtitle: const Text(
-                      'เมื่อเลือกขายสินค้าในหมวดนี้ ระบบจะแสดงหน้าจอเครื่องชั่ง'),
-                  value: isWeighing,
-                  onChanged: (val) {
-                    setState(() => isWeighing = val ?? false);
-                  },
-                  activeColor: Colors.teal,
-                ),
-                if (isSystemDefault) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    color: Colors.orange.shade50,
-                    child: const Row(
-                      children: [
-                        Icon(Icons.lock, size: 16, color: Colors.orange),
-                        SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            'นี่คือประเภทเริ่มต้นของระบบ (System Default)',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.deepOrange),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ]
-              ],
-            ),
-            actions: [
-              CustomButton(
-                label: 'ยกเลิก',
-                type: ButtonType.secondary,
-                onPressed: () => Navigator.pop(ctx),
-              ),
-              CustomButton(
-                label: 'บันทึก',
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  final navigator = Navigator.of(ctx);
-
-                  final newObj = ProductType(
-                    id: type?.id ?? 0,
-                    name: nameCtrl.text.trim(),
-                    isWeighing: isWeighing,
-                  );
-
-                  final id = await _typeRepo.saveProductType(newObj);
-                  if (id != 0 && mounted) {
-                    navigator.pop();
-                    _loadProductTypes(); // Reload
-                    AlertService.show(
-                      context: context,
-                      message: 'บันทึกข้อมูลเรียบร้อย',
-                      type: 'success',
-                    );
-                  } else if (mounted) {
-                    AlertService.show(
-                      context: context,
-                      message: 'เกิดข้อผิดพลาด',
-                      type: 'error',
-                    );
-                  }
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<void> _deleteProductType(ProductType type) async {
-    if (type.id <= 1) {
-      AlertService.show(
-        context: context,
-        message: 'ไม่สามารถลบประเภทเริ่มต้นของระบบได้',
-        type: 'warning',
-      );
-      return;
-    }
-
-    final confirm = await ConfirmDialog.show(
-      context,
-      title: 'ยืนยันการลบ',
-      content: 'ต้องการลบประเภทสินค้า "${type.name}" หรือไม่?',
-      isDestructive: true,
-      confirmText: 'ลบ',
-    );
-
-    if (confirm == true) {
-      final success = await _typeRepo.deleteProductType(type.id);
-      if (success) {
-        _loadProductTypes();
-      } else {
-        if (mounted) {
-          AlertService.show(
-            context: context,
-            message: 'ไม่สามารถลบได้ (อาจมีการใช้งานอยู่)',
-            type: 'error',
-          );
-        }
-      }
-    }
-  }
-
-  // --- CRUD Shelves ---
-  Future<void> _showShelfDialog({Shelf? shelf}) async {
-    final isEditing = shelf != null;
-    final ctrl = TextEditingController(text: isEditing ? shelf.name : '');
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isEditing ? 'แก้ไขชั้นวาง' : 'เพิ่มชั้นวางใหม่'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomTextField(
-              controller: ctrl,
-              label: 'ชื่อชั้นวาง (เช่น โซน A, ชั้น 1)',
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          CustomButton(
-            label: 'ยกเลิก',
-            type: ButtonType.secondary,
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          CustomButton(
-            label: 'บันทึก',
-            onPressed: () async {
-              if (ctrl.text.trim().isEmpty) return;
-              final navigator = Navigator.of(ctx);
-              bool success = false;
-
-              if (isEditing) {
-                success =
-                    await _shelfRepo.updateShelf(shelf.id, ctrl.text.trim());
-              } else {
-                final id = await _shelfRepo.saveShelf(ctrl.text.trim());
-                success = id > 0;
-              }
-
-              if (success && mounted) {
-                navigator.pop();
-                _loadShelves(); // Reload
-                AlertService.show(
-                  context: context,
-                  message: 'บันทึกข้อมูลเรียบร้อย',
-                  type: 'success',
-                );
-              } else if (mounted) {
-                AlertService.show(
-                  context: context,
-                  message: 'เกิดข้อผิดพลาด หรือชื่อซ้ำ',
-                  type: 'error',
-                );
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deleteShelf(Shelf shelf) async {
-    final confirm = await ConfirmDialog.show(
-      context,
-      title: 'ยืนยันการลบ',
-      content: 'ต้องการลบชั้นวาง "${shelf.name}" หรือไม่?',
-      isDestructive: true,
-      confirmText: 'ลบ',
-    );
-
-    if (confirm == true) {
-      final success = await _shelfRepo.deleteShelf(shelf.id);
-      if (success) {
-        _loadShelves();
-      } else {
-        if (mounted) {
-          AlertService.show(
-            context: context,
-            message: 'ไม่สามารถลบได้ (อาจมีการเชื่อมโยงกับสินค้าอยู่)',
-            type: 'error',
-          );
-        }
+            message: 'ไม่สามารถลบได้ (อาจถูกใช้งานอยู่)',
+            type: 'error');
       }
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('จัดการข้อมูลหลัก (Master Data Management)'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.straighten), text: 'หน่วยนับ (Units)'),
-            Tab(icon: Icon(Icons.category), text: 'ประเภทสินค้า (Types)'),
-            Tab(
-                icon: Icon(Icons.shelves),
-                text: 'ชั้นวาง (Shelves)'), // Add Shelf Tab
-          ],
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildUnitList(),
-                _buildTypeList(),
-                _buildShelfList(), // Display Shelf List
-              ],
-            ),
-    );
-  }
-
-  Widget _buildUnitList() {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final units = ref.watch(masterDataProvider).units;
     return Column(
       children: [
         Padding(
@@ -407,12 +127,12 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('รายการหน่วยนับทั้งหมด (${_units.length})',
+              Text('รายการหน่วยนับทั้งหมด (${units.length})',
                   style: Theme.of(context).textTheme.titleMedium),
               CustomButton(
                 label: 'เพิ่มหน่วยนับ',
                 icon: Icons.add,
-                onPressed: () => _showUnitDialog(),
+                onPressed: () => _showUnitDialog(context, ref),
               ),
             ],
           ),
@@ -421,10 +141,10 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: _units.length,
+            itemCount: units.length,
             separatorBuilder: (ctx, i) => const Divider(),
             itemBuilder: (ctx, i) {
-              final u = _units[i];
+              final u = units[i];
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: Colors.teal.shade50,
@@ -437,10 +157,10 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
                   children: [
                     IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _showUnitDialog(unit: u)),
+                        onPressed: () => _showUnitDialog(context, ref, unit: u)),
                     IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteUnit(u)),
+                        onPressed: () => _deleteUnit(context, ref, u)),
                   ],
                 ),
               );
@@ -450,8 +170,67 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
       ],
     );
   }
+}
 
-  Widget _buildTypeList() {
+class _TypeListTab extends ConsumerWidget {
+  const _TypeListTab();
+
+  Future<void> _showTypeDialog(BuildContext context, WidgetRef ref, {ProductType? type}) async {
+    final controller = ref.read(masterDataProvider.notifier);
+    final result = await showDialog<ProductType>(
+      context: context,
+      builder: (_) => MasterDataTypeDialog(type: type),
+    );
+
+    if (result != null) {
+      if (!context.mounted) return;
+      final success = await controller.saveProductType(result);
+      if (success) {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context, message: 'บันทึกเรียบร้อย', type: 'success');
+      } else {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context, message: 'เกิดข้อผิดพลาด', type: 'error');
+      }
+    }
+  }
+
+  Future<void> _deleteProductType(BuildContext context, WidgetRef ref, ProductType type) async {
+    if (type.id <= 1) {
+      AlertService.show(
+          context: context,
+          message: 'ไม่สามารถลบประเภทเริ่มต้นได้',
+          type: 'warning');
+      return;
+    }
+
+    final controller = ref.read(masterDataProvider.notifier);
+    final confirm = await ConfirmDialog.show(
+      context,
+      title: 'ยืนยันการลบ',
+      content: 'ต้องการลบประเภทสินค้า "${type.name}" หรือไม่?',
+      isDestructive: true,
+      confirmText: 'ลบ',
+    );
+
+    if (confirm == true) {
+      if (!context.mounted) return;
+      final success = await controller.deleteProductType(type.id);
+      if (!success) {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context,
+            message: 'ไม่สามารถลบได้ (อาจถูกใช้งานอยู่)',
+            type: 'error');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final types = ref.watch(masterDataProvider).productTypes;
     return Column(
       children: [
         Padding(
@@ -459,12 +238,12 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('รายการประเภทสินค้าทั้งหมด (${_productTypes.length})',
+              Text('รายการประเภทสินค้าทั้งหมด (${types.length})',
                   style: Theme.of(context).textTheme.titleMedium),
               CustomButton(
                 label: 'เพิ่มประเภทสินค้า',
                 icon: Icons.add,
-                onPressed: () => _showTypeDialog(),
+                onPressed: () => _showTypeDialog(context, ref),
               ),
             ],
           ),
@@ -473,10 +252,10 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: _productTypes.length,
+            itemCount: types.length,
             separatorBuilder: (ctx, i) => const Divider(),
             itemBuilder: (ctx, i) {
-              final t = _productTypes[i];
+              final t = types[i];
               final isSystem = t.id <= 1;
               return ListTile(
                 leading: CircleAvatar(
@@ -517,15 +296,15 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
                   children: [
                     IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _showTypeDialog(type: t)),
+                        onPressed: () => _showTypeDialog(context, ref, type: t)),
                     if (!isSystem)
                       IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteProductType(t))
+                          onPressed: () => _deleteProductType(context, ref, t))
                     else
                       const IconButton(
                           icon: Icon(Icons.delete, color: Colors.grey),
-                          onPressed: null), // Disabled delete for system
+                          onPressed: null),
                   ],
                 ),
               );
@@ -535,8 +314,59 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
       ],
     );
   }
+}
 
-  Widget _buildShelfList() {
+class _ShelfListTab extends ConsumerWidget {
+  const _ShelfListTab();
+
+  Future<void> _showShelfDialog(BuildContext context, WidgetRef ref, {Shelf? shelf}) async {
+    final controller = ref.read(masterDataProvider.notifier);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => MasterDataShelfDialog(shelf: shelf),
+    );
+
+    if (result != null) {
+      if (!context.mounted) return;
+      final success = await controller.saveShelf(shelf?.id ?? 0, result);
+      if (success) {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context, message: 'บันทึกเรียบร้อย', type: 'success');
+      } else {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context, message: 'เกิดข้อผิดพลาด/ชื่อซ้ำ', type: 'error');
+      }
+    }
+  }
+
+  Future<void> _deleteShelf(BuildContext context, WidgetRef ref, Shelf shelf) async {
+    final controller = ref.read(masterDataProvider.notifier);
+    final confirm = await ConfirmDialog.show(
+      context,
+      title: 'ยืนยันการลบ',
+      content: 'ต้องการลบชั้นวาง "${shelf.name}" หรือไม่?',
+      isDestructive: true,
+      confirmText: 'ลบ',
+    );
+
+    if (confirm == true) {
+      if (!context.mounted) return;
+      final success = await controller.deleteShelf(shelf.id);
+      if (!success) {
+        if (!context.mounted) return;
+        AlertService.show(
+            context: context,
+            message: 'ไม่สามารถลบได้ (อาจถูกใช้งานอยู่)',
+            type: 'error');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shelves = ref.watch(masterDataProvider).shelves;
     return Column(
       children: [
         Padding(
@@ -544,12 +374,12 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('รายการชั้นวางทั้งหมด (${_shelves.length})',
+              Text('รายการชั้นวางทั้งหมด (${shelves.length})',
                   style: Theme.of(context).textTheme.titleMedium),
               CustomButton(
                 label: 'เพิ่มชั้นวาง',
                 icon: Icons.add,
-                onPressed: () => _showShelfDialog(),
+                onPressed: () => _showShelfDialog(context, ref),
               ),
             ],
           ),
@@ -558,10 +388,10 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: _shelves.length,
+            itemCount: shelves.length,
             separatorBuilder: (ctx, i) => const Divider(),
             itemBuilder: (ctx, i) {
-              final shelf = _shelves[i];
+              final shelf = shelves[i];
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: Colors.brown.shade50,
@@ -574,10 +404,11 @@ class _MasterDataManagementScreenState extends State<MasterDataManagementScreen>
                   children: [
                     IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _showShelfDialog(shelf: shelf)),
+                        onPressed: () =>
+                            _showShelfDialog(context, ref, shelf: shelf)),
                     IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteShelf(shelf)),
+                        onPressed: () => _deleteShelf(context, ref, shelf)),
                   ],
                 ),
               );
