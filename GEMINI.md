@@ -132,3 +132,4 @@
 - [ ] **Delivery Dashboard - Offline-first Strategy**: เพิ่ม Logic ใน `DeliveryCoordinator` ให้ค้นหา/แสดงข้อมูลจาก Local Database (เช่น Isar หรือ SQLite) เป็น Fallback ก่อนดึงข้อมูลผ่าน Firestore/MySQL เมื่อออฟไลน์
 - [ ] **Logger Service - Crash Reporting**: เชื่อมต่อ `LoggerService.error` เข้ากับระบบคลาวด์ เช่น Sentry หรือ Firebase Crashlytics เพื่อรายงานปัญหาอัตโนมัติในฝั่ง Production
 - [ ] **Logger Service - Query Performance Monitoring**: เพิ่มการวัดความเร็ว (Execution Time) ใน `MySqlQueryExecutor` เพื่อตรวจจับ Query ที่ใช้เวลานานและบันทึกเป็น `LoggerService.debug`
+- [ ] **POS State Decomposition (Core Module)**: แนะนำให้แยก Logic การชำระเงินออกจาก `PosStateNotifier` ไปเป็น `posPaymentProvider` เพื่อให้ `posStateProvider` ทำหน้าที่เป็นแค่ Orchestrator หลัก ลดการ Rebuild ที่ไม่จำเป็น

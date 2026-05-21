@@ -5,8 +5,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -30,7 +29,6 @@ import 'services/database_initializer.dart';
 import 'services/settings_service.dart';
 import 'services/system/network_discovery_service.dart';
 import 'theme/app_theme.dart';
-import 'state/customer_display_provider.dart';
 import 'screens/customer_display/customer_display_repository.dart';
 import 'services/command_service.dart';
 import 'services/alert_service.dart';
@@ -339,13 +337,12 @@ class CustomerDisplayApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Customer Display',
-      theme: AppTheme.lightTheme,
-      home: ChangeNotifierProvider(
-        create: (_) => CustomerDisplayProvider(windowId),
-        child: CustomerDisplayScreen(
+    return ProviderScope(
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Customer Display',
+        theme: AppTheme.lightTheme,
+        home: CustomerDisplayScreen(
           windowId: windowId,
           arguments: arguments,
         ),
