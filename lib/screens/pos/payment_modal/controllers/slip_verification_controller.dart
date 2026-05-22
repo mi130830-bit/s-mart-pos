@@ -52,6 +52,7 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (!mounted) return;
         setState(() {
           slipVerificationSuccess = data['success'] == true;
           slipVerificationMsg = data['message'];
@@ -63,6 +64,7 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
           }
         });
       } else {
+        if (!mounted) return;
         setState(() {
           slipVerificationSuccess = false;
           slipVerificationMsg = 'Server Error: ${response.statusCode}';
@@ -70,6 +72,7 @@ mixin SlipVerificationControllerMixin<T extends StatefulWidget> on State<T> {
       }
     } catch (e, stackTrace) {
       LoggerService.error('PaymentModal', 'Verify Slip Error: $e', e, stackTrace);
+      if (!mounted) return;
       setState(() {
         slipVerificationSuccess = false;
         slipVerificationMsg = 'Error: $e';

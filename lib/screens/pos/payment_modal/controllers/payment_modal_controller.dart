@@ -150,7 +150,12 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
   }
 
   void showError(String msg) {
-    AlertService.show(context: context, message: msg, type: 'error');
+    final activeContext = mounted ? context : AlertService.navigatorKey.currentContext;
+    if (activeContext != null) {
+      AlertService.show(context: activeContext, message: msg, type: 'error');
+    } else {
+      LoggerService.warning('PaymentModal', 'Cannot show error dialog (unmounted and no root context): $msg');
+    }
   }
 
   Future<void> openPointRedemptionDialog(
@@ -516,7 +521,9 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     } catch (e, stackTrace) {
       LoggerService.error('PaymentModal', 'เกิดข้อผิดพลาดในการบันทึกบิล: $e', e, stackTrace);
       showError('เกิดข้อผิดพลาด: $e');
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 }
