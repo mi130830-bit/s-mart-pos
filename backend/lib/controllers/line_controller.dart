@@ -118,16 +118,15 @@ class LineController {
               '$pointLine';
           break;
         case 2:
-          // Case 2: Cash + Delivery (Stage 1) - Text with items
+          // Case 2: Cash + Delivery — รายการสั่งซื้อ + ยอด (ไม่มีคำ "กำลังเตรียม" แล้ว)
           message =
-              '🛒 ร้าน ส.บริการ ท่าข้าม ได้รับรายการสั่งซื้อของท่านแล้ว (#$orderIdStr)\n'
-              'กำลังดำเนินการจัดเตรียมสินค้าครับ...\n'
-              '(เมื่อรถออกจากร้าน จะมีข้อความแจ้งเตือนอีกครั้งครับ)\n'
-              '${frontStoreCount > 0 ? "\n📦 มีสินค้าซื้อหน้าร้าน: $frontStoreCount รายการ\n" : ""}\n'
+              '🧾 *ได้รับรายการสั่งซื้อแล้วครับ*\nคุณ $customerName\n\n'
+              '🔖 ใบเสร็จเลขที่: #$orderIdStr\n'
+              '${frontStoreCount > 0 ? "📦 สินค้าซื้อหน้าร้าน: $frontStoreCount รายการ\n" : ""}'
               '─────────────────\n'
               '${itemBuffer.toString().trimRight()}\n'
               '─────────────────\n'
-              '💰 ยอดสุทธิ: ฿$totalFmt'
+              '💰 ยอดสุทธิ: ฿$totalFmt (ชำระแล้ว)'
               '$pointLine';
           break;
         case 3:
@@ -143,18 +142,34 @@ class LineController {
               '$pointLine';
           break;
         case 4:
-          // Case 4: Credit + Delivery (COD) (Stage 1) - Text with items
+          // Case 4: Credit + Delivery — รายการ + ยอด + หนี้ (ไม่มีคำ "กำลังเตรียม" แล้ว)
           message =
-              '🛒 ร้าน ส.บริการ ท่าข้าม ได้รับรายการสั่งซื้อของท่านแล้ว (#$orderIdStr)\n'
-              'กำลังดำเนินการจัดเตรียมสินค้าครับ...\n'
-              '(เมื่อรถออกจากร้าน จะมีข้อความแจ้งเตือนอีกครั้งครับ)\n'
-              '${frontStoreCount > 0 ? "\n📦 มีสินค้าซื้อหน้าร้าน: $frontStoreCount รายการ\n" : ""}\n'
+              '📦 *ได้รับรายการสั่งซื้อแล้วครับ (ลงบัญชี/COD)*\nคุณ $customerName\n\n'
+              '🔖 ใบส่งของเลขที่: #$orderIdStr\n'
+              '${frontStoreCount > 0 ? "📦 สินค้าซื้อหน้าร้าน: $frontStoreCount รายการ\n" : ""}'
               '─────────────────\n'
               '${itemBuffer.toString().trimRight()}\n'
               '─────────────────\n'
               'ยอดบิลนี้: ฿$totalFmt\n'
               '🚨 *หนี้รวมล่าสุด*: ฿${totalDebt.toStringAsFixed(0)}'
               '$pointLine';
+          break;
+        case 21:
+          // Scenario 21: Cash+Delivery — กำลังเตรียมสินค้า (ส่งโดย DeliveryIntegrationService หลังสร้าง Firestore Job)
+          message =
+              '⏳ *กำลังเตรียมสินค้าของท่านครับ*\n'
+              '🔖 เลขที่: #$orderIdStr\n'
+              '─────────────────\n'
+              'เมื่อรถออกจากร้าน ท่านจะได้รับข้อความแจ้งเตือนอีกครั้งครับ 🚚';
+          break;
+        case 41:
+          // Scenario 41: Credit+Delivery — กำลังเตรียมสินค้า COD (ส่งโดย DeliveryIntegrationService)
+          message =
+              '⏳ *กำลังเตรียมสินค้าของท่านครับ*\n'
+              '🔖 เลขที่: #$orderIdStr\n'
+              '─────────────────\n'
+              'สินค้าจะถูกนำส่งพร้อมเก็บยอด *฿$totalFmt* ปลายทางครับ\n'
+              'เมื่อรถออกจากร้าน ท่านจะได้รับข้อความแจ้งเตือนอีกครั้งครับ 🚚';
           break;
         case 5:
           // Case 5: Debt Payment (Paid amount + Remaining debt + Thank you) (Attach Receipt)
@@ -210,9 +225,9 @@ class LineController {
       final bytes = base64Decode(base64Image);
 
       // 2. Save File
-      // ✅ ใช้ path สัมพัทธ์กับโปรเจกต์ (CWD) เพื่อให้ตรงกับ static handler ใน server.dart
-      final String projectDir = Directory.current.path;
-      final directory = Directory('$projectDir/public/bills');
+      // ✅ ใช้ writableDir เพื่อแก้ปัญหาความปลอดภัยสิทธิ์การเขียนไฟล์ใน C:\Program Files\
+      final String writableDir = EnvConfig().writableDir;
+      final directory = Directory('$writableDir/bills');
       if (!directory.existsSync()) {
         directory.createSync(recursive: true);
       }

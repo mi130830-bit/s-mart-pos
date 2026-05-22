@@ -1,7 +1,8 @@
-import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:printing/printing.dart';
+import 'package:http/http.dart' as http;
 import '../../services/firebase_service.dart';
 import '../../services/telegram_service.dart';
 import '../../services/mysql_service.dart';
@@ -17,13 +18,14 @@ class DeliveryIntegrationService {
   final MySQLService _dbService;
   final FirebaseService _firebaseService;
   final TelegramService _telegramService = TelegramService();
-  
+
   late final DeliveryDistanceService _distanceService;
   late final DeliveryCleanupService _cleanupService;
 
   DeliveryIntegrationService(this._dbService, this._firebaseService) {
     _distanceService = DeliveryDistanceService();
-    _cleanupService = DeliveryCleanupService(_dbService, _firebaseService, _distanceService);
+    _cleanupService =
+        DeliveryCleanupService(_dbService, _firebaseService, _distanceService);
     _cleanupService.startAutoCleanupTimer();
   }
 
@@ -34,7 +36,8 @@ class DeliveryIntegrationService {
   /// Fetch Active (Pending/Shipping) Jobs for UI
   Future<List<Map<String, dynamic>>> fetchActiveDeliveryJobs() async {
     if (!await _cleanupService.ensureAuth()) {
-      LoggerService.warning('DeliveryIntegration', 'Auth failed. Cannot fetch active jobs.');
+      LoggerService.warning(
+          'DeliveryIntegration', 'Auth failed. Cannot fetch active jobs.');
       return [];
     }
     return await _firebaseService.fetchActiveDeliveryJobs();
@@ -42,19 +45,21 @@ class DeliveryIntegrationService {
 
   /// Public method ให้ UI เรียก Sync ได้จากหน้ารายงาน
   Future<void> syncNow() async {
-    LoggerService.info('DeliveryIntegration', 'Manual Sync triggered from UI...');
-    
+    LoggerService.info(
+        'DeliveryIntegration', 'Manual Sync triggered from UI...');
+
     // 👤 Force identity refresh to avoid permission-denied
     final authSuccess = await _cleanupService.ensureAuth(forceRefresh: true);
     if (!authSuccess) {
-      LoggerService.error('DeliveryIntegration', 'Manual Sync aborted: Auth Failed.');
+      LoggerService.error(
+          'DeliveryIntegration', 'Manual Sync aborted: Auth Failed.');
       return;
     }
-    
+
     try {
       // 1. Cleanup Expired Pickup Jobs
       await _cleanupService.cleanupExpiredPickupJobs();
-      
+
       // 2. Archive Completed Delivery Jobs
       LoggerService.info('DeliveryIntegration', 'Starting archival process...');
       await _cleanupService.cleanupArchivableJobs();
@@ -66,7 +71,8 @@ class DeliveryIntegrationService {
       // 3a. แยก GPS coordinates จาก locationUrl สำหรับ records ที่ยังไม่มี
       final coordsFilled = await repo.backfillDestinationCoords();
       if (coordsFilled > 0) {
-        LoggerService.info('DeliveryIntegration', 'Coordinates filled for $coordsFilled records.');
+        LoggerService.info('DeliveryIntegration',
+            'Coordinates filled for $coordsFilled records.');
       }
 
       // 3b. คำนวณระยะทาง + ค่าน้ำมัน ย้อนหลัง (ใช้ OSRM)
@@ -80,10 +86,11 @@ class DeliveryIntegrationService {
           calcRoadDistance: _distanceService.getRoadDistanceRoundTrip,
         );
         if (distFilled > 0) {
-          LoggerService.info('DeliveryIntegration', 'Distance/fuel recalculated for $distFilled records.');
+          LoggerService.info('DeliveryIntegration',
+              'Distance/fuel recalculated for $distFilled records.');
         }
       }
-      
+
       LoggerService.info('DeliveryIntegration', 'Manual Sync complete.');
     } catch (e) {
       LoggerService.error('DeliveryIntegration', 'Sync encountered errors', e);
@@ -108,8 +115,7 @@ class DeliveryIntegrationService {
         throw Exception(
             'เครื่องนี้ยังไม่ได้เชื่อมต่อระบบ S_MartPOS Cloud (Auth Failed)\nกรุณาไปที่ ตั้งค่า > การเชื่อมต่อ > Firebase แล้วตรวจสอบ Email/Password');
       } else {
-        LoggerService.warning(
-            'DeliveryIntegration',
+        LoggerService.warning('DeliveryIntegration',
             'Firebase auth failed for Order #$orderId. Delivery job skipped (Background). MySQL order already saved.');
         return;
       }
@@ -138,7 +144,8 @@ class DeliveryIntegrationService {
 
       // Notify Telegram
       try {
-        if (await _telegramService.shouldNotify(TelegramService.keyNotifyDelivery)) {
+        if (await _telegramService
+            .shouldNotify(TelegramService.keyNotifyDelivery)) {
           final title = isPickup
               ? '🛍️ *ลูกค้าเข้ารับเอง (Pickup)*'
               : '🚚 *มีงานจัดส่งใหม่*';
@@ -174,8 +181,44 @@ class DeliveryIntegrationService {
             {'oid': orderId, 'fid': jobId, 'status': localStatus},
           );
         }
+
+        // [New] ส่ง LINE "กำลังเตรียมสินค้า" (Scenario 21 สำหรับ Cash, 41 สำหรับ Credit)
+        try {
+          if (customer.id > 0 &&
+              customer.lineUserId != null &&
+              customer.lineUserId!.isNotEmpty) {
+            final urlStr = SettingsService().apiUrl;
+            final url = Uri.parse('$urlStr/line/push-scenario');
+
+            // scenario: 21 (cash) or 41 (credit)
+            final int lineScenario =
+                paymentMethod.toLowerCase() == 'credit' ? 41 : 21;
+
+            final payload = {
+              'lineUserId': customer.lineUserId,
+              'orderId': orderId.toString(),
+              'scenario': lineScenario,
+              'customerName': customer.name,
+              'grandTotal': grandTotal,
+            };
+
+            await http
+                .post(
+                  url,
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode(payload),
+                )
+                .timeout(const Duration(seconds: 5));
+            LoggerService.info('DeliveryIntegration',
+                '✅ Sent Line Preparing Message (Scenario $lineScenario) for #$orderId');
+          }
+        } catch (e) {
+          LoggerService.error(
+              'DeliveryIntegration', 'Failed to send Preparing Line Msg', e);
+        }
       } catch (e) {
-        LoggerService.error('DeliveryIntegration', 'Local DB Delivery Sync Error', e);
+        LoggerService.error(
+            'DeliveryIntegration', 'Local DB Delivery Sync Error', e);
       }
 
       // Upload Bill Image
@@ -183,7 +226,8 @@ class DeliveryIntegrationService {
         _uploadBillImageInBackground(jobId, orderId, billPdfData);
       }
     } catch (e) {
-      LoggerService.error('DeliveryIntegration', 'Error creating delivery job', e);
+      LoggerService.error(
+          'DeliveryIntegration', 'Error creating delivery job', e);
       if (isManual) {
         rethrow;
       }
@@ -194,7 +238,8 @@ class DeliveryIntegrationService {
       String jobId, int orderId, Uint8List pdfData) async {
     if (pdfData.isEmpty) return;
 
-    LoggerService.info('DeliveryIntegration', 'Processing bill image for Job $jobId...');
+    LoggerService.info(
+        'DeliveryIntegration', 'Processing bill image for Job $jobId...');
 
     try {
       await Future.delayed(const Duration(seconds: 1));
@@ -214,7 +259,8 @@ class DeliveryIntegrationService {
         }
         await file.writeAsBytes(pngBytes);
         LoggerService.info('DeliveryIntegration', 'Saved locally: $savePath');
-        LoggerService.info('DeliveryIntegration', 'Saved Delivery Note locally, skipping Line image push for Stage 1.');
+        LoggerService.info('DeliveryIntegration',
+            'Saved Delivery Note locally, skipping Line image push for Stage 1.');
 
         break;
       }
