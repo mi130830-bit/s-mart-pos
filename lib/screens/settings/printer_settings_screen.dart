@@ -15,6 +15,7 @@ import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
 import '../../widgets/common/confirm_dialog.dart';
 import '../../widgets/common/settings_section_header.dart';
+import '../../services/printing/utils/print_settings_helper.dart';
 
 // ── Part files (share state via `part of`) ───────────────────────────────────
 part 'printers/extensions/printer_actions_extension.dart';

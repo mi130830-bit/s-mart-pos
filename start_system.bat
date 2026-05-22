@@ -7,10 +7,17 @@ echo.
 
 set "BASE_DIR=%~dp0"
 
+:: 0. Kill all existing components immediately
+echo [0/3] Stopping all running S-Link POS components...
+
+:: Kill POS Desktop App, child processes, port 8080 listeners, and parent cmd windows instantly
+powershell -NoProfile -Command "Stop-Process -Name pos_desktop, cloudflared, server -Force -ErrorAction SilentlyContinue; ForEach ($c in (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue)) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }; ForEach ($p in (Get-CimInstance Win32_Process -Filter 'Name = ''cmd.exe''' -ErrorAction SilentlyContinue)) { If ($p.CommandLine -and ($p.CommandLine -like '*cloudflared*' -or $p.CommandLine -like '*server.exe*' -or $p.CommandLine -like '*server.dart*')) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue } }"
+
+echo       All old processes stopped immediately.
+echo.
+
 :: 1. Start Backend Server
 echo [1/3] Launching Backend Server (Port 8080)...
-taskkill /F /FI "WINDOWTITLE eq S-Link Backend API*" /T >nul 2>&1
-taskkill /F /IM server.exe /T >nul 2>&1
 if exist "%BASE_DIR%backend\server.exe" (
     start "S-Link Backend API" /D "%BASE_DIR%backend" "%BASE_DIR%backend\server.exe"
 ) else (
@@ -22,8 +29,6 @@ timeout /t 5 >nul
 
 :: 2. Start Cloudflare Tunnel
 echo [2/3] Launching Cloudflare Tunnel...
-taskkill /F /FI "WINDOWTITLE eq Cloudflare Tunnel*" /T >nul 2>&1
-taskkill /F /IM cloudflared.exe /T >nul 2>&1
 if exist "%BASE_DIR%cloudflared.exe" (
     echo       Starting Tunnel...
     :: Launching Permanent Tunnel (pos)
@@ -36,7 +41,6 @@ timeout /t 3 >nul
 
 :: 3. Start POS Application
 echo [3/3] Launching POS Desktop Application...
-taskkill /F /IM pos_desktop.exe /T >nul 2>&1
 
 :: Priority: 1. Installer Root 2. Build Release 3. Build Debug
 if exist "%BASE_DIR%pos_desktop.exe" (

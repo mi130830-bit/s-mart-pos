@@ -25,12 +25,38 @@ Future<void> main() async {
     await conn.connect();
     stdout.writeln('Connected!');
 
-    stdout.writeln('\n--- Customers ---');
-    var result = await conn.execute("SELECT id, firstName, phone, line_user_id FROM customer WHERE line_user_id IS NOT NULL OR line_display_name IS NOT NULL");
-
-    for (final row in result.rows) {
-      stdout.writeln('ID: ${row.colByName("id")} | Name: ${row.colByName("firstName")} | Phone: ${row.colByName("phone")} | LineID: ${row.colByName("line_user_id")}');
+    stdout.writeln('\n--- Describe product ---');
+    var descProd = await conn.execute("DESCRIBE product");
+    for (final row in descProd.rows) {
+      stdout.writeln('${row.colAt(0)} | ${row.colAt(1)} | ${row.colAt(2)} | ${row.colAt(3)}');
     }
+
+    stdout.writeln('\n--- Describe stockledger ---');
+    var descLedger = await conn.execute("DESCRIBE stockledger");
+    for (final row in descLedger.rows) {
+      stdout.writeln('${row.colAt(0)} | ${row.colAt(1)} | ${row.colAt(2)} | ${row.colAt(3)}');
+    }
+
+    stdout.writeln('\n--- Products matching Barcodes or Name ---');
+    var prodResult = await conn.execute(
+      "SELECT id, barcode, name, stockQuantity FROM product WHERE barcode IN ('254495', '946009', '120931', '620575', '27965189', '28007879') OR name LIKE 'ท่อหด%'"
+    );
+    for (final row in prodResult.rows) {
+      stdout.writeln('ID: ${row.colByName("id")} | Barcode: ${row.colByName("barcode")} | Name: ${row.colByName("name")} | Stock: ${row.colByName("stockQuantity")}');
+    }
+
+    stdout.writeln('\n--- Orphaned product_components ---');
+    var orphans = await conn.execute(
+      "SELECT parent_product_id, child_product_id, quantity FROM product_components WHERE parent_product_id NOT IN (SELECT id FROM product) OR child_product_id NOT IN (SELECT id FROM product)"
+    );
+    if (orphans.rows.isEmpty) {
+      stdout.writeln('No orphaned components found.');
+    } else {
+      for (final row in orphans.rows) {
+        stdout.writeln('ParentID: ${row.colByName("parent_product_id")} | ChildID: ${row.colByName("child_product_id")} | Qty: ${row.colByName("quantity")}');
+      }
+    }
+
   } catch (e) {
     stdout.writeln('Error: $e');
   } finally {

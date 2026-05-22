@@ -81,15 +81,15 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
 
   @override
   ConnectionSettingsState build() {
-    telegramTokenCtrl = TextEditingController();
-    telegramChatIdCtrl = TextEditingController();
-    firebaseEmailCtrl = TextEditingController();
-    firebasePasswordCtrl = TextEditingController();
-    geminiApiKeyCtrl = TextEditingController();
-    apiUrlCtrl = TextEditingController();
-    shopLatCtrl = TextEditingController();
-    shopLngCtrl = TextEditingController();
-    fuelCostCtrl = TextEditingController();
+    telegramTokenCtrl = TextEditingController(text: _settings.telegramToken);
+    telegramChatIdCtrl = TextEditingController(text: _settings.telegramChatId);
+    firebaseEmailCtrl = TextEditingController(text: _settings.firebaseAuthEmail);
+    firebasePasswordCtrl = TextEditingController(text: _settings.firebaseAuthPassword);
+    geminiApiKeyCtrl = TextEditingController(text: _settings.geminiApiKey);
+    apiUrlCtrl = TextEditingController(text: _settings.apiUrl);
+    shopLatCtrl = TextEditingController(text: _settings.shopLatitude != 0.0 ? _settings.shopLatitude.toString() : '16.160189');
+    shopLngCtrl = TextEditingController(text: _settings.shopLongitude != 0.0 ? _settings.shopLongitude.toString() : '100.802307');
+    fuelCostCtrl = TextEditingController(text: _settings.fuelCostPerKm.toString());
 
     ref.onDispose(() {
       telegramTokenCtrl.dispose();
@@ -103,8 +103,18 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
       fuelCostCtrl.dispose();
     });
 
-    loadSettings();
-    return const ConnectionSettingsState();
+    return ConnectionSettingsState(
+      isLoading: false,
+      telegramEnabled: _settings.telegramEnabled,
+      tgNotifyPayment: _settings.telegramNotifyPayment,
+      tgNotifyDebt: _settings.telegramNotifyDebt,
+      tgNotifyDeleteBill: _settings.telegramNotifyDeleteBill,
+      tgNotifyLowStock: _settings.telegramNotifyLowStock,
+      tgNotifyDelivery: _settings.telegramNotifyDelivery,
+      tgNotifyStockAdjust: _settings.telegramNotifyStockAdjust,
+      tgNotifyAppOpen: _settings.telegramNotifyAppOpen,
+      tgNotifyHourlySales: _settings.telegramNotifyHourlySales,
+    );
   }
 
   void loadSettings() {

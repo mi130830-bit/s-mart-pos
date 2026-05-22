@@ -25,7 +25,17 @@ Middleware jwtMiddleware() {
       
       // ตรวจสอบ JWT
       final verifier = FirebaseAuthVerifier();
-      final payload = await verifier.verify(token);
+      Map<String, dynamic>? payload;
+      try {
+        payload = await verifier.verify(token);
+      } catch (e) {
+        // ignore: avoid_print
+        print('⚠️ JWT Middleware: Token rejected. Error: $e');
+        return Response.forbidden(
+          jsonEncode({'error': 'Token Rejected: $e'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
 
       if (payload == null) {
         return Response.forbidden(

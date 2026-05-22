@@ -1,4 +1,4 @@
-﻿// ignore_for_file: deprecated_member_use, invalid_use_of_protected_member, library_private_types_in_public_api
+// ignore_for_file: deprecated_member_use, invalid_use_of_protected_member, library_private_types_in_public_api
 part of '../../printer_settings_screen.dart';
 
 /// Extension for save/load helpers and preview dialog.
@@ -55,6 +55,7 @@ extension PrinterActionsExtension on _PrinterSettingsScreenState {
       await settings.setDrawerPort(_drawerPort);
       await settings.setDrawerCommand(_drawerCommand);
       await settings.setDrawerUsePrinter(_drawerUsePrinter);
+      PrintSettingsHelper.clearCache();
       debugPrint('💾 Auto-saved printer settings');
       if (mounted && showMessage) {
         AlertService.show(

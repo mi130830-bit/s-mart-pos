@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../../controllers/connection_settings_controller.dart';
-import '../../../../services/alert_service.dart';
-import '../../../../widgets/common/custom_text_field.dart';
-import '../../../../widgets/common/custom_buttons.dart';
+import '../../../controllers/connection_settings_controller.dart';
+import '../../../services/alert_service.dart';
+import '../../../widgets/common/custom_text_field.dart';
+import '../../../widgets/common/custom_buttons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ApiSettingsCard extends ConsumerWidget {

@@ -8,7 +8,7 @@ class FirebaseAuthVerifier {
   factory FirebaseAuthVerifier() => _instance;
   FirebaseAuthVerifier._internal();
 
-  static const String _projectId = 'opsmate-3dde2';
+  static const String _projectId = 'fir-link-a8266';
   static const String _jwksUrl = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
   
   Map<String, String> _keys = {};
@@ -43,14 +43,13 @@ class FirebaseAuthVerifier {
 
   /// Verifies a Firebase ID token and returns the decoded payload if valid
   Future<Map<String, dynamic>?> verify(String token) async {
-    try {
+
       // 1. Decode token without verifying to get header (kid)
       final unverifiedJwt = JWT.decode(token);
       final kid = unverifiedJwt.header?['kid'];
 
       if (kid == null) {
-        stderr.writeln('⚠️ FirebaseAuthVerifier: Token missing kid in header');
-        return null;
+        throw Exception('Token missing kid in header');
       }
 
       // 2. Refresh keys if expired or kid is unknown
@@ -60,14 +59,13 @@ class FirebaseAuthVerifier {
 
       final certificateString = _keys[kid];
       if (certificateString == null) {
-        stderr.writeln('⚠️ FirebaseAuthVerifier: Unknown kid $kid even after refresh');
-        return null;
+        throw Exception('Unknown kid $kid even after refresh');
       }
 
-      // 3. Verify Signature using RSAPublicKey
+      // 3. Verify Signature using RSAPublicKey.cert for X.509 certificates
       final jwt = JWT.verify(
         token,
-        RSAPublicKey(certificateString),
+        RSAPublicKey.cert(certificateString),
         issueAt: Duration(seconds: 0), // Allow iat check
       );
 
@@ -79,28 +77,21 @@ class FirebaseAuthVerifier {
       final exp = payload['exp'];
 
       if (aud != _projectId) {
-        stderr.writeln('⚠️ FirebaseAuthVerifier: Invalid aud: $aud');
-        return null;
+        throw Exception('Invalid aud: $aud (Expected $_projectId)');
       }
 
       if (iss != 'https://securetoken.google.com/$_projectId') {
-        stderr.writeln('⚠️ FirebaseAuthVerifier: Invalid iss: $iss');
-        return null;
+        throw Exception('Invalid iss: $iss');
       }
 
       // 5. Validate Expiration (exp)
       if (exp != null) {
         final expTime = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
         if (DateTime.now().isAfter(expTime)) {
-          stderr.writeln('⚠️ FirebaseAuthVerifier: Token expired');
-          return null;
+          throw Exception('Token expired');
         }
       }
 
       return payload; // Validation passed
-    } catch (e) {
-      stderr.writeln('⚠️ FirebaseAuthVerifier: Verification Failed: $e');
-      return null;
-    }
   }
 }

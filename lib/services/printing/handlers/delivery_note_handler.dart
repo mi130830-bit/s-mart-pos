@@ -11,7 +11,7 @@ import '../core/print_core_service.dart';
 import '../utils/print_settings_helper.dart';
 import '../utils/print_data_helper.dart';
 
-import '../delivery_note_pdf.dart';
+import '../../pdf/delivery_note_pdf.dart';
 
 class DeliveryNoteHandler {
   static Future<void> printDeliveryNote({

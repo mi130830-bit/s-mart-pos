@@ -1,10 +1,10 @@
 import 'dart:typed_data';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import '../../models/shop_info.dart';
 import '../../repositories/shift_repository.dart';
+import 'pdf_helper.dart';
 
 class ShiftReportPdf {
   /// Generate Shortened Report (for Thermal 80/58mm and A5)
@@ -13,11 +13,8 @@ class ShiftReportPdf {
     required ShopInfo shopInfo,
     required PdfPageFormat pageFormat,
   }) async {
-    final fontData = await rootBundle.load('assets/fonts/sarabun/Sarabun-Regular.ttf');
-    final ttf = pw.Font.ttf(fontData);
-
-    final fontBoldData = await rootBundle.load('assets/fonts/sarabun/Sarabun-Bold.ttf');
-    final ttfBold = pw.Font.ttf(fontBoldData);
+    final ttf = await PdfHelper.getFontRegular();
+    final ttfBold = await PdfHelper.getFontBold();
 
     final pdf = pw.Document();
     
@@ -86,11 +83,8 @@ class ShiftReportPdf {
     required ShiftSummary shift,
     required ShopInfo shopInfo,
   }) async {
-    final fontData = await rootBundle.load('assets/fonts/sarabun/Sarabun-Regular.ttf');
-    final ttf = pw.Font.ttf(fontData);
-
-    final fontBoldData = await rootBundle.load('assets/fonts/sarabun/Sarabun-Bold.ttf');
-    final ttfBold = pw.Font.ttf(fontBoldData);
+    final ttf = await PdfHelper.getFontRegular();
+    final ttfBold = await PdfHelper.getFontBold();
 
     final pdf = pw.Document();
     

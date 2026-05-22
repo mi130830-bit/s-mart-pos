@@ -9,6 +9,12 @@ class PrintSettingsHelper {
   static const String keyDeliveryPrinter = 'printer_delivery_name';
   static const String keyBarcodePrinter = 'printer_barcode_name';
 
+  static final Map<String, Printer> _printerCache = {};
+
+  static void clearCache() {
+    _printerCache.clear();
+  }
+
   static final PdfPageFormat customA5 = PdfPageFormat(
     22.86 * PdfPageFormat.cm, // 9 นิ้ว
     13.97 * PdfPageFormat.cm, // 5.5 นิ้ว
@@ -22,15 +28,21 @@ class PrintSettingsHelper {
   );
 
   static Future<Printer?> getPrinterBySettingKey(String key) async {
-    final settings = LocalSettingsService();
-
+    // 1. Manual barcode printer check (bypass cache)
     if (key == keyBarcodePrinter) {
+      final settings = LocalSettingsService();
       final manualName = await settings.getPrinterManualName();
       if (manualName != null && manualName.isNotEmpty) {
         return Printer(url: manualName, name: manualName);
       }
     }
 
+    // 2. Check cache
+    if (_printerCache.containsKey(key)) {
+      return _printerCache[key];
+    }
+
+    final settings = LocalSettingsService();
     String? name;
     if (key == keyCashPrinter) {
       name = await settings.getCashPrinterName();
@@ -47,8 +59,12 @@ class PrintSettingsHelper {
     }
 
     if (name == null || name.isEmpty) return null;
-    return Printer(url: name, name: name);
+    
+    final printer = Printer(url: name, name: name);
+    _printerCache[key] = printer;
+    return printer;
   }
+
 
   static Future<PdfPageFormat> getDeliveryPageFormat() async {
     final settings = LocalSettingsService();

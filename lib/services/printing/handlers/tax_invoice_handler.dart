@@ -9,7 +9,7 @@ import '../core/print_core_service.dart';
 import '../utils/print_settings_helper.dart';
 import '../utils/print_data_helper.dart';
 
-import '../tax_invoice_pdf.dart';
+import '../../pdf/tax_invoice_pdf.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/widgets.dart' as pw;
 

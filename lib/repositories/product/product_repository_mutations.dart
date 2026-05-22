@@ -8,7 +8,7 @@ extension ProductRepositoryMutations on ProductRepository {
 
     try {
       int savedId = 0;
-      if (product.id == 0) {
+      if (product.id <= 0) {
         if (product.barcode != null && product.barcode!.isNotEmpty) {
           final existing = await _dbService.query(
               'SELECT id FROM product WHERE barcode = :barcode',

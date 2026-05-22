@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../controllers/connection_settings_controller.dart';
-import '../../../../widgets/common/custom_text_field.dart';
+import '../../../controllers/connection_settings_controller.dart';
+import '../../../widgets/common/custom_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AiSettingsCard extends ConsumerWidget {

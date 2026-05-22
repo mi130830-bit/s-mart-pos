@@ -3,9 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pos_desktop/models/customer.dart';
 import 'package:pos_desktop/models/order_item.dart';
-import 'package:pos_desktop/services/printing/delivery_note_pdf.dart';
-import 'package:pos_desktop/services/printing/tax_invoice_pdf.dart';
+import 'package:pos_desktop/services/pdf/delivery_note_pdf.dart';
+import 'package:pos_desktop/services/pdf/tax_invoice_pdf.dart';
 import 'package:pos_desktop/services/pdf/thermal_receipt_pdf.dart';
+import 'package:pos_desktop/services/pdf/picking_list_pdf.dart';
 import 'package:pos_desktop/models/shop_info.dart';
 import 'package:decimal/decimal.dart';
 
@@ -112,6 +113,14 @@ void main() {
           shopInfo: shopInfo);
       expect(bytes, isNotEmpty);
       await File('test_thermal_receipt_80mm.pdf').writeAsBytes(bytes);
+    });
+
+    test('Picking List generation', () async {
+      final bytes = await PickingListPdf.generate(
+          items: items.sublist(0, 5),
+          pageFormat: PdfPageFormat.roll80);
+      expect(bytes, isNotEmpty);
+      await File('test_picking_list.pdf').writeAsBytes(bytes);
     });
   });
 }

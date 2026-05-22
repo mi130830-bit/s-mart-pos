@@ -449,6 +449,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                 }
               }
             });
+          } else {
+            throw Exception('ไม่สามารถบันทึกสินค้า "${item.product.name}" ลงฐานข้อมูลได้');
           }
         }
         if (mounted) setState(() => _isLoading = false); // Close loading

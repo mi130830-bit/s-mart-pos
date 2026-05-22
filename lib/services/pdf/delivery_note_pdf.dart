@@ -6,7 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../models/order_item.dart';
 import '../../models/customer.dart';
 import '../../models/shop_info.dart';
-import '../pdf/pdf_helper.dart';
+import 'pdf_helper.dart';
 
 class DeliveryNotePdf {
   static Future<Uint8List> generate({

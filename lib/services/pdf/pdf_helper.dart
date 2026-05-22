@@ -7,19 +7,24 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 class PdfHelper {
+  static pw.Font? _regularFont;
+  static pw.Font? _boldFont;
 
   static Future<pw.Font> getFontRegular() async {
+    if (_regularFont != null) return _regularFont!;
     await initializeDateFormatting('th', null);
     try {
       // 1. Try Local Asset
       final fontData =
           await rootBundle.load("assets/fonts/sarabun/Sarabun-Regular.ttf");
-      return pw.Font.ttf(fontData);
+      _regularFont = pw.Font.ttf(fontData);
+      return _regularFont!;
     } catch (e) {
       debugPrint('⚠️ Error loading local Sarabun Regular: $e');
       // 2. Fallback to GoogleFonts
       try {
-        return await PdfGoogleFonts.sarabunRegular();
+        _regularFont = await PdfGoogleFonts.sarabunRegular();
+        return _regularFont!;
       } catch (e2) {
         debugPrint('⚠️ Error loading GoogleFonts Sarabun Regular: $e2');
         return pw.Font.helvetica();
@@ -28,17 +33,26 @@ class PdfHelper {
   }
 
   static Future<pw.Font> getFontBold() async {
+    if (_boldFont != null) return _boldFont!;
     try {
       // 1. Try Local Asset
       final fontData =
           await rootBundle.load("assets/fonts/sarabun/Sarabun-Bold.ttf");
-      return pw.Font.ttf(fontData);
+      _boldFont = pw.Font.ttf(fontData);
+      return _boldFont!;
     } catch (e) {
       debugPrint('⚠️ Error loading local Sarabun Bold: $e');
       // 2. Fallback to GoogleFonts
-      return await PdfGoogleFonts.sarabunBold();
+      try {
+        _boldFont = await PdfGoogleFonts.sarabunBold();
+        return _boldFont!;
+      } catch (e2) {
+        debugPrint('⚠️ Error loading GoogleFonts Sarabun Bold: $e2');
+        return pw.Font.helveticaBold();
+      }
     }
   }
+
 
 
 

@@ -10,7 +10,7 @@ import '../core/print_core_service.dart';
 import '../utils/print_settings_helper.dart';
 import '../utils/print_data_helper.dart';
 
-import '../shift_report_pdf.dart';
+import '../../pdf/shift_report_pdf.dart';
 
 class ShiftReportHandler {
   static Future<void> printShiftClosingSlip({

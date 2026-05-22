@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pos_desktop/models/customer.dart';
 import 'package:pos_desktop/models/order_item.dart';
-import 'package:pos_desktop/services/printing/delivery_note_pdf.dart';
+import 'package:pos_desktop/services/pdf/delivery_note_pdf.dart';
 import 'package:pos_desktop/models/shop_info.dart';
 import 'package:decimal/decimal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
