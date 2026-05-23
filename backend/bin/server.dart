@@ -8,6 +8,7 @@ import 'package:dotenv/dotenv.dart';
 import 'package:backend/api_router.dart';
 import 'package:backend/middlewares/cors_middleware.dart';
 import 'package:backend/services/print_bridge_service.dart';
+import 'package:backend/env_config.dart';
 
 void main(List<String> args) async {
   // Load .env
@@ -20,10 +21,21 @@ void main(List<String> args) async {
     defaultDocument: 'index.html',
   );
 
+  // Writable static file handler (for bills saved in AppData/Local)
+  final writableDir = EnvConfig().writableDir;
+  final writableStaticHandler = createStaticHandler(
+    writableDir,
+  );
+
   // Main Router
   final router = Router()
     ..mount('/api/v1', ApiRouter().router.call)
-    ..mount('/public/', (Request req) => staticHandler(req))
+    ..mount('/public/', (Request req) {
+      if (req.url.path.startsWith('bills/')) {
+        return writableStaticHandler(req);
+      }
+      return staticHandler(req);
+    })
     ..get(
       '/health',
       (Request req) => Response.ok(
