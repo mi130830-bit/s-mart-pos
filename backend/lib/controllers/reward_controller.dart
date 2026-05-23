@@ -22,6 +22,15 @@ class RewardController {
     return router;
   }
 
+  Map<String, dynamic> _safeMap(Map<String, dynamic> data) {
+    data.forEach((key, value) {
+      if (value is DateTime) {
+        data[key] = value.toIso8601String();
+      }
+    });
+    return data;
+  }
+
   // GET /api/v1/rewards
   Future<Response> _getRewards(Request request) async {
     try {
@@ -252,7 +261,7 @@ class RewardController {
         WHERE rr.customer_id = :cid
         ORDER BY rr.redeemed_at DESC LIMIT 30
       ''', {'cid': customerId});
-      final history = result.rows.map((row) => row.assoc()).toList();
+      final history = result.rows.map((row) => _safeMap(row.assoc())).toList();
       return Response.ok(jsonEncode(history), headers: {'content-type': 'application/json'});
     } catch (e) {
       return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
@@ -275,7 +284,7 @@ class RewardController {
         WHERE rc.customer_id = :cid
         ORDER BY rc.expires_at ASC
       ''', {'cid': customerId});
-      final coupons = result.rows.map((row) => row.assoc()).toList();
+      final coupons = result.rows.map((row) => _safeMap(row.assoc())).toList();
       return Response.ok(jsonEncode(coupons), headers: {'content-type': 'application/json'});
     } catch (e) {
       return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
@@ -299,7 +308,7 @@ class RewardController {
         LEFT JOIN reward_coupon rc ON rc.redemption_id = rr.id
         ORDER BY rr.redeemed_at DESC LIMIT 200
       ''');
-      final list = result.rows.map((row) => row.assoc()).toList();
+      final list = result.rows.map((row) => _safeMap(row.assoc())).toList();
       return Response.ok(jsonEncode(list), headers: {'content-type': 'application/json'});
     } catch (e) {
       return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
@@ -333,7 +342,7 @@ class RewardController {
         WHERE rc.coupon_code = :code LIMIT 1
       ''', {'code': code.toUpperCase()});
       if (result.rows.isEmpty) return Response.notFound(jsonEncode({'error': 'ไม่พบรหัสคูปองนี้'}));
-      return Response.ok(jsonEncode(result.rows.first.assoc()), headers: {'content-type': 'application/json'});
+      return Response.ok(jsonEncode(_safeMap(result.rows.first.assoc())), headers: {'content-type': 'application/json'});
     } catch (e) {
       return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
     }

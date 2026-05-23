@@ -46,10 +46,14 @@ class ShortageController {
       final List<Map<String, dynamic>> list = [];
       for (final row in results.rows) {
         final data = row.assoc();
-        // Ensure keys match what frontend expects (camelCase usually preferred in JSON)
-        // Frontend ShortageLogModel uses map['item_name'], map['status'], etc. from MySQL row directly.
-        // So we can return snake_case as is, or convert.
-        // Let's return as is to minimize frontend changes for serialization.
+        
+        // Fix: Convert DateTime objects to String for jsonEncode
+        data.forEach((key, value) {
+          if (value is DateTime) {
+            data[key] = (value as DateTime).toIso8601String();
+          }
+        });
+
         list.add(data);
       }
 
