@@ -84,3 +84,11 @@ backend/public/bills/*.png
 
 # Scratch scripts
 scratch_split.py
+
+# Irrelevant platforms and files
+web/
+android/
+ios/
+linux/
+macos/
+GEMINI.md
