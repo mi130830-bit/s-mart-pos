@@ -242,11 +242,11 @@ class OrderController {
         SELECT
           COUNT(*) as orderCount,
           COALESCE(SUM(grandTotal), 0) as totalSales,
-          COALESCE(SUM(CASE WHEN paymentMethod = 'CASH' THEN grandTotal ELSE 0 END), 0) as cashTotal,
+          COALESCE(SUM(CASE WHEN paymentMethod != 'CREDIT' THEN grandTotal ELSE 0 END), 0) as cashTotal,
           COALESCE(SUM(CASE WHEN paymentMethod = 'CREDIT' THEN grandTotal ELSE 0 END), 0) as creditTotal
         FROM `order`
         WHERE DATE(createdAt) = CURDATE()
-          AND status = 'COMPLETED'
+          AND status IN ('COMPLETED', 'HELD', 'UNPAID')
       ''');
 
       final row = result.rows.first;
