@@ -55,26 +55,45 @@ class DebtorDialogs {
                       itemCount: items.length,
                       itemBuilder: (ctx, i) {
                         final item = items[i];
-                        return ListTile(
-                          dense: true,
-                          leading: Text('${i + 1}.'),
-                          title: Text(item.productName),
-                          subtitle: item.comment.isNotEmpty
-                              ? Text(
-                                  item.comment,
-                                  style: const TextStyle(color: Colors.grey),
-                                )
-                              : null,
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                '${NumberFormat('#,##0.##').format(item.quantity.toDouble())} x ${NumberFormat('#,##0.00').format(item.price.toDouble())}',
+                              SizedBox(
+                                width: 30,
+                                child: Text('${i + 1}.', style: const TextStyle(color: Colors.black54)),
                               ),
-                              Text(
-                                NumberFormat('#,##0.00').format(item.total.toDouble()),
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.productName),
+                                    if (item.comment.isNotEmpty)
+                                      Text(
+                                        item.comment,
+                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '${NumberFormat('#,##0.##').format(item.quantity.toDouble())} x ${NumberFormat('#,##0.00').format(item.price.toDouble())}',
+                                    style: const TextStyle(color: Colors.black87),
+                                  ),
+                                  if (item.discount.toDouble() > 0)
+                                    Text(
+                                      'ส่วนลด: -${NumberFormat('#,##0.00').format(item.discount.toDouble())}',
+                                      style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  Text(
+                                    NumberFormat('#,##0.00').format(item.total.toDouble()),
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

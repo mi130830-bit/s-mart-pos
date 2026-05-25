@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/order_item.dart';
 import '../../../repositories/sales_repository.dart';
 import '../../../state/auth_provider.dart';
+import '../../pos/pos_state_manager.dart'; // ✅ [NEW]
+import '../../../state/navigation_provider.dart';
 
 /// Dialog แสดงรายละเอียดบิลขาย และรายละเอียดการชำระหนี้
 class DashboardOrderDetailDialog {
@@ -41,6 +43,11 @@ class DashboardOrderDetailDialog {
     auth = container.read(authProvider);
     final bool canViewCost = auth.hasPermission('view_cost');
     final bool canViewProfit = auth.hasPermission('view_profit');
+    // ✅ [NEW] ตรวจสิทธิ์แก้ไขบิล
+    final bool canEditUnpaid = auth.hasPermission('edit_unpaid_order');
+    final String orderStatus = order['status']?.toString().toUpperCase() ?? '';
+    final bool isUnpaid = orderStatus == 'UNPAID';
+    final bool isPaid = orderStatus == 'COMPLETED' || orderStatus == 'PAID';
 
     showDialog(
       context: context,
@@ -95,7 +102,18 @@ class DashboardOrderDetailDialog {
                     ...items.map((item) => ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(item.productName),
-                          subtitle: Text('${item.quantity} x ${item.price}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${item.quantity} x ${item.price}'),
+                              if (item.discount.toDouble() > 0)
+                                Text(
+                                  'ส่วนลด: -${moneyFormat.format(item.discount.toDouble())}',
+                                  style: const TextStyle(
+                                      color: Colors.red, fontSize: 12),
+                                ),
+                            ],
+                          ),
                           trailing: Text(
                               '฿${moneyFormat.format(item.total.toDouble())}'),
                         )),
@@ -129,6 +147,28 @@ class DashboardOrderDetailDialog {
           ),
         ),
         actions: [
+          // ✅ [NEW] ปุ่มแก้ไขบิล — แสดงสำหรับบิล UNPAID/PAID และมีสิทธิ์
+          if ((isUnpaid || isPaid) && canEditUnpaid)
+            TextButton.icon(
+              icon: const Icon(Icons.edit_note, color: Colors.orange),
+              label: const Text('แก้ไขรายการ',
+                  style: TextStyle(color: Colors.orange)),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final posNotifier = container.read(posProvider.notifier);
+                final success = await posNotifier.loadOrderForEditing(orderId);
+                if (success) {
+                  // ✅ Switch tab to POS screen (index 0)
+                  container.read(mainNavigationProvider.notifier).state = 0;
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('ไม่สามารถโหลดบิลนี้ได้'),
+                        backgroundColor: Colors.red),
+                  );
+                }
+              },
+            ),
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
         ],

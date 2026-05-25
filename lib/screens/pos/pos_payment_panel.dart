@@ -27,11 +27,13 @@ enum PaymentType {
 class PosPaymentPanel extends ConsumerWidget {
   final VoidCallback onPaymentSuccess;
   final VoidCallback? onClear;
+  final VoidCallback? onHoldSuccess;
 
   const PosPaymentPanel({
     super.key,
     required this.onPaymentSuccess,
     this.onClear,
+    this.onHoldSuccess,
   });
 
   void _openPaymentModal(BuildContext context) async {
@@ -178,9 +180,13 @@ class PosPaymentPanel extends ConsumerWidget {
                       icon: Icons.history_rounded,
                       colors: const [Color(0xFFF39C12), Color(0xFFF1C40F)],
                       onPressed: posState.cart.isNotEmpty
-                          ? () {
-                              posState.holdCurrentBill(note: 'พักบิลโดย Cashier');
-                              onPaymentSuccess();
+                          ? () async {
+                              try {
+                                await posState.holdCurrentBill(note: 'พักบิลโดย Cashier');
+                                if (onHoldSuccess != null) onHoldSuccess!();
+                              } catch (e) {
+                                // Ignore error
+                              }
                             }
                           : null,
                     ),

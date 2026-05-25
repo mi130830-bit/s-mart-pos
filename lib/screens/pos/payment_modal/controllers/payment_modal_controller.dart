@@ -406,6 +406,22 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     if (mounted) setState(() => isLoading = true);
 
     try {
+      // ✅ [NEW] โหมดแก้ไขบิล UNPAID — Flow แยกต่างหาก ไม่แตะ Flow เดิม
+      if (posState.editingOrderId != null) {
+        final editedOrderId = await posState.saveOrderAsEdit();
+        if (mounted) {
+          Navigator.of(context).pop(true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ บันทึกการแก้ไขบิล #$editedOrderId เรียบร้อย'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
       final orderId = await posState.saveOrder(
         payments: payments,
         deliveryType: deliveryType,

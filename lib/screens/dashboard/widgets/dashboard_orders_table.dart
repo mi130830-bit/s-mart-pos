@@ -166,6 +166,7 @@ class DashboardOrdersTable extends StatelessWidget {
     final received = double.tryParse(o['received'].toString()) ?? 0.0;
     final type = o['type'];
     final rawStatus = o['status']?.toString().toUpperCase() ?? '';
+    final paymentMethod = o['paymentMethod']?.toString().toLowerCase() ?? '';
     final int orderId = int.tryParse(o['id'].toString()) ?? 0;
 
     // ── สถานะ ──────────────────────────────────────────────────────────────────
@@ -180,7 +181,7 @@ class DashboardOrdersTable extends StatelessWidget {
       statusText = 'ค้างจ่าย';
       statusColor = Colors.orange.shade800;
     } else if (rawStatus == 'COMPLETED') {
-      statusText = 'สำเร็จ';
+      statusText = paymentMethod == 'credit' ? 'สำเร็จ (ลงบัญชี)' : 'สำเร็จ';
       statusColor = Colors.green;
     } else if (rawStatus == 'HELD') {
       statusText = 'พักบิล';

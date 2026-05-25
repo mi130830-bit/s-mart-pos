@@ -39,6 +39,7 @@ part 'mixins/pos_pricing_mixin.dart';
 part 'mixins/pos_cart_mixin.dart';
 part 'mixins/pos_order_mixin.dart';
 part 'mixins/pos_delivery_mixin.dart';
+part 'mixins/pos_edit_order_mixin.dart'; // ✅ [NEW] โหมดแก้ไขบิล UNPAID
 
 enum ScanStatus { success, notFound, multipleMatches, error, requiresWeight }
 
@@ -74,6 +75,8 @@ class PosState {
   final bool allowPriceEdit;
   final User? authUser;
   final VatType vatType;
+  // ✅ [NEW] โหมดแก้ไขบิล UNPAID — null = โหมดขายปกติ
+  final int? editingOrderId;
 
   PosState({
     this.currentCustomer,
@@ -98,6 +101,7 @@ class PosState {
     this.allowPriceEdit = false,
     this.authUser,
     this.vatType = VatType.none,
+    this.editingOrderId, // ✅ [NEW]
   });
 }
 
@@ -129,6 +133,7 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
       allowPriceEdit: _allowPriceEdit,
       authUser: _authUser,
       vatType: _vatType,
+      editingOrderId: _editingOrderId, // ✅ [NEW]
     );
   }
 
@@ -147,6 +152,11 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
   final OrderProcessingService _orderService = OrderProcessingService();
 
   final List<HeldBill> _heldBills = [];
+
+  // ✅ [NEW] โหมดแก้ไขบิล UNPAID/PAID
+  int? _editingOrderId;
+  String? _editingOldStatus;
+  double _editingOldGrandTotal = 0.0;
 
   double _billDiscount = 0.0;
   bool _isPercentDiscount = false;

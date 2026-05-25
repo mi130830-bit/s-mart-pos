@@ -244,6 +244,13 @@ class _CustomerFormDialogContentState extends ConsumerState<_CustomerFormDialogC
                   label: 'ระยะทางจัดส่งตั้งต้นจากร้าน (กิโลเมตร ไป-กลับ)',
                   prefixIcon: Icons.route,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  suffixIcon: Tooltip(
+                    message: 'ดึงข้อมูลระยะทางจากรายงานขนส่ง',
+                    child: IconButton(
+                      icon: const Icon(Icons.cloud_download, color: Colors.blue),
+                      onPressed: () => controller.fetchDistanceFromHistory(context),
+                    ),
+                  ),
                 ),
                 if (customer != null) ...[
                   const SizedBox(height: 15),

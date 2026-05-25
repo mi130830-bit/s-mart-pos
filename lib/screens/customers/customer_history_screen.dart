@@ -73,8 +73,18 @@ class _CustomerHistoryScreenState extends State<CustomerHistoryScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(item.productName),
-                      subtitle: Text(
-                          '${item.quantity} x ${moneyFormat.format(item.price.toDouble())}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              '${item.quantity} x ${moneyFormat.format(item.price.toDouble())}'),
+                          if (item.discount.toDouble() > 0)
+                            Text(
+                              'ส่วนลด: -${moneyFormat.format(item.discount.toDouble())}',
+                              style: const TextStyle(color: Colors.red, fontSize: 12),
+                            ),
+                        ],
+                      ),
                       trailing: Text(
                         // ✅ แก้ไข: เอา '${...}' ออก เพราะ moneyFormat คืนค่าเป็น String อยู่แล้ว
                         moneyFormat.format(item.total.toDouble()),

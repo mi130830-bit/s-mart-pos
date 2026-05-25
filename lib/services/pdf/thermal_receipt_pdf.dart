@@ -59,6 +59,15 @@ class ThermalReceiptPdf {
       }
     }
 
+    // Prepare totals and discounts
+    final double calculatedTotal = items
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + (i.price * i.quantity))
+        .toDouble();
+    final double totalLineDiscount = items
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.discount)
+        .toDouble();
+    final double totalDiscount = discount + totalLineDiscount;
+
     // เตรียมวันที่และเวลา
     final now = DateTime.now();
     // คำนวณปี พ.ศ.
@@ -298,7 +307,7 @@ class ThermalReceiptPdf {
                               _buildCell(moneyFmt.format(e.price.toDouble()),
                                   fontBold, bodySize,
                                   align: pw.TextAlign.right),
-                              _buildCell(moneyFmt.format(e.total.toDouble()),
+                              _buildCell(moneyFmt.format((e.price * e.quantity).toDouble()),
                                   fontBold, bodySize,
                                   align: pw.TextAlign.right),
                             ],
@@ -314,12 +323,12 @@ class ThermalReceiptPdf {
                     width: double.infinity,
                     child: pw.Column(
                       children: [
-                        if (discount > 0) ...[
-                          _buildTotalRow('รวมเป็นเงิน', moneyFmt.format(total),
+                        if (totalDiscount > 0) ...[
+                          _buildTotalRow('รวมเป็นเงิน', moneyFmt.format(calculatedTotal),
                               fontBold, bodySize),
                           _buildTotalRow(
                               'ส่วนลด',
-                              '-${moneyFmt.format(discount)}',
+                              '-${moneyFmt.format(totalDiscount)}',
                               fontBold,
                               bodySize),
                         ],

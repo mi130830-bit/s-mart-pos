@@ -91,6 +91,11 @@ class _PosCheckoutScreenState extends ConsumerState<PosCheckoutScreen> with PosB
                 paymentPanel: PosPaymentPanel(
                   onPaymentSuccess: resetTransaction,
                   onClear: resetTransaction,
+                  onHoldSuccess: () {
+                    posState.selectCustomer(null);
+                    setState(() => qtyCtrl.text = '1');
+                    barcodeFocusNode.requestFocus();
+                  },
                 ),
               ),
             ),
@@ -116,7 +121,38 @@ class _PosCheckoutScreenState extends ConsumerState<PosCheckoutScreen> with PosB
   }
 
   Widget _buildCartList(PosStateNotifier posState) {
-    return PosCartList(
+    final editId = ref.watch(posProvider).editingOrderId;
+    return Column(
+      children: [
+        // ✅ [NEW] Banner แจ้งเตือนโหมดแก้ไขบิล
+        if (editId != null)
+          Material(
+            color: Colors.orange.shade700,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit_note, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '⚠️ กำลังแก้ไขบิลค้างชำระ #$editId — เพิ่ม/ลดรายการแล้วกดชำระเงินเพื่อบันทึก',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                    label: const Text('ยกเลิกการแก้ไข',
+                        style: TextStyle(color: Colors.white)),
+                    onPressed: () => posState.cancelOrderEditing(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Expanded(
+          child: PosCartList(
       items: posState.cart,
       onEdit: (index) => PosEditItemDialog.show(context,
           posState: posState,
@@ -160,6 +196,9 @@ class _PosCheckoutScreenState extends ConsumerState<PosCheckoutScreen> with PosB
         posState.updateItemDiscount(index, newDiscount.toDouble());
         barcodeFocusNode.requestFocus();
       },
-    );
+    ),
+        ), // close Expanded
+      ],    // close Column children
+    );     // close Column
   }
 }

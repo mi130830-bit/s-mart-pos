@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../models/customer.dart';
 import '../../../../models/member_tier.dart';
 import '../../../../repositories/customer_repository.dart';
+import '../../../../services/mysql_service.dart';
 import '../../../../services/alert_service.dart';
 
 class CustomerFormState {
@@ -150,6 +151,69 @@ class CustomerFormController extends AutoDisposeFamilyNotifier<CustomerFormState
   void unlinkLine() {
     if (_mounted) {
       state = state.copyWith(clearLine: true);
+    }
+  }
+
+  Future<void> fetchDistanceFromHistory(BuildContext context) async {
+    final name = firstNameCtrl.text.trim();
+    if (name.isEmpty) {
+      AlertService.show(
+        context: context,
+        message: 'กรุณากรอกชื่อลูกค้าก่อนดึงข้อมูลระยะทาง',
+        type: 'warning',
+      );
+      return;
+    }
+
+    try {
+      final db = MySQLService();
+      // ค้นหาประวัติจัดส่งที่เสร็จสิ้นล่าสุดของลูกค้ารายนี้ ที่มีระยะทาง > 0
+      final res = await db.query(
+        '''
+        SELECT distanceKm 
+        FROM delivery_history 
+        WHERE customerName LIKE :cname 
+          AND distanceKm > 0 
+        ORDER BY completedAt DESC 
+        LIMIT 1
+        ''',
+        {'cname': '%$name%'},
+      );
+
+      if (res.isNotEmpty) {
+        final dist = double.tryParse(res.first['distanceKm']?.toString() ?? '0') ?? 0.0;
+        if (dist > 0) {
+          distanceKmCtrl.text = dist.toStringAsFixed(1);
+          if (!context.mounted) return;
+          AlertService.show(
+            context: context,
+            message: 'ดึงระยะทางสำเร็จ: $dist กม.',
+            type: 'success',
+          );
+        } else {
+          if (!context.mounted) return;
+          AlertService.show(
+            context: context,
+            message: 'ไม่พบประวัติระยะทางของลูกค้าคนนี้ในรายงานขนส่ง',
+            type: 'warning',
+          );
+        }
+      } else {
+        if (!context.mounted) return;
+        AlertService.show(
+          context: context,
+          message: 'ไม่พบประวัติระยะทางของลูกค้าคนนี้ในรายงานขนส่ง',
+          type: 'warning',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error fetching distance from history: $e');
+      if (!context.mounted) return;
+      AlertService.show(
+        context: context,
+        message: 'เกิดข้อผิดพลาดในการดึงข้อมูลระยะทาง',
+        type: 'error',
+      );
     }
   }
 

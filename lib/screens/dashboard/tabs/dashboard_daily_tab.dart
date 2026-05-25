@@ -37,7 +37,7 @@ class _DashboardDailyTabState extends ConsumerState<DashboardDailyTab> {
         ? state.searchResults 
         : state.recentOrders;
 
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,17 +46,21 @@ class _DashboardDailyTabState extends ConsumerState<DashboardDailyTab> {
           const SizedBox(height: 16),
           _buildSearchBar(context, state, notifier),
           const SizedBox(height: 16),
-          DashboardOrdersTable(
-            orders: orders,
-            searchQuery: state.searchQuery,
-            isSearchLoading: state.isSearchLoading,
-            auth: auth,
-            onViewDetails: (row) => notifier.viewDetails(context, row),
-            onReprint: (row) => notifier.reprintOrder(context, row),
-            onSendToDelivery: (id) => notifier.sendToDelivery(context, id),
-            onSendToBackShop: (id) => notifier.sendToBackShop(context, id),
-            onChangeCustomer: (id) => notifier.changeCustomer(context, id),
-            onDelete: (row) => notifier.deleteOrder(context, row),
+          Expanded(
+            child: SingleChildScrollView(
+              child: DashboardOrdersTable(
+                orders: orders,
+                searchQuery: state.searchQuery,
+                isSearchLoading: state.isSearchLoading,
+                auth: auth,
+                onViewDetails: (row) => notifier.viewDetails(context, row),
+                onReprint: (row) => notifier.reprintOrder(context, row),
+                onSendToDelivery: (id) => notifier.sendToDelivery(context, id),
+                onSendToBackShop: (id) => notifier.sendToBackShop(context, id),
+                onChangeCustomer: (id) => notifier.changeCustomer(context, id),
+                onDelete: (row) => notifier.deleteOrder(context, row),
+              ),
+            ),
           ),
         ],
       ),

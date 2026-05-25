@@ -266,6 +266,19 @@ class DeliveryCleanupService {
                 distanceKm = await _distanceService.getRoadDistanceRoundTrip(shopLat, shopLng, dLat, dLng);
                 fuelCostEstimate = distanceKm * fuelRate;
                 LoggerService.info('DeliveryCleanup', 'Road Distance (RT): ${distanceKm.toStringAsFixed(2)} km | Fuel: ฿${fuelCostEstimate.toStringAsFixed(2)}');
+                
+                // ✅ Auto-Save ระยะทางกลับไปที่ข้อมูลลูกค้า เพื่อใช้ในรอบถัดไป
+                if (distanceKm > 0.0 && customerName.isNotEmpty && customerName != 'ลูกค้าทั่วไป') {
+                  try {
+                    await _dbService.execute(
+                      'UPDATE customer SET distanceKm = :d WHERE (firstName LIKE :cname OR CONCAT(firstName, " ", IFNULL(lastName, "")) LIKE :cname) AND distanceKm = 0',
+                      {'d': distanceKm, 'cname': '%$customerName%'}
+                    );
+                    LoggerService.info('DeliveryCleanup', 'Auto-saved distance $distanceKm to customer $customerName');
+                  } catch (e) {
+                    LoggerService.warning('DeliveryCleanup', 'Failed to auto-save distance to customer: $e');
+                  }
+                }
               } else if (shopLat == 0.0 || shopLng == 0.0) {
                 LoggerService.warning('DeliveryCleanup', 'Shop GPS not configured. Skipping distance calc.');
               }

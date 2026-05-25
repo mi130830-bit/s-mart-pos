@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import '../../state/auth_provider.dart';
+import '../../state/navigation_provider.dart';
 
 // import หน้าจออื่นๆ
 import '../pos/pos_checkout_screen.dart';
@@ -31,7 +32,6 @@ class MainScreen extends ConsumerStatefulWidget {
 
 class _MainScreenState extends ConsumerState<MainScreen>
     with WindowListener, TickerProviderStateMixin {
-  int _selectedIndex = 0;
   Key _refreshKey = UniqueKey(); // ✅ Key สำหรับบังคับ Rebuild
   late TabController _tabController;
 
@@ -209,9 +209,10 @@ class _MainScreenState extends ConsumerState<MainScreen>
         ),
     ];
 
+    final int selectedIndex = ref.watch(mainNavigationProvider);
     // ป้องกัน Error กรณีสิทธิ์เปลี่ยนแล้ว Index เกิน
-    if (_selectedIndex >= screens.length) {
-      _selectedIndex = 0;
+    if (selectedIndex >= screens.length) {
+      Future.microtask(() => ref.read(mainNavigationProvider.notifier).state = 0);
     }
 
     final posState = ref.watch(posProvider);
@@ -222,17 +223,17 @@ class _MainScreenState extends ConsumerState<MainScreen>
           NavigationRail(
             // ปรับความกว้างเมนูซ้ายให้ไม่อึดอัด (ตามที่เคยคุยกันไว้)
             minWidth: 110,
-            selectedIndex: _selectedIndex,
+            selectedIndex: selectedIndex < screens.length ? selectedIndex : 0,
             onDestinationSelected: (index) {
-              setState(() {
-                if (_selectedIndex == index) {
-                  // ✅ กดเมนูเดิม -> Force Rebuild หน้าจอ
+              if (selectedIndex == index) {
+                // ✅ กดเมนูเดิม -> Force Rebuild หน้าจอ
+                setState(() {
                   _refreshKey = UniqueKey();
-                } else {
-                  // ✅ กดเปลี่ยนเมนู -> เปลี่ยน Index
-                  _selectedIndex = index;
-                }
-              });
+                });
+              } else {
+                // ✅ กดเปลี่ยนเมนู -> เปลี่ยน Index
+                ref.read(mainNavigationProvider.notifier).state = index;
+              }
             },
             labelType: NavigationRailLabelType.all,
             selectedLabelTextStyle: TextStyle(
@@ -331,7 +332,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
           Expanded(
             child: KeyedSubtree(
               key: _refreshKey, // ✅ Force Rebuild Here
-              child: screens[_selectedIndex],
+              child: screens[selectedIndex < screens.length ? selectedIndex : 0],
             ),
           ),
         ],

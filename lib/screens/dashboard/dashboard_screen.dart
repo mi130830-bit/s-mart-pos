@@ -21,12 +21,6 @@ class DashboardScreen extends ConsumerWidget {
     final isLoading = ref.watch(dashboardProvider.select((state) => state.isLoading));
     final auth = ref.watch(authProvider);
 
-    if (isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     final List<Tab> tabs = [];
     final List<Widget> tabViews = [];
 
@@ -88,7 +82,18 @@ class DashboardScreen extends ConsumerWidget {
             const SizedBox(width: 10),
           ],
         ),
-        body: TabBarView(children: tabViews),
+        body: Stack(
+          children: [
+            TabBarView(children: tabViews),
+            if (isLoading)
+              Container(
+                color: Colors.white.withValues(alpha: 0.5),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

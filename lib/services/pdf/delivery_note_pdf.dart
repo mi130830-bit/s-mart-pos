@@ -34,8 +34,14 @@ class DeliveryNotePdf {
     final double calculatedTotal = items
         .fold<Decimal>(Decimal.zero, (sum, i) => sum + (i.price * i.quantity))
         .toDouble();
+    
+    final double totalLineDiscount = items
+        .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.discount)
+        .toDouble();
+    final double totalDiscount = discount + totalLineDiscount;
+
     final double finalGrandTotal =
-        grandTotalOverride ?? (calculatedTotal - discount + vatAmount);
+        grandTotalOverride ?? (calculatedTotal - totalDiscount + vatAmount);
 
     final pdf = pw.Document(
       theme: pw.ThemeData.withFont(base: font, bold: fontBold),
@@ -90,7 +96,7 @@ class DeliveryNotePdf {
                     fontSize: globalFontSize,
                     paddingVertical: cellPaddingVertical),
               ),
-              _buildFooter(calculatedTotal, discount, vatAmount,
+              _buildFooter(calculatedTotal, totalDiscount, vatAmount,
                   finalGrandTotal, moneyFmt, font, fontBold,
                   signatureLabel: signatureLabel,
                   isLastPage: i == totalPages - 1,

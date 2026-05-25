@@ -1,4 +1,5 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../repositories/user_repository.dart';
 import '../../models/user.dart' as model;
@@ -28,14 +29,19 @@ class UserManagementNotifier extends AutoDisposeNotifier<UserManagementState> {
 
   @override
   UserManagementState build() {
-    loadUsers();
+    Future.microtask(() => loadUsers());
     return const UserManagementState();
   }
 
   Future<void> loadUsers() async {
     state = state.copyWith(isLoading: true);
-    final users = await _userRepo.getAllUsers();
-    state = state.copyWith(users: users, isLoading: false);
+    try {
+      final users = await _userRepo.getAllUsers();
+      state = state.copyWith(users: users, isLoading: false);
+    } catch (e) {
+      debugPrint('❌ [UserManagement] loadUsers error: $e');
+      state = state.copyWith(isLoading: false);
+    }
   }
 
   Future<bool> deleteUser(int userId) async {

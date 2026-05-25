@@ -40,13 +40,25 @@ extension SalesAnalyticsExtension on SalesRepository {
           ? '%Y-%m-%d'
           : (periodType == 'MONTHLY' ? '%Y-%m' : '%Y');
 
-      // 1. Sales Query (From Order Header) - Correct calculation of Sales & Count
+      // 1. Sales Query (Cash-Basis) - Count sales only for COMPLETED and DEBT_PAYMENT
       final sqlSales = '''
-        SELECT DATE_FORMAT(createdAt, '$groupByFormat') as label, 
-               SUM(grandTotal) as totalSales,
-               COUNT(id) as orderCount
-        FROM `order`
-        WHERE createdAt BETWEEN :start AND :end AND status IN ('COMPLETED', 'UNPAID')
+        SELECT label, SUM(sales) as totalSales, SUM(orders) as orderCount FROM (
+          SELECT DATE_FORMAT(createdAt, '$groupByFormat') as label, 
+                 CASE WHEN status = 'COMPLETED' AND LOWER(paymentMethod) != 'credit' THEN grandTotal ELSE 0 END as sales,
+                 1 as orders
+          FROM `order`
+          WHERE createdAt BETWEEN :start AND :end AND status IN ('COMPLETED', 'UNPAID')
+          
+          UNION ALL
+          
+          SELECT DATE_FORMAT(createdAt, '$groupByFormat') as label, 
+                 ABS(amount) as sales,
+                 0 as orders
+          FROM debtor_transaction
+          WHERE createdAt BETWEEN :start AND :end 
+            AND transactionType = 'DEBT_PAYMENT' 
+            AND (isDeleted = 0 OR isDeleted IS NULL)
+        ) combined
         GROUP BY label ORDER BY label ASC;
       ''';
       final salesRes = await _dbService.query(sqlSales,

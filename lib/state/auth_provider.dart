@@ -31,10 +31,10 @@ class AuthState {
 
   bool hasPermission(String key) {
     if (currentUser == null) return false;
+    if (currentUser!.role == 'ADMIN') return true; // ✅ Admin overrides all permissions
     if (permissions.containsKey(key)) {
       return permissions[key] ?? false;
     }
-    if (currentUser!.role == 'ADMIN') return true;
     return false;
   }
 

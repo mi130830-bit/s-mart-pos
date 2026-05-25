@@ -234,6 +234,118 @@ class DeliveryIntegrationService {
     }
   }
 
+  /// อัปเดตรายการสินค้าของบิลจัดส่ง (กรณีมีการแก้ไขบิล)
+  Future<void> updateDeliveryJobItems({
+    required int orderId,
+    required List<OrderItem> items,
+    required double grandTotal,
+    String? oldStatus,
+    double oldGrandTotal = 0.0,
+  }) async {
+    try {
+      // 1. ตรวจสอบว่าบิลนี้มีในระบบส่งของหรือไม่
+      final existsRes = await _dbService.query(
+          'SELECT firebaseJobId FROM delivery_jobs WHERE orderId = :oid',
+          {'oid': orderId});
+      
+      if (existsRes.isEmpty) return; // ไม่ใช่งานจัดส่ง หรือยังไม่เคยส่งขึ้น cloud
+
+      final jobId = existsRes.first['firebaseJobId']?.toString();
+      if (jobId == null || jobId.isEmpty) return;
+
+      // 2. จัดเตรียมข้อมูล Items & Details เหมือนตอนสร้าง
+      final bool filterEnabled = SettingsService().enableWarehouseAutoTag;
+      List<OrderItem> jobItems = items;
+
+      if (filterEnabled) {
+        Set<int> warehouseProductIds = {};
+        try {
+          final pIds = items.map((i) => i.productId).toList();
+          if (pIds.isNotEmpty) {
+            final idsStr = pIds.join(',');
+            final res = await _dbService.query(
+                'SELECT id FROM product WHERE id IN ($idsStr) AND isWarehouseItem = 1');
+            warehouseProductIds =
+                res.map((r) => int.parse(r['id'].toString())).toSet();
+          }
+        } catch (e) {
+          warehouseProductIds = items
+              .where((i) => i.product?.isWarehouseItem == true)
+              .map((i) => i.productId)
+              .toSet();
+        }
+
+        final warehouseItems = items.where((i) => warehouseProductIds.contains(i.productId)).toList();
+        if (warehouseItems.isNotEmpty) {
+          jobItems = warehouseItems.map((i) {
+            if (i.product != null) {
+              return i.copyWith(product: i.product!.copyWith(isWarehouseItem: true));
+            }
+            return i;
+          }).toList();
+        }
+      }
+
+      String details = jobItems.map((i) {
+        String txt = '${i.productName} x${i.quantity}${i.comment.isNotEmpty ? " (${i.comment})" : ""}';
+        if (i.product?.shelfLocation != null && i.product!.shelfLocation!.isNotEmpty) {
+          txt += ' [เก็บ: ${i.product!.shelfLocation}]';
+        }
+        return txt.trim();
+      }).join('\n');
+
+      if (filterEnabled && jobItems.length < items.length) {
+        details += '\n📦 มีของหน้าร้าน ${items.length - jobItems.length} จำนวนรายการ';
+      }
+
+      // ตรวจสอบกรณีหนี้เพิ่ม (แก้ไขบิลเงินสด แล้วมียอดต้องเก็บปลายทาง)
+      double debtDelta = grandTotal - oldGrandTotal;
+      bool isPaidToUnpaid = (oldStatus == 'COMPLETED' || oldStatus == 'PAID') && debtDelta > 0.001;
+
+      if (isPaidToUnpaid) {
+        details = '⚠️ จ่ายแล้วบางส่วน! เก็บเงินปลายทางเพิ่มเฉพาะส่วนต่าง: ฿${debtDelta.toStringAsFixed(2)}\n━━━━━━━━━━━━━━━━━━\n$details';
+      } else {
+        details = '⚠️ มีการแก้ไขรายการสินค้า!\n━━━━━━━━━━━━━━━━━━\n$details';
+      }
+
+      final updates = {
+        'details': details,
+        'price': isPaidToUnpaid ? debtDelta : grandTotal, // ถ้าเดิมจ่ายแล้ว ให้แอปคนขับเก็บเฉพาะส่วนต่าง!
+        if (isPaidToUnpaid) 'payment_method': 'credit', // บังคับให้เป็น COD เพื่อเก็บส่วนต่าง
+        'items': jobItems.map((item) => {
+                  'name': item.productName,
+                  'qty': item.quantity.toDouble(),
+                  'price': item.price.toDouble(),
+                  'total': item.total.toDouble(),
+                  'location': item.product?.shelfLocation ?? '',
+                  'is_warehouse': item.product?.isWarehouseItem ?? false,
+                }).toList(),
+      };
+
+      // 3. อัปเดตขึ้น Firebase
+      await _firebaseService.updateJob(jobId, updates);
+      LoggerService.info('DeliveryIntegration', '✅ Updated Cloud Job $jobId with new items for Order #$orderId');
+
+      // 4. ส่งแจ้งเตือน Telegram (Option)
+      try {
+        if (await _telegramService.shouldNotify(TelegramService.keyNotifyDelivery)) {
+          String msg = '⚠️ *มีการแก้ไขรายการบิลจัดส่ง*\n'
+              '━━━━━━━━━━━━━━━━━━\n'
+              '🧾 *เลขที่บิล:* #$orderId\n'
+              '💰 *ยอดเงินใหม่:* ${grandTotal.toStringAsFixed(2)} บาท\n'
+              '━━━━━━━━━━━━━━━━━━\n'
+              'แอปคนขับอัปเดตข้อมูลอัตโนมัติแล้ว';
+          _telegramService.sendMessage(msg);
+        }
+      } catch (e) {
+        LoggerService.error('DeliveryIntegration', 'Telegram Notify Edit Error', e);
+      }
+
+    } catch (e) {
+      LoggerService.error('DeliveryIntegration', 'Error updating delivery job items', e);
+    }
+  }
+
   Future<void> _uploadBillImageInBackground(
       String jobId, int orderId, Uint8List pdfData) async {
     if (pdfData.isEmpty) return;

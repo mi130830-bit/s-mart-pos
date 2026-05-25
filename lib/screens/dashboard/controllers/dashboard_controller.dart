@@ -145,9 +145,16 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
       double tempTodaySales = 0.0;
       int tempTodayOrderCount = 0;
       for (var o in orders) {
+        final double amount = double.tryParse(o['amount'].toString()) ?? 0.0;
+        final String paymentMethod = o['paymentMethod']?.toString().toLowerCase() ?? '';
+        
         if (o['type']?.toString() == 'ORDER') {
-          tempTodaySales += double.tryParse(o['amount'].toString()) ?? 0.0;
+          if (o['status'] == 'COMPLETED' && paymentMethod != 'credit') {
+            tempTodaySales += amount;
+          }
           tempTodayOrderCount++;
+        } else if (o['type']?.toString() == 'DEBT_PAYMENT') {
+          tempTodaySales += amount;
         }
       }
       _processTimeStats(orders);
@@ -230,7 +237,10 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
     final Map<int, double> hourlySales = {};
     Map<String, double> timeOfDaySales = {'Morning': 0.0, 'Afternoon': 0.0};
     for (var o in orders) {
-      if (o['type'] != 'ORDER') continue;
+      if (o['type'] != 'ORDER' && o['type'] != 'DEBT_PAYMENT') continue;
+      final String paymentMethod = o['paymentMethod']?.toString().toLowerCase() ?? '';
+      if (o['type'] == 'ORDER' && (o['status'] != 'COMPLETED' || paymentMethod == 'credit')) continue;
+      
       final date = DateTime.tryParse(o['createdAt'].toString());
       if (date == null) continue;
       final amount = double.tryParse(o['amount'].toString()) ?? 0.0;

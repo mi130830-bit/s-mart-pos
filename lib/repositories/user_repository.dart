@@ -76,10 +76,18 @@ class UserRepository {
   }
 
   Future<List<User>> getAllUsers() async {
-    if (!_dbService.isConnected()) await _dbService.connect();
+    if (!_dbService.isConnected()) {
+      await _dbService.connect().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception('DB connection timeout'),
+      );
+    }
     try {
       const sql = 'SELECT * FROM user ORDER BY role, displayName;';
-      final rows = await _dbService.query(sql);
+      final rows = await _dbService.query(sql).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception('Query timeout'),
+      );
       return rows.map((r) => User.fromJson(r)).toList();
     } catch (e) {
       debugPrint('Error fetching users: $e');

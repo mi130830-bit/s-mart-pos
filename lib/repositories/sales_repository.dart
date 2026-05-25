@@ -19,6 +19,7 @@ part 'sales/sales_command_extension.dart';
 part 'sales/sales_query_extension.dart';
 part 'sales/sales_analytics_extension.dart';
 part 'sales/sales_return_extension.dart';
+part 'sales/sales_edit_order_extension.dart'; // ✅ [NEW] แก้ไขบิล UNPAID
 
 class SalesRepository {
   final MySQLService _dbService;
