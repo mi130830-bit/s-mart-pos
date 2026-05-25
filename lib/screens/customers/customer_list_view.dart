@@ -335,7 +335,7 @@ class _CustomerListViewState extends State<CustomerListView> {
                               ],
                             ),
                             subtitle: Text(
-                              'Tel: ${c.phone ?? "-"} | แต้ม: ${c.currentPoints}',
+                              'Tel: ${c.phone ?? "-"} | แต้ม: ${c.currentPoints} | ระยะทาง: ${c.distanceKm > 0 ? c.distanceKm.toStringAsFixed(1) : "-"} กม.',
                             ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,

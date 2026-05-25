@@ -77,7 +77,7 @@ class _CustomerSearchDialogState extends State<CustomerSearchDialog> {
                   ),
                 ),
               Text(
-                'แต้ม: ${c.currentPoints}',
+                'แต้ม: ${c.currentPoints} | ระยะทาง: ${c.distanceKm > 0 ? c.distanceKm.toStringAsFixed(1) : "-"} กม.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ],
