@@ -13,6 +13,7 @@ import '../suppliers/supplier_list_view.dart';
 
 import '../reports/logistics_menu_screen.dart';
 import '../settings/settings_screen.dart';
+import '../hr/hr_screen.dart'; // ✅ HR Module
 
 import 'package:window_manager/window_manager.dart'; // ✅ For WindowListener
 import '../../services/customer_display_service.dart';
@@ -145,6 +146,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
     }
 
     final bool isUserAdmin = user.role == 'ADMIN';
+    final bool isUserHR = user.role == 'HR';
     final bool isSignedIn = authState.isAuthenticated;
 
     final bool showDashboard = user.canViewProfit ||
@@ -157,6 +159,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
     
     final bool canViewDeliveryReport =
         isUserAdmin || authState.hasPermission('view_delivery_report');
+    
+    final bool canAccessHR = isUserAdmin || isUserHR;
 
     // ✅ 1. เรียงลำดับหน้าจอ (Screens) ใหม่ตามคำขอ
     final List<Widget> screens = [
@@ -168,6 +172,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
       if (canViewDeliveryReport)
         LogisticsMenuScreen(deliveryService: _deliveryService), // 5. ขนส่ง (Logistics)
       if (isUserAdmin) const SupplierListView(), // 6. จัดการผู้ขาย
+      if (canAccessHR) const HrScreen(), // 7. บุคคล (HR)
       if (canAccessSettings)
         const SettingsScreen(), // 7. ตั้งค่า
     ];
@@ -201,6 +206,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
         const NavigationRailDestination(
           icon: Icon(Icons.store),
           label: Text('จัดการผู้ขาย'),
+        ),
+      if (canAccessHR)
+        const NavigationRailDestination(
+          icon: Icon(Icons.badge),
+          label: Text('บุคคล'),
         ),
       if (canAccessSettings)
         const NavigationRailDestination(

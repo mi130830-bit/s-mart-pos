@@ -32,6 +32,8 @@ import 'theme/app_theme.dart';
 import 'screens/customer_display/customer_display_repository.dart';
 import 'services/command_service.dart';
 import 'services/alert_service.dart';
+import 'services/hr/attendance_sync_service.dart';
+import 'services/hr/advance_sync_service.dart';
 
 void main(List<String> args) {
   runZonedGuarded(
@@ -187,6 +189,12 @@ void main(List<String> args) {
 
           // ✅ [Fixed] CommandService now uses REST Polling on Windows, safe to start.
           CommandService().startListening();
+          
+          // ✅ Start sync for mobile attendance
+          AttendanceSyncService().startSyncTimer();
+          
+          // ✅ Start sync for mobile advance money requests
+          AdvanceSyncService().startSyncTimer();
         } catch (e) {
           debugPrint('⚠️ [Background Init Error]: $e');
         }

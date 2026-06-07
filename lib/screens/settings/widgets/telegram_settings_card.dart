@@ -11,7 +11,7 @@ class TelegramSettingsCard extends ConsumerWidget {
   void _showTelegramSettingsDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(builder: (context, setStateDlg) {
+      builder: (context) => Consumer(builder: (context, ref, _) {
         return AlertDialog(
           title: const Text('ตั้งค่าการแจ้งเตือน (Notification Config)'),
           content: SingleChildScrollView(

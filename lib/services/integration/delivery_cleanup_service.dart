@@ -7,6 +7,7 @@ import '../../services/settings_service.dart';
 import '../../repositories/delivery_history_repository.dart';
 import 'delivery_distance_service.dart';
 import '../logger_service.dart';
+import '../../repositories/debtor_repository.dart';
 
 class DeliveryCleanupService {
   final MySQLService _dbService;
@@ -116,6 +117,49 @@ class DeliveryCleanupService {
           final double totalAmount = (job['price'] ?? 0.0).toDouble();
           final String status = job['status'] ?? 'completed';
           final String jobType = job['job_type'] ?? 'delivery';
+          final String finalPaymentMethod = (job['payment_method'] ?? '').toString().toLowerCase();
+
+          // ✅ ตรวจสอบ COD / การชำระหนี้ปลายทาง
+          if (orderId > 0 && status == 'completed' && (finalPaymentMethod == 'cash' || finalPaymentMethod == 'transfer' || finalPaymentMethod == 'cod')) {
+             try {
+                final orderCheckRes = await _dbService.query(
+                   'SELECT customerId, grandTotal, received, paymentMethod FROM `order` WHERE id = :id',
+                   {'id': orderId}
+                );
+                
+                if (orderCheckRes.isNotEmpty) {
+                   final orderData = orderCheckRes.first;
+                   final double localGrandTotal = double.tryParse(orderData['grandTotal'].toString()) ?? 0.0;
+                   final double localReceived = double.tryParse(orderData['received'].toString()) ?? 0.0;
+                   final double outstanding = localGrandTotal - localReceived;
+                   
+                   // ถ้าบิลนี้เดิมเป็นเงินเชื่อ หรือมียอดค้างชำระ (COD)
+                   if (outstanding > 0.01) {
+                      LoggerService.info('DeliveryCleanup', '💰 Processing COD / Debt Clearance for Order #$orderId ($finalPaymentMethod)');
+                      
+                      final debtorRepo = DebtorRepository(dbService: _dbService);
+                      
+                      final success = await debtorRepo.paySpecificBill(
+                         orderId: orderId,
+                         amount: outstanding
+                      );
+                      
+                      if (success) {
+                         LoggerService.info('DeliveryCleanup', '✅ COD cleared successfully for Order #$orderId');
+                         // บันทึกวิธีการชำระเงินที่แท้จริง
+                         await _dbService.execute(
+                            "UPDATE `order` SET paymentMethod = :pm WHERE id = :id",
+                            {'pm': finalPaymentMethod, 'id': orderId}
+                         );
+                      } else {
+                         LoggerService.error('DeliveryCleanup', '❌ Failed to clear COD for Order #$orderId', null);
+                      }
+                   }
+                }
+             } catch (e) {
+                LoggerService.error('DeliveryCleanup', 'Error processing COD clearance for Order #$orderId', e);
+             }
+          }
 
           // ✅ ข้ามการเก็บลงประวัติขนส่งสำหรับงานรับของหน้าร้าน/หลังร้าน
           if (jobType == 'pickup' || jobType == 'customer_pickup') {
@@ -311,6 +355,13 @@ class DeliveryCleanupService {
 
           // 🗑️ Delete from Firebase only if archived or already exists AND time is past 16:30
           if (archiveResult > 0 || archiveResult == -1) {
+            try {
+               await _dbService.execute(
+                 'UPDATE delivery_jobs SET status = "COMPLETED" WHERE orderId = :oid',
+                 {'oid': orderId}
+               );
+            } catch (_) {}
+
             final now = DateTime.now();
             final cutoffTime = DateTime(now.year, now.month, now.day, 16, 30);
             

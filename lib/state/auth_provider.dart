@@ -28,6 +28,7 @@ class AuthState {
   bool get canViewCost => isAdmin || (currentUser?.canViewCostPrice ?? false);
   bool get canViewProfit => isAdmin || (currentUser?.canViewProfit ?? false);
   bool get isAdmin => currentUser?.role == 'ADMIN';
+  bool get isHR => currentUser?.role == 'HR';
 
   bool hasPermission(String key) {
     if (currentUser == null) return false;

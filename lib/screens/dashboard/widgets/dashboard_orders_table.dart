@@ -19,6 +19,7 @@ class DashboardOrdersTable extends StatelessWidget {
   final void Function(int orderId) onSendToBackShop;
   final void Function(int orderId) onChangeCustomer;
   final void Function(Map<String, dynamic> row) onDelete;
+  final void Function(Map<String, dynamic> row) onMarkUnpaid;
 
   const DashboardOrdersTable({
     super.key,
@@ -32,6 +33,7 @@ class DashboardOrdersTable extends StatelessWidget {
     required this.onSendToBackShop,
     required this.onChangeCustomer,
     required this.onDelete,
+    required this.onMarkUnpaid,
   });
 
   @override
@@ -287,6 +289,12 @@ class DashboardOrdersTable extends StatelessWidget {
               onPressed: () => onReprint(o),
             ),
             if (type != 'DEBT_PAYMENT') ...[
+              if (rawStatus == 'COMPLETED')
+                IconButton(
+                  icon: const Icon(Icons.money_off, color: Colors.orange, size: 20),
+                  tooltip: 'เปลี่ยนเป็นยังไม่ได้จ่าย',
+                  onPressed: () => onMarkUnpaid(o),
+                ),
               IconButton(
                 icon: const Icon(Icons.local_shipping,
                     color: Colors.orange, size: 20),

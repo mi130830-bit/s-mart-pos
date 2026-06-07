@@ -13,6 +13,13 @@ import '../repositories/fuel_price_repository.dart';
 import '../repositories/vehicle_settings_repository.dart';
 import '../repositories/reward_repository.dart';
 
+// HR Repositories
+import '../repositories/hr/employee_repository.dart';
+import '../repositories/hr/attendance_repository.dart';
+import '../repositories/hr/leave_repository.dart';
+import '../repositories/hr/advance_repository.dart';
+import '../repositories/hr/payroll_repository.dart';
+
 class DatabaseInitializer {
   static final MySQLService _db = MySQLService();
 
@@ -152,6 +159,14 @@ class DatabaseInitializer {
       await _safeInit('Expenses', () => ExpenseRepository().initTable());
       await _safeInit('Promotions', () => PromotionRepository().initTable());
       await _safeInit('Rewards', () => RewardRepository().initTable());
+      
+      // 🧑‍💼 HR & Payroll Tables
+      await _safeInit('Employee Profiles', () => EmployeeRepository().initTable());
+      await _safeInit('Attendance Logs', () => AttendanceRepository().initTable());
+      await _safeInit('Leave Requests', () => LeaveRepository().initTable());
+      await _safeInit('Advance Payments', () => AdvanceRepository().initTable());
+      await _safeInit('Payroll Records', () => PayrollRepository().initTable());
+
       await _safeInit('Shift Summary', () async {
         await _db.execute('''
           CREATE TABLE IF NOT EXISTS shift_summary (

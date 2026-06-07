@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/settings_service.dart';
 import '../../services/telegram_service.dart';
+import '../../services/firestore_rest_service.dart';
+import '../../services/logger_service.dart';
 
 class ConnectionSettingsState {
   final bool isLoading;
@@ -175,6 +177,20 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
     await _settings.set('shop_latitude', lat.toString());
     await _settings.set('shop_longitude', lng.toString());
     await _settings.set('fuel_cost_per_km', fuelRate.toString());
+
+    // ✅ Sync พิกัดร้านไปยัง Firestore config/mobile_app
+    // เพื่อให้ S-Link ทุกเครื่องดึงพิกัดสำหรับระบบลงเวลาได้อัตโนมัติ
+    if (lat != 0.0 && lng != 0.0) {
+      FirestoreRestService().setDocument('config', 'mobile_app', {
+        'store_lat': lat,
+        'store_lng': lng,
+        'max_checkin_distance': 100.0,
+      }).then((_) {
+        LoggerService.info('Settings', 'Synced store GPS to Firestore: $lat, $lng');
+      }).catchError((e) {
+        LoggerService.warning('Settings', 'Failed to sync store GPS to Firestore: $e');
+      });
+    }
   }
 
   void updateTelegramEnabled(bool val) {

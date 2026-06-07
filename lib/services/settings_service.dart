@@ -298,7 +298,7 @@ class SettingsService {
     }
     // Fallback: ค่าจาก MySQL (Global default)
     return _normalizeApiUrl(
-        _memoryCache['api_url'] ?? 'http://localhost:8080/api/v1');
+        _memoryCache['api_url'] ?? 'https://api.namecheap.work/api/v1');
   }
 
   String _normalizeApiUrl(String url) {
@@ -319,7 +319,7 @@ class SettingsService {
   Future<void> syncApiUrlWithHost(String newHost) async {
     try {
       final String currentUrl =
-          _memoryCache['api_url'] ?? 'http://localhost:8080/api/v1';
+          _memoryCache['api_url'] ?? 'https://api.namecheap.work/api/v1';
       final Uri? uri = Uri.tryParse(currentUrl);
       if (uri != null) {
         final newUri = uri.replace(host: newHost);

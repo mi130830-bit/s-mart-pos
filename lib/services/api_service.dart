@@ -16,7 +16,7 @@ class ApiService {
   String get _baseUrl {
     // Default to localhost:8080 if not set
     return SettingsService().getString('api_url') ??
-        'http://localhost:8080/api/v1';
+        'https://api.namecheap.work/api/v1';
   }
 
   Future<String?> getToken() async {

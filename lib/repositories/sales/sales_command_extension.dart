@@ -451,4 +451,89 @@ extension SalesCommandExtension on SalesRepository {
     }
   }
 
+  // 11. เปลี่ยนบิลที่จ่ายแล้วเป็น "ยังไม่ได้จ่าย" (Mark as Unpaid)
+  Future<void> markOrderAsUnpaid(int orderId) async {
+    if (!_dbService.isConnected()) await _dbService.connect();
+    
+    // 1. Fetch current order
+    final orderRes = await _dbService.query(
+      'SELECT status, paymentMethod, customerId, grandTotal FROM `order` WHERE id = :id FOR UPDATE',
+      {'id': orderId}
+    );
+    if (orderRes.isEmpty) throw Exception('ไม่พบบิล #$orderId');
+    
+    final order = orderRes.first;
+    if (order['status'] == 'VOID') throw Exception('บิลถูกยกเลิกไปแล้ว ไม่สามารถเปลี่ยนสถานะได้');
+    if (order['status'] == 'UNPAID') return; // Already unpaid
+    
+    // ป้องกันการเปลี่ยนบิลที่มีการชำระหนี้ไปแล้ว
+    final paymentCheck = await _dbService.query(
+      "SELECT id FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'DEBT_PAYMENT' AND (isDeleted = 0 OR isDeleted IS NULL)",
+      {'oid': orderId}
+    );
+    if (paymentCheck.isNotEmpty) {
+      throw Exception('ไม่สามารถเปลี่ยนสถานะบิลที่ชำระหนี้แล้วได้ กรุณายกเลิกรายการรับชำระหนี้ก่อน');
+    }
+
+    final paymentMethod = order['paymentMethod']?.toString().toUpperCase() ?? '';
+    final grandTotal = double.tryParse(order['grandTotal'].toString()) ?? 0.0;
+    
+    await _dbService.execute('START TRANSACTION;');
+    try {
+      // 2. ถ้าเป็นเครดิตที่ลงบัญชีไปแล้ว ต้องคืนยอดหนี้
+      if (paymentMethod == 'CREDIT') {
+        final debtTrans = await _dbService.query(
+          "SELECT amount, customerId FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'CREDIT_SALE' AND (isDeleted = 0 OR isDeleted IS NULL) FOR UPDATE",
+          {'oid': orderId}
+        );
+        for (var t in debtTrans) {
+          final double amount = double.tryParse(t['amount'].toString()) ?? 0.0;
+          final int cid = int.tryParse(t['customerId'].toString()) ?? 0;
+          if (cid > 0) {
+            await _dbService.execute(
+              'UPDATE customer SET currentDebt = currentDebt - :amt WHERE id = :id',
+              {'amt': amount, 'id': cid}
+            );
+          }
+        }
+        await _dbService.execute(
+          "UPDATE debtor_transaction SET isDeleted = 1, deletedAt = NOW(), deleteReason = 'เปลี่ยนเป็นยังไม่ได้จ่าย' WHERE orderId = :oid AND transactionType = 'CREDIT_SALE'",
+          {'oid': orderId}
+        );
+        try {
+          await _dbService.execute('DELETE FROM customer_ledger WHERE orderId = :oid AND action = "CREDIT_SALE"', {'oid': orderId});
+        } catch (_) {}
+      }
+
+      // 3. เปลี่ยนสถานะบิลและลดยอดรับเงิน
+      await _dbService.execute(
+        "UPDATE `order` SET status = 'UNPAID', received = 0, paymentMethod = '' WHERE id = :id",
+        {'id': orderId}
+      );
+      
+      // 4. บันทึกประวัติ
+      await _activityRepo.log(
+        action: 'MARK_UNPAID',
+        details: 'เปลี่ยนสถานะบิล #$orderId กลับเป็นยังไม่ได้จ่าย'
+      );
+      
+      await _dbService.execute('COMMIT;');
+      
+      // 5. แจ้งเตือน Telegram (ใช้คีย์ลบบิล/ยกเลิกบิลแทน)
+      if (await TelegramService().shouldNotify(TelegramService.keyNotifyDeleteBill)) {
+        TelegramService().sendMessage(
+          '🔄 *แจ้งเตือนแก้ไขบิล*\n'
+          '━━━━━━━━━━━━━━━━━━\n'
+          '🧾 *เลขที่บิล:* #$orderId\n'
+          '💰 *ยอดเงิน:* ${grandTotal.toStringAsFixed(2)} บาท\n'
+          '⚠️ *สถานะ:* ถูกเปลี่ยนเป็น "ยังไม่ได้จ่าย"'
+        );
+      }
+    } catch (e) {
+      await _dbService.execute('ROLLBACK;');
+      LoggerService.error('SalesRepository', 'Error marking order as unpaid', e);
+      rethrow;
+    }
+  }
+
 }

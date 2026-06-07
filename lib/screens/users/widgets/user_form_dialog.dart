@@ -246,6 +246,10 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                           child: Text('Admin (ผู้ดูแล)'),
                         ),
                         DropdownMenuItem(
+                          value: 'HR',
+                          child: Text('HR (บุคคล)'),
+                        ),
+                        DropdownMenuItem(
                           value: 'CASHIER',
                           child: Text('Cashier (พนักงาน)'),
                         ),
@@ -326,6 +330,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                     _buildPermToggle('history_send_pickup', 'ประวัติ: ส่งหลังร้าน'),
                     _buildPermToggle('history_delete_bill', 'ประวัติ: ลบบิล'),
                     _buildPermToggle('history_edit_customer', 'ประวัติ: แก้ไขลูกค้า'),
+                    _buildPermToggle('history_mark_unpaid', 'ประวัติ: แก้เป็นค้างจ่าย'),
                     _buildPermToggle('edit_unpaid_order', 'ประวัติ: แก้ไขรายการบิล'),
                     // --- Delivery Report ---
                     _buildPermToggle('view_delivery_report', 'ระบบขนส่ง'),

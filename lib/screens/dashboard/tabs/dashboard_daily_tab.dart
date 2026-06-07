@@ -59,6 +59,7 @@ class _DashboardDailyTabState extends ConsumerState<DashboardDailyTab> {
                 onSendToBackShop: (id) => notifier.sendToBackShop(context, id),
                 onChangeCustomer: (id) => notifier.changeCustomer(context, id),
                 onDelete: (row) => notifier.deleteOrder(context, row),
+                onMarkUnpaid: (row) => notifier.markAsUnpaid(context, row),
               ),
             ),
           ),

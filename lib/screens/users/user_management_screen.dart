@@ -7,6 +7,8 @@ import 'widgets/user_form_dialog.dart';
 import 'widgets/change_password_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+
+
 class UserManagementScreen extends ConsumerStatefulWidget {
   const UserManagementScreen({super.key});
 
@@ -15,8 +17,6 @@ class UserManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
-  // ไม่ต้องใช้ _controller หรือ initState อีกต่อไปเพราะ Riverpod จะจัดการให้เมื่อถูกเรียกใช้
-  
   void _confirmDelete(model.User user) {
     ConfirmDialog.show(
       context,
@@ -41,7 +41,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('จัดการผู้ใช้งาน (User Management)')),
+      appBar: AppBar(
+        title: const Text('จัดการผู้ใช้งาน (User Management)'),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => UserFormDialog.show(context),
         icon: const Icon(Icons.person_add),

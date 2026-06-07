@@ -226,7 +226,7 @@ class DashboardTabDaily extends ConsumerWidget {
             onSendToDelivery: onSendToDelivery,
             onSendToBackShop: onSendToBackShop,
             onChangeCustomer: onChangeCustomer,
-            onDelete: onDelete,
+            onDelete: onDelete, onMarkUnpaid: (Map<String, dynamic> row) {  },
           ),
         ],
       ),

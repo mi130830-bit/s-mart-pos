@@ -13,6 +13,9 @@ part 'firestore/firestore_rest_cars.dart';
 part 'firestore/firestore_rest_customers.dart';
 part 'firestore/firestore_rest_commands.dart';
 part 'firestore/firestore_rest_logs.dart';
+part 'firestore/firestore_rest_users.dart';
+part 'firestore/firestore_rest_attendance.dart';
+part 'firestore/firestore_rest_advance.dart';
 
 class FirestoreResult<T> {
   final T? data;
@@ -131,6 +134,14 @@ class FirestoreRestService {
 
   static Future<List<Map<String, dynamic>>> fetchPendingCommands(String devId) async {
     final result = await _instance.getPendingCommands(devId);
+    if (!result.isSuccess) {
+      throw Exception(result.errorMessage);
+    }
+    return result.data!;
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchSLinkUsers() async {
+    final result = await _instance.getSLinkUsers();
     if (!result.isSuccess) {
       throw Exception(result.errorMessage);
     }

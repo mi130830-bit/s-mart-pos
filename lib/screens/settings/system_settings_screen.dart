@@ -6,10 +6,67 @@ import '../../services/settings_service.dart';
 import '../users/user_management_screen.dart';
 import '../../widgets/common/custom_buttons.dart';
 import '../../widgets/common/confirm_dialog.dart';
-// import 'line_settings_widget.dart'; // Moved to connection_settings_screen.dart
+import 'package:package_info_plus/package_info_plus.dart';
+import '../../services/mysql_service.dart';
+import '../../services/firestore_rest_service.dart';
 
 class SystemSettingsScreen extends StatelessWidget {
   const SystemSettingsScreen({super.key});
+
+  Future<void> _clearAllHrData(BuildContext context) async {
+    final confirm = await ConfirmDialog.show(
+      context,
+      title: 'ยืนยันล้างข้อมูล HR (ทดสอบ)',
+      content: 'คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลการลงเวลาและการเบิกเงินล่วงหน้าทั้งหมด?\n(ล้างทั้ง MySQL และ Firebase)\n*คำเตือน: โปรดระวังหากใช้งานในระบบจริง',
+      isDestructive: true,
+      confirmText: 'ล้างข้อมูล',
+    );
+    if (confirm != true) return;
+
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // 1. Clear MySQL Tables
+      await MySQLService().execute('SET FOREIGN_KEY_CHECKS = 0;');
+      await MySQLService().execute('TRUNCATE TABLE attendance_log;');
+      await MySQLService().execute('TRUNCATE TABLE advance_deduction;');
+      await MySQLService().execute('TRUNCATE TABLE advance_payment;');
+      await MySQLService().execute('TRUNCATE TABLE leave_request;');
+      await MySQLService().execute('SET FOREIGN_KEY_CHECKS = 1;');
+
+      // 2. Clear Firebase Collections
+      final att = await FirestoreRestService().getAttendanceLogs();
+      if (att.isSuccess && att.data != null) {
+        for (var doc in att.data!) {
+          final id = doc['name']?.toString().split('/').last;
+          if (id != null) await FirestoreRestService.deleteDocument('attendance_logs', id);
+        }
+      }
+
+      final adv = await FirestoreRestService().getAdvanceMoneyRequests();
+      if (adv.isSuccess && adv.data != null) {
+        for (var doc in adv.data!) {
+          final id = doc['name']?.toString().split('/').last;
+          if (id != null) await FirestoreRestService.deleteDocument('advance_money_requests', id);
+        }
+      }
+
+      if (context.mounted) {
+        Navigator.pop(context); // close dialog
+        AlertService.show(context: context, message: 'ล้างข้อมูล HR ทั้งหมดเรียบร้อยแล้ว', type: 'success');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // close dialog
+        AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+      }
+    }
+  }
 
   Future<void> _showClearOldDataDialog(BuildContext context) async {
     String selectedType = 'SALES'; // SALES, BILLING
@@ -230,6 +287,16 @@ class SystemSettingsScreen extends StatelessWidget {
                 ),
                 const Divider(),
                 ListTile(
+                  leading: const Icon(Icons.person_off, color: Colors.red),
+                  title: const Text('ล้างข้อมูล HR ทั้งหมด (HR Data Reset)',
+                      style: TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold)),
+                  subtitle: const Text(
+                      'ล้างข้อมูลเข้างานและเบิกเงินล่วงหน้าทั้งหมดเพื่อทดสอบระบบ'),
+                  onTap: () => _clearAllHrData(context),
+                ),
+                const Divider(),
+                ListTile(
                   leading: const Icon(Icons.delete_forever, color: Colors.red),
                   title: const Text('ล้างข้อมูลทั้งหมด (Factory Reset)',
                       style: TextStyle(
@@ -242,9 +309,22 @@ class SystemSettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 40),
-          const Center(
-              child: Text('Version 1.0.6 (Build 2025)',
-                  style: TextStyle(color: Colors.grey))),
+          FutureBuilder<PackageInfo>(
+            future: PackageInfo.fromPlatform(),
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                final info = snapshot.data!;
+                return Center(
+                  child: Text(
+                    'Version ${info.version} (Build ${info.buildNumber})',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );

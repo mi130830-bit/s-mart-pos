@@ -485,6 +485,25 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
     }
   }
 
+  Future<void> markAsUnpaid(BuildContext context, Map<String, dynamic> row) async {
+    final orderId = int.tryParse(row['id'].toString()) ?? 0;
+    
+    // เช็คสิทธิ์ 'history_mark_unpaid' ถ้าไม่มีสิทธิ์จะถามหารหัส Admin อัตโนมัติ
+    if (!await _checkPermission(context, 'history_mark_unpaid') || !context.mounted) return;
+
+    try {
+      await _salesRepo.markOrderAsUnpaid(orderId);
+      if (context.mounted) {
+        AlertService.show(context: context, message: 'เปลี่ยนสถานะบิล #$orderId เป็นยังไม่ได้จ่ายเรียบร้อย', type: 'success');
+        loadData();
+      }
+    } catch (e) {
+      if (context.mounted) {
+        AlertService.show(context: context, message: e.toString().replaceAll('Exception: ', ''), type: 'error');
+      }
+    }
+  }
+
   Future<void> exportDeliveryHistory(BuildContext context) async {
     final now = DateTime.now();
     final dateRange = await showDateRangePicker(
