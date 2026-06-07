@@ -214,51 +214,7 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
                   padding: const EdgeInsets.only(top: 4),
                   child: _buildInlineTempLeaveActive(log),
                 ),
-              // ถ้ากลับเข้างานแล้ว แสดง chip กว้าง + expandable
-              if (hasTempHistory)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        if (isExpanded) {
-                          _expandedRows.remove(emp.id);
-                        } else {
-                          _expandedRows.add(emp.id);
-                        }
-                      });
-                    },
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.history, size: 12, color: Colors.orange),
-                              const SizedBox(width: 4),
-                              Text(
-                                'ออกชั่วคราว • ${_formatDuration(log.backToWork!.difference(log.tempOut!))}',
-                                style: const TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(
-                                isExpanded ? Icons.expand_less : Icons.expand_more,
-                                size: 14,
-                                color: Colors.orange,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              // ถ้ากลับเข้างานแล้ว ลบ chip แบบซ่อนออก เพื่อให้ไปโชว์ใน timeline เต็มๆ ด้านล่างเลย
             ],
           ),
           isThreeLine: isOnTempLeave || hasTempHistory,
@@ -283,8 +239,8 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
             ],
           ),
         ),
-        // โซน Expandable Timeline (timeline เต็ม)
-        if (hasTempHistory && isExpanded)
+        // โซน Timeline เต็ม (แสดงเสมอ ไม่ต้องซ่อน)
+        if (hasTempHistory)
           _buildExpandedTimeline(log),
       ],
     );
