@@ -44,7 +44,7 @@ class _OverrideClockinDialogState extends ConsumerState<OverrideClockinDialog> {
   @override
   void initState() {
     super.initState();
-    final now = TimeOfDay.now();
+    final now = widget.actionType == 'OUT' ? const TimeOfDay(hour: 17, minute: 0) : TimeOfDay.now();
     _hourController = TextEditingController(text: now.hour.toString().padLeft(2, '0'));
     _minuteController = TextEditingController(text: now.minute.toString().padLeft(2, '0'));
 
