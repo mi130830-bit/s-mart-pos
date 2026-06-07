@@ -19,8 +19,6 @@ class HrAttendanceTab extends ConsumerStatefulWidget {
 }
 
 class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
-  // ตัวเก็บ track expanded rows สำหรับ timeline
-  final Set<int> _expandedRows = {};
   // Timer สำหรับเดิน realtime วัดเวลาออกชั่วคราว
   Timer? _realtimeTimer;
   int _tickCount = 0; // ใช้ trigger setState เพื่อ update timer
@@ -193,7 +191,6 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
 
     // ตรวจว่ามีประวัติ temp-out ที่เสร็จแล้ว (backToWork != null)
     final hasTempHistory = log != null && log.tempOut != null && log.backToWork != null;
-    final isExpanded = _expandedRows.contains(emp.id);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
