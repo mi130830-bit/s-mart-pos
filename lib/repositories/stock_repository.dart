@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../services/mysql_service.dart';
 import '../services/telegram_service.dart';
+import './activity_repository.dart';
 
 part 'stock/stock_ledger_extension.dart';
 part 'stock/purchase_order_query_extension.dart';
@@ -38,6 +39,11 @@ class StockRepository {
       // --- Notification Logic (Fire & Forget) ---
       // ✅ ย้ายออกนอก transaction เพื่อไม่ให้ block
       _checkAndNotify(productId, quantityChange, type, note);
+      
+      ActivityRepository().log(
+        action: 'ADJUST_STOCK',
+        details: 'Product ID: $productId, Change: $quantityChange, Type: $type, Note: ${note ?? "-"}',
+      );
 
       return true;
     } catch (e) {
@@ -234,6 +240,11 @@ class StockRepository {
       await _dbService.execute('COMMIT;');
 
       _checkAndNotify(productId, diff, 'ADJUST_FIX', note);
+      
+      ActivityRepository().log(
+        action: 'ADJUST_STOCK_EXACT',
+        details: 'Product ID: $productId, Set to: $actualQty (Diff: $diff), Note: ${note ?? "-"}',
+      );
 
       return true;
     } catch (e) {

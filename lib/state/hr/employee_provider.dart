@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../../models/hr/employee_profile.dart';
 import '../../repositories/hr/employee_repository.dart';
 import '../../services/firestore_rest_service.dart';
+import '../../repositories/activity_repository.dart';
+import '../auth_provider.dart';
 
 class EmployeeState {
   final List<EmployeeProfile> employees;
@@ -57,6 +59,13 @@ class EmployeeNotifier extends AutoDisposeNotifier<EmployeeState> {
     try {
       await _repo.create(emp);
       await _syncToFirestore(emp);
+      
+      ActivityRepository().log(
+        userId: ref.read(authProvider).currentUser?.id,
+        action: 'ADD_EMPLOYEE',
+        details: 'Added employee: ${emp.displayName} (Code: ${emp.employeeCode})',
+      );
+      
       await loadAll();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
@@ -69,6 +78,13 @@ class EmployeeNotifier extends AutoDisposeNotifier<EmployeeState> {
     try {
       await _repo.update(emp);
       await _syncToFirestore(emp);
+
+      ActivityRepository().log(
+        userId: ref.read(authProvider).currentUser?.id,
+        action: 'UPDATE_EMPLOYEE',
+        details: 'Updated employee: ${emp.displayName} (Code: ${emp.employeeCode})',
+      );
+
       await loadAll();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);

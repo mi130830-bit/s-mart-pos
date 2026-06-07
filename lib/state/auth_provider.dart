@@ -8,6 +8,7 @@ import '../services/firebase_service.dart';
 import '../services/mysql_service.dart';
 import '../services/api_service.dart';
 import 'package:dbcrypt/dbcrypt.dart';
+import '../repositories/activity_repository.dart';
 
 class AuthState {
   final User? currentUser;
@@ -206,6 +207,13 @@ class AuthNotifier extends AutoDisposeNotifier<AuthState> {
 
       if (isMatch) {
         debugPrint('✅ Local Login Success: $username');
+        
+        // Log Activity
+        ActivityRepository().log(
+          userId: row['id'],
+          action: row['role'] == 'ADMIN' ? 'ADMIN_LOGIN' : 'USER_LOGIN',
+          details: 'User $username logged in locally.',
+        );
 
         final permResults = await db.query(
           'SELECT permissionKey, isAllowed FROM user_permission WHERE userId = :uid',
@@ -246,6 +254,15 @@ class AuthNotifier extends AutoDisposeNotifier<AuthState> {
   }
 
   void logout() async {
+    final oldUser = state.currentUser;
+    if (oldUser != null) {
+      ActivityRepository().log(
+        userId: oldUser.id,
+        action: 'LOGOUT',
+        details: 'User ${oldUser.username} logged out.',
+      );
+    }
+    
     state = state.copyWith(clearUser: true, permissions: {});
     _firebaseService.stopListener();
 

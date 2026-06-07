@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/hr/advance_payment.dart';
 import '../../repositories/hr/advance_repository.dart';
 import '../../services/hr/advance_service.dart';
+import '../../repositories/activity_repository.dart';
 
 class AdvanceState {
   final List<AdvancePayment> pending;
@@ -99,6 +100,13 @@ class AdvanceNotifier extends AutoDisposeNotifier<AdvanceState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await _service.approveAdvance(id, approvedBy);
+      
+      ActivityRepository().log(
+        userId: approvedBy,
+        action: 'APPROVE_ADVANCE',
+        details: 'Approved advance payment ID: $id',
+      );
+      
       await loadPending();
       await loadAllHistory();
     } catch (e) {

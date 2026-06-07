@@ -3,6 +3,8 @@ import '../../models/hr/payroll_record.dart';
 import '../../repositories/hr/payroll_repository.dart';
 import '../../services/hr/payroll_calculation_service.dart';
 import '../../services/hr/advance_service.dart';
+import '../../repositories/activity_repository.dart';
+import '../auth_provider.dart';
 
 class PayrollState {
   final List<PayrollRecord> records; // Currently loaded records (e.g. for a period)
@@ -158,6 +160,12 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await _repo.markPaid(id);
+      
+      ActivityRepository().log(
+        userId: ref.read(authProvider).currentUser?.id,
+        action: 'PAY_PAYROLL',
+        details: 'Marked payroll record ID $id as paid.',
+      );
       
       final updatedRecords = state.records.map((r) {
         if (r.id == id) {

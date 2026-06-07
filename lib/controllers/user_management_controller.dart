@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../repositories/user_repository.dart';
 import '../../models/user.dart' as model;
+import '../../repositories/activity_repository.dart';
+import '../state/auth_provider.dart';
 
 class UserManagementState {
   final List<model.User> users;
@@ -47,6 +49,11 @@ class UserManagementNotifier extends AutoDisposeNotifier<UserManagementState> {
   Future<bool> deleteUser(int userId) async {
     final success = await _userRepo.deleteUser(userId);
     if (success) {
+      ActivityRepository().log(
+        userId: ref.read(authProvider).currentUser?.id,
+        action: 'DELETE_USER',
+        details: 'Deleted user ID: $userId',
+      );
       await loadUsers();
     }
     return success;
@@ -94,6 +101,12 @@ class UserManagementNotifier extends AutoDisposeNotifier<UserManagementState> {
       if (targetId > 0) {
         await _userRepo.setPermissions(targetId, permissions);
       }
+      
+      ActivityRepository().log(
+        userId: ref.read(authProvider).currentUser?.id,
+        action: isEditing ? 'UPDATE_USER' : 'ADD_USER',
+        details: '${isEditing ? "Updated" : "Added"} user: ${newUser.username}',
+      );
       
       await loadUsers();
       return true;
