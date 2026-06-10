@@ -34,7 +34,7 @@ class DeliveryNotePdf {
     final double calculatedTotal = items
         .fold<Decimal>(Decimal.zero, (sum, i) => sum + (i.price * i.quantity))
         .toDouble();
-    
+
     final double totalLineDiscount = items
         .fold<Decimal>(Decimal.zero, (sum, i) => sum + i.discount)
         .toDouble();
@@ -53,7 +53,7 @@ class DeliveryNotePdf {
     final bool isContinuous = pageFormat.height < 430; // 5.5in = ~396pt
     // else: A5 standard
 
-    final int itemsPerPage = isA4 ? 20 : (isContinuous ? 6 : 8);
+    final int itemsPerPage = isA4 ? 20 : (isContinuous ? 8 : 8);
     final double globalFontSize = isA4 ? 12.0 : 9.5;
     final double headerFontSize = isA4 ? 12.0 : 9.0;
     final double titleFontSize = isA4 ? 16.0 : 13.0;
@@ -144,11 +144,13 @@ class DeliveryNotePdf {
                     shopInfo.name.trim().startsWith('ร้าน')
                         ? shopInfo.name.trim()
                         : 'ร้าน ${shopInfo.name.trim()}',
-                    style: pw.TextStyle(font: fontBold, fontSize: shopNameFontSize)),
+                    style: pw.TextStyle(
+                        font: fontBold, fontSize: shopNameFontSize)),
                 if (!shopInfo.address.contains('จำหน่ายวัสดุก่อสร้าง') &&
                     !shopInfo.address.contains('อุปกรณ์ไฟฟ้า'))
                   pw.Text('จำหน่ายวัสดุก่อสร้าง อุปกรณ์ไฟฟ้าและประปา',
-                      style: pw.TextStyle(font: font, fontSize: headerFontSize)),
+                      style:
+                          pw.TextStyle(font: font, fontSize: headerFontSize)),
                 pw.Text(shopInfo.address,
                     style: pw.TextStyle(font: font, fontSize: headerFontSize)),
                 pw.Text('โทร: ${shopInfo.phone}',
@@ -156,7 +158,8 @@ class DeliveryNotePdf {
               ]),
         ),
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text(title, style: pw.TextStyle(font: fontBold, fontSize: titleFontSize)),
+          pw.Text(title,
+              style: pw.TextStyle(font: fontBold, fontSize: titleFontSize)),
           pw.Row(children: [
             pw.SizedBox(
                 width: headerFontSize * 5.0,
@@ -249,19 +252,26 @@ class DeliveryNotePdf {
                     bottom: pw.BorderSide(
                         width: 1.0))), // Top/Bottom lines for header
             children: [
-              _cell('ลำดับ', fontBold, fontSize, align: pw.TextAlign.center, paddingVertical: paddingVertical),
-              _cell('รายการ', fontBold, fontSize, paddingVertical: paddingVertical),
-              _cell('จำนวน', fontBold, fontSize, align: pw.TextAlign.center, paddingVertical: paddingVertical),
-              _cell('ราคา', fontBold, fontSize, align: pw.TextAlign.right, paddingVertical: paddingVertical),
-              _cell('รวม', fontBold, fontSize, align: pw.TextAlign.right, paddingVertical: paddingVertical),
+              _cell('ลำดับ', fontBold, fontSize,
+                  align: pw.TextAlign.center, paddingVertical: paddingVertical),
+              _cell('รายการ', fontBold, fontSize,
+                  paddingVertical: paddingVertical),
+              _cell('จำนวน', fontBold, fontSize,
+                  align: pw.TextAlign.center, paddingVertical: paddingVertical),
+              _cell('ราคา', fontBold, fontSize,
+                  align: pw.TextAlign.right, paddingVertical: paddingVertical),
+              _cell('รวม', fontBold, fontSize,
+                  align: pw.TextAlign.right, paddingVertical: paddingVertical),
             ]),
         ...items.asMap().entries.map((entry) {
           final item = entry.value;
           return pw.TableRow(children: [
             _cell('${startIndex + entry.key}', font, fontSize,
                 align: pw.TextAlign.center, paddingVertical: paddingVertical),
-            _cell(item.productName, font, fontSize, paddingVertical: paddingVertical),
-            _cell('${item.quantity}', font, fontSize, align: pw.TextAlign.center, paddingVertical: paddingVertical),
+            _cell(item.productName, font, fontSize,
+                paddingVertical: paddingVertical),
+            _cell('${item.quantity}', font, fontSize,
+                align: pw.TextAlign.center, paddingVertical: paddingVertical),
             _cell(moneyFmt.format(item.price.toDouble()), font, fontSize,
                 align: pw.TextAlign.right, paddingVertical: paddingVertical),
             _cell(moneyFmt.format((item.price * item.quantity).toDouble()),
@@ -274,9 +284,11 @@ class DeliveryNotePdf {
   }
 
   static pw.Widget _cell(String text, pw.Font font, double fontSize,
-          {pw.TextAlign align = pw.TextAlign.left, required double paddingVertical}) =>
+          {pw.TextAlign align = pw.TextAlign.left,
+          required double paddingVertical}) =>
       pw.Padding(
-          padding: pw.EdgeInsets.symmetric(vertical: paddingVertical, horizontal: 4),
+          padding:
+              pw.EdgeInsets.symmetric(vertical: paddingVertical, horizontal: 4),
           child: pw.Text(text,
               style: pw.TextStyle(font: font, fontSize: fontSize),
               textAlign: align));
@@ -316,7 +328,8 @@ class DeliveryNotePdf {
                   pw.SizedBox(
                       width: fontSize * 8.0,
                       child: pw.Text('รวม :',
-                          style: pw.TextStyle(font: fontBold, fontSize: fontSize),
+                          style:
+                              pw.TextStyle(font: fontBold, fontSize: fontSize),
                           textAlign: pw.TextAlign.right)),
                   pw.SizedBox(
                       width: fontSize * 7.0,
@@ -328,7 +341,8 @@ class DeliveryNotePdf {
                   pw.SizedBox(
                       width: fontSize * 8.0,
                       child: pw.Text('ส่วนลด :',
-                          style: pw.TextStyle(font: fontBold, fontSize: fontSize),
+                          style:
+                              pw.TextStyle(font: fontBold, fontSize: fontSize),
                           textAlign: pw.TextAlign.right)),
                   pw.SizedBox(
                       width: fontSize * 7.0,
@@ -341,12 +355,14 @@ class DeliveryNotePdf {
                   pw.SizedBox(
                       width: fontSize * 8.0,
                       child: pw.Text('ยอดรวมทั้งสิ้น :',
-                          style: pw.TextStyle(font: fontBold, fontSize: fontSize),
+                          style:
+                              pw.TextStyle(font: fontBold, fontSize: fontSize),
                           textAlign: pw.TextAlign.right)),
                   pw.SizedBox(
                       width: fontSize * 7.0,
                       child: pw.Text(moneyFmt.format(grandTotal),
-                          style: pw.TextStyle(font: fontBold, fontSize: fontSize),
+                          style:
+                              pw.TextStyle(font: fontBold, fontSize: fontSize),
                           textAlign: pw.TextAlign.right)),
                 ]),
                 pw.SizedBox(height: footerSpacing),

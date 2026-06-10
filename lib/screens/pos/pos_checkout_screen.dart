@@ -64,58 +64,63 @@ class _PosCheckoutScreenState extends ConsumerState<PosCheckoutScreen> with PosB
           }
         },
       },
-      child: Stack(
-        children: [
-          Scaffold(
-            body: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                if (MediaQuery.of(context).viewInsets.bottom == 0) {
-                  barcodeFocusNode.requestFocus();
-                }
-              },
-              child: PosLayoutSelector(
-                controlBar: PosControlBar(
-                  barcodeCtrl: barcodeCtrl,
-                  qtyCtrl: qtyCtrl,
-                  barcodeFocusNode: barcodeFocusNode,
-                  onScan: (val) => val.isEmpty
-                      ? openPaymentModal()
-                      : handleBarcodeSubmit(val, posState),
-                  onSearch: () => showSearchDialog(posState),
-                  onQtyTap: () => PosQuantityDialog.show(context,
-                      onConfirm: applyQuantity),
-                ),
-                cartList: _buildCartList(posState),
-                shortcutBar: const PosShortcutBar(),
-                paymentPanel: PosPaymentPanel(
-                  onPaymentSuccess: resetTransaction,
-                  onClear: resetTransaction,
-                  onHoldSuccess: () {
-                    posState.selectCustomer(null);
-                    setState(() => qtyCtrl.text = '1');
+      child: Focus(
+        autofocus: true,
+        canRequestFocus: true,
+        descendantsAreFocusable: true,
+        child: Stack(
+          children: [
+            Scaffold(
+              body: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (MediaQuery.of(context).viewInsets.bottom == 0) {
                     barcodeFocusNode.requestFocus();
-                  },
+                  }
+                },
+                child: PosLayoutSelector(
+                  controlBar: PosControlBar(
+                    barcodeCtrl: barcodeCtrl,
+                    qtyCtrl: qtyCtrl,
+                    barcodeFocusNode: barcodeFocusNode,
+                    onScan: (val) => val.isEmpty
+                        ? openPaymentModal()
+                        : handleBarcodeSubmit(val, posState),
+                    onSearch: () => showSearchDialog(posState),
+                    onQtyTap: () => PosQuantityDialog.show(context,
+                        onConfirm: applyQuantity),
+                  ),
+                  cartList: _buildCartList(posState),
+                  shortcutBar: const PosShortcutBar(),
+                  paymentPanel: PosPaymentPanel(
+                    onPaymentSuccess: resetTransaction,
+                    onClear: resetTransaction,
+                    onHoldSuccess: () {
+                      posState.selectCustomer(null);
+                      setState(() => qtyCtrl.text = '1');
+                      barcodeFocusNode.requestFocus();
+                    },
+                  ),
                 ),
               ),
             ),
-          ),
-          if (isLoading)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 16),
-                    Text('กำลังบันทึก...',
-                        style: TextStyle(color: Colors.white, fontSize: 18)),
-                  ],
+            if (isLoading)
+              Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 16),
+                      Text('กำลังบันทึก...',
+                          style: TextStyle(color: Colors.white, fontSize: 18)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
