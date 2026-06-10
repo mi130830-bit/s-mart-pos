@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../services/excel_export_service.dart';
 import '../../services/alert_service.dart';
-import '../../services/settings_service.dart';
 import '../../repositories/delivery_history_repository.dart';
 import '../../services/integration/delivery_integration_service.dart';
 import '../../services/mysql_service.dart';
@@ -372,10 +371,9 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       _filteredRecords.fold(0.0, (total, r) => total + (double.tryParse(r['totalAmount']?.toString() ?? '0') ?? 0.0));
 
   double get _totalFuelCost {
-    final fuelRate = SettingsService().fuelCostPerKm;
     return _filteredRecords.fold(0.0, (total, r) {
-      final dist = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
-      return total + (dist * fuelRate);
+      final fuel = double.tryParse(r['fuelCostEstimate']?.toString() ?? '0') ?? 0.0;
+      return total + fuel;
     });
   }
 

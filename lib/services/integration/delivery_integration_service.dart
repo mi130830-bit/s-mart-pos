@@ -82,7 +82,6 @@ class DeliveryIntegrationService {
         final distFilled = await repo.backfillDistanceAndFuel(
           shopLat: shopLat,
           shopLng: shopLng,
-          fuelRate: settings.fuelCostPerKm,
           calcRoadDistance: _distanceService.getRoadDistanceRoundTrip,
         );
         if (distFilled > 0) {

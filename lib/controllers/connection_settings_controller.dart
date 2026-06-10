@@ -79,7 +79,6 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
   // Delivery / GPS
   late final TextEditingController shopLatCtrl;
   late final TextEditingController shopLngCtrl;
-  late final TextEditingController fuelCostCtrl;
 
   @override
   ConnectionSettingsState build() {
@@ -91,7 +90,6 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
     apiUrlCtrl = TextEditingController(text: _settings.apiUrl);
     shopLatCtrl = TextEditingController(text: _settings.shopLatitude != 0.0 ? _settings.shopLatitude.toString() : '16.160189');
     shopLngCtrl = TextEditingController(text: _settings.shopLongitude != 0.0 ? _settings.shopLongitude.toString() : '100.802307');
-    fuelCostCtrl = TextEditingController(text: _settings.fuelCostPerKm.toString());
 
     ref.onDispose(() {
       telegramTokenCtrl.dispose();
@@ -102,7 +100,6 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
       apiUrlCtrl.dispose();
       shopLatCtrl.dispose();
       shopLngCtrl.dispose();
-      fuelCostCtrl.dispose();
     });
 
     return ConnectionSettingsState(
@@ -146,7 +143,6 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
 
     shopLatCtrl.text = _settings.shopLatitude != 0.0 ? _settings.shopLatitude.toString() : '16.160189';
     shopLngCtrl.text = _settings.shopLongitude != 0.0 ? _settings.shopLongitude.toString() : '100.802307';
-    fuelCostCtrl.text = _settings.fuelCostPerKm.toString();
 
     state = state.copyWith(isLoading: false);
   }
@@ -173,10 +169,8 @@ class ConnectionSettingsNotifier extends AutoDisposeNotifier<ConnectionSettingsS
 
     final lat = double.tryParse(shopLatCtrl.text.trim()) ?? 0.0;
     final lng = double.tryParse(shopLngCtrl.text.trim()) ?? 0.0;
-    final fuelRate = double.tryParse(fuelCostCtrl.text.trim()) ?? 3.0;
     await _settings.set('shop_latitude', lat.toString());
     await _settings.set('shop_longitude', lng.toString());
-    await _settings.set('fuel_cost_per_km', fuelRate.toString());
 
     // ✅ Sync พิกัดร้านไปยัง Firestore config/mobile_app
     // เพื่อให้ S-Link ทุกเครื่องดึงพิกัดสำหรับระบบลงเวลาได้อัตโนมัติ

@@ -39,4 +39,18 @@ extension ProductRepositoryStock on ProductRepository {
       ''';
     return await _dbService.query(sql, {'date': dateThreshold});
   }
+
+  Future<double> getInventoryValuation() async {
+    if (!_dbService.isConnected()) await _dbService.connect();
+    final sql = '''
+      SELECT SUM(stockQuantity * costPrice) as totalValuation 
+      FROM product 
+      WHERE isActive = 1 AND stockQuantity > 0 AND trackStock = 1
+    ''';
+    final result = await _dbService.query(sql);
+    if (result.isNotEmpty && result.first['totalValuation'] != null) {
+      return double.tryParse(result.first['totalValuation'].toString()) ?? 0.0;
+    }
+    return 0.0;
+  }
 }

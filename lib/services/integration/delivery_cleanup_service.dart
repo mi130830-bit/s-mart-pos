@@ -8,7 +8,8 @@ import '../../repositories/delivery_history_repository.dart';
 import 'delivery_distance_service.dart';
 import '../logger_service.dart';
 import '../../repositories/debtor_repository.dart';
-
+import '../../repositories/fuel_price_repository.dart';
+import '../../repositories/vehicle_settings_repository.dart';
 class DeliveryCleanupService {
   final MySQLService _dbService;
   final FirebaseService _firebaseService;
@@ -281,7 +282,10 @@ class DeliveryCleanupService {
             final settings = SettingsService();
             final shopLat = settings.shopLatitude;
             final shopLng = settings.shopLongitude;
-            final fuelRate = settings.fuelCostPerKm;
+            
+            final dateForFuel = completedAt ?? DateTime.now();
+            final fuelPrice = await FuelPriceRepository().getPriceForDate(dateForFuel) ?? 30.0;
+            final efficiency = await VehicleSettingsRepository().getEfficiency(vehiclePlate);
 
             // 🌟 1. ดึงระยะทางจากที่ตั้งค่าไว้ในประวัติลูกค้า (ถ้ามี)
             if (customerName.isNotEmpty && customerName != 'ลูกค้าทั่วไป') {
@@ -293,8 +297,8 @@ class DeliveryCleanupService {
                 if (dbRes.isNotEmpty) {
                   distanceKm = double.tryParse(dbRes.first['distanceKm']?.toString() ?? '0') ?? 0.0;
                   if (distanceKm > 0.0) {
-                    fuelCostEstimate = distanceKm * fuelRate;
-                    LoggerService.info('DeliveryCleanup', 'Using Predefined Customer Distance: ${distanceKm.toStringAsFixed(2)} km | Fuel: ฿${fuelCostEstimate.toStringAsFixed(2)}');
+                    fuelCostEstimate = (distanceKm / efficiency) * fuelPrice;
+                    LoggerService.info('DeliveryCleanup', 'Using Predefined Customer Distance: ${distanceKm.toStringAsFixed(2)} km | Fuel: ฿${fuelCostEstimate.toStringAsFixed(2)} (Price: $fuelPrice, Eff: $efficiency)');
                   }
                 }
               } catch (e) {
@@ -308,8 +312,8 @@ class DeliveryCleanupService {
               final dLng = destinationLng ?? 0.0;
               if (shopLat != 0.0 && shopLng != 0.0 && dLat != 0.0 && dLng != 0.0) {
                 distanceKm = await _distanceService.getRoadDistanceRoundTrip(shopLat, shopLng, dLat, dLng);
-                fuelCostEstimate = distanceKm * fuelRate;
-                LoggerService.info('DeliveryCleanup', 'Road Distance (RT): ${distanceKm.toStringAsFixed(2)} km | Fuel: ฿${fuelCostEstimate.toStringAsFixed(2)}');
+                fuelCostEstimate = (distanceKm / efficiency) * fuelPrice;
+                LoggerService.info('DeliveryCleanup', 'Road Distance (RT): ${distanceKm.toStringAsFixed(2)} km | Fuel: ฿${fuelCostEstimate.toStringAsFixed(2)} (Price: $fuelPrice, Eff: $efficiency)');
                 
                 // ✅ Auto-Save ระยะทางกลับไปที่ข้อมูลลูกค้า เพื่อใช้ในรอบถัดไป
                 if (distanceKm > 0.0 && customerName.isNotEmpty && customerName != 'ลูกค้าทั่วไป') {

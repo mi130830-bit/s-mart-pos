@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../services/alert_service.dart';
-import '../../../../services/settings_service.dart';
 
 class DeliveryReportDataTable extends StatelessWidget {
   final bool isLoading;
@@ -148,19 +147,15 @@ class DeliveryReportDataTable extends StatelessWidget {
               ),
               DataCell(Text(
                 () {
-                  final dist =
-                      double.tryParse(r['distanceKm']?.toString() ?? '0') ??
-                          0.0;
-                  final fuelRate = SettingsService().fuelCostPerKm;
-                  final fuel = dist > 0 ? dist * fuelRate : 0.0;
+                  final fuel = double.tryParse(r['fuelCostEstimate']?.toString() ?? '0') ?? 0.0;
                   return fuel > 0 ? '฿${moneyFormat.format(fuel)}' : '-';
                 }(),
                 style: TextStyle(
                     color: (() {
-                      final dist = double.tryParse(
-                              r['distanceKm']?.toString() ?? '0') ??
+                      final fuelCost = double.tryParse(
+                              r['fuelCostEstimate']?.toString() ?? '0') ??
                           0.0;
-                      return dist > 0 ? Colors.red : Colors.grey;
+                      return fuelCost > 0 ? Colors.red : Colors.grey;
                     })(),
                     fontWeight: FontWeight.bold),
               )),

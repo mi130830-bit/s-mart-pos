@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../repositories/delivery_history_repository.dart';
-import '../services/settings_service.dart';
 
 class ExcelExportService {
   final DeliveryHistoryRepository _repo;
@@ -195,8 +194,7 @@ class ExcelExportService {
           }
           
           final double distanceKm = double.tryParse(record['distanceKm']?.toString() ?? '0') ?? 0.0;
-          // ✅ คำนวณจากอัตราตั้งค่าปัจจุบัน (ไม่ใช้ค่าเก่าที่บันทึกไว้)
-          final double fuelCost = distanceKm > 0 ? distanceKm * SettingsService().fuelCostPerKm : 0.0;
+          final double fuelCost = double.tryParse(record['fuelCostEstimate']?.toString() ?? '0') ?? 0.0;
           totalDistance += distanceKm;
           totalFuelCost += fuelCost;
 

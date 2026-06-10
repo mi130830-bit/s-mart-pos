@@ -182,10 +182,6 @@ class SettingsService {
       double.tryParse(getString('shop_longitude') ?? '0') ?? 0.0;
   set shopLongitude(double value) => set('shop_longitude', value.toString());
 
-  double get fuelCostPerKm =>
-      double.tryParse(getString('fuel_cost_per_km') ?? '3.0') ?? 3.0;
-  set fuelCostPerKm(double value) => set('fuel_cost_per_km', value.toString());
-
   // --- Policies & Rates (Global) ---
   double get vatRate => double.tryParse(getString('vat_rate') ?? '7.0') ?? 7.0;
   set vatRate(double value) => set('vat_rate', value.toString());

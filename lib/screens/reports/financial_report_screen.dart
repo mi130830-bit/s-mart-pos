@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../repositories/sales_repository.dart';
 import '../../repositories/expense_repository.dart';
 import '../../repositories/purchase_repository.dart';
+import '../../repositories/product_repository.dart';
 
 class FinancialReportScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -17,6 +18,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   final SalesRepository _salesRepo = SalesRepository();
   final ExpenseRepository _expenseRepo = ExpenseRepository();
   final PurchaseRepository _purchaseRepo = PurchaseRepository();
+  final ProductRepository _productRepo = ProductRepository();
 
   bool _isLoading = false;
 
@@ -31,6 +33,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   double _totalExpenses = 0.0;
   double _totalIncome = 0.0;
   double _totalPurchases = 0.0;
+  double _inventoryValuation = 0.0;
 
   // Charts Data
   List<Map<String, dynamic>> _chartData = [];
@@ -74,6 +77,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       final purchases =
           await _purchaseRepo.getTotalPurchasesByDateRange(start, end);
 
+      // 4. Fetch Inventory Valuation
+      final inventoryValuation = await _productRepo.getInventoryValuation();
+
       if (mounted) {
         setState(() {
           _totalSales = sales;
@@ -81,6 +87,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           _totalExpenses = expenses;
           _totalIncome = income;
           _totalPurchases = purchases;
+          _inventoryValuation = inventoryValuation;
           _chartData = salesStats;
           _isLoading = false;
         });
@@ -207,7 +214,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                             children: [
                               Text('กำไรสุทธิ (Net Profit)', style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
                               const SizedBox(height: 8),
-                              Text('฿${_f(_netProfit)}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: _netProfit >= 0 ? Colors.teal.shade800 : Colors.red.shade800)),
+                              Text('฿${_f(_netProfit)}', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _netProfit >= 0 ? Colors.teal.shade800 : Colors.red.shade800)),
                               const SizedBox(height: 8),
                               Text('(ยอดขาย - ต้นทุนสินค้า)', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                             ],
@@ -228,9 +235,30 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                             children: [
                               Text('กระแสเงินสด (Cash Flow)', style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
                               const SizedBox(height: 8),
-                              Text('฿${_f(_cashProfit)}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: _cashProfit >= 0 ? Colors.blue.shade800 : Colors.orange.shade800)),
+                              Text('฿${_f(_cashProfit)}', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _cashProfit >= 0 ? Colors.blue.shade800 : Colors.orange.shade800)),
                               const SizedBox(height: 8),
                               Text('(ยอดขาย - ยอดสั่งซื้อ)', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // Inventory Valuation
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.purple.shade200),
+                          ),
+                          child: Column(
+                            children: [
+                              Text('มูลค่าสินค้าคงเหลือ (Stock Value)', style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
+                              const SizedBox(height: 8),
+                              Text('฿${_f(_inventoryValuation)}', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
+                              const SizedBox(height: 8),
+                              Text('(สต็อกคงเหลือ x ราคาทุน)', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                             ],
                           ),
                         ),

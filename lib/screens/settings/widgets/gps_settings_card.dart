@@ -41,8 +41,11 @@ class GpsSettingsCard extends ConsumerWidget {
               children: [
                 Icon(Icons.local_shipping, color: Colors.white),
                 SizedBox(width: 10),
-                Text('การจัดส่ง & GPS ต้นทาง',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('GPS ต้นทาง',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -52,7 +55,7 @@ class GpsSettingsCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'ตั้งค่าพิกัด GPS ต้นทาง (ร้าน) เพื่อคำนวณระยะทางและต้นทุนน้ำมันในรายงานการส่งของ',
+                  'ตั้งค่าพิกัด GPS ต้นทาง (ร้าน) เพื่อใช้อ้างอิงและคำนวณระยะทางจริงในรายงานการส่งของ',
                   style: TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
@@ -63,7 +66,8 @@ class GpsSettingsCard extends ConsumerWidget {
                         controller: controller.shopLatCtrl,
                         label: 'ละติจูดร้าน (Latitude)',
                         hint: 'เช่น 16.160189',
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true, signed: true),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -72,16 +76,8 @@ class GpsSettingsCard extends ConsumerWidget {
                         controller: controller.shopLngCtrl,
                         label: 'ลองจิจูดร้าน (Longitude)',
                         hint: 'เช่น 100.802307',
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: CustomTextField(
-                        controller: controller.fuelCostCtrl,
-                        label: 'ค่าน้ำมัน (฿/กม.)',
-                        hint: 'เช่น 3.0',
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true, signed: true),
                       ),
                     ),
                   ],

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../services/mysql_service.dart';
+import 'fuel_price_repository.dart';
+import 'vehicle_settings_repository.dart';
 
 class DeliveryHistoryRepository {
   final MySQLService _db;
@@ -427,7 +429,6 @@ class DeliveryHistoryRepository {
   Future<int> backfillDistanceAndFuel({
     required double shopLat,
     required double shopLng,
-    required double fuelRate,
     required Future<double> Function(double, double, double, double) calcRoadDistance,
   }) async {
     if (shopLat == 0.0 || shopLng == 0.0) {
@@ -437,7 +438,7 @@ class DeliveryHistoryRepository {
 
     try {
       final rows = await _db.query('''
-        SELECT id, destinationLat, destinationLng
+        SELECT id, destinationLat, destinationLng, completedAt, vehiclePlate
         FROM delivery_history
         WHERE (distanceKm IS NULL OR distanceKm = 0)
           AND destinationLat IS NOT NULL
@@ -454,7 +455,16 @@ class DeliveryHistoryRepository {
 
         try {
           final dist = await calcRoadDistance(shopLat, shopLng, dLat, dLng);
-          final fuel = dist * fuelRate;
+          
+          final completedAtRaw = row['completedAt'];
+          final completedAt = (completedAtRaw is DateTime) ? completedAtRaw : DateTime.now();
+          final vehiclePlate = row['vehiclePlate']?.toString() ?? '';
+          
+          final fuelPrice = await FuelPriceRepository().getPriceForDate(completedAt) ?? 30.0;
+          final efficiency = await VehicleSettingsRepository().getEfficiency(vehiclePlate);
+          
+          final fuel = (dist / efficiency) * fuelPrice;
+          
           await _db.execute(
             'UPDATE delivery_history SET distanceKm = :dist, fuelCostEstimate = :fuel WHERE id = :id',
             {'dist': dist, 'fuel': fuel, 'id': id},
