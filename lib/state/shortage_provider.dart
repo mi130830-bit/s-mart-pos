@@ -105,29 +105,42 @@ class ShortageNotifier extends AutoDisposeNotifier<ShortageState> {
         stockQuantities: {},
       );
 
-      // Load suggestions + stock qty with stagger to avoid DB overload
-      for (var i = 0; i < openShortages.length; i++) {
-        final item = openShortages[i];
-        Future.delayed(Duration(milliseconds: i * 40), () {
-          _repo.getCheapestSupplierSuggestions(item.itemName).then((suggestions) {
-            final newSuggestions = Map<int, List<Map<String, dynamic>>>.from(state.priceSuggestions);
-            newSuggestions[item.id] = suggestions;
-            state = state.copyWith(priceSuggestions: newSuggestions);
-          }).catchError((e) {
-            debugPrint('❌ [Suggestion Error] ${item.itemName}: $e');
-          });
-
-          _repo.getProductStockByName(item.itemName).then((info) {
-            final newQuantities = Map<int, Map<String, dynamic>?>.from(state.stockQuantities);
-            newQuantities[item.id] = info;
-            state = state.copyWith(stockQuantities: newQuantities);
-          }).catchError((_) {});
-        });
-      }
+      // Load suggestions + stock qty asynchronously in batches to avoid rapid UI flickering (วูบๆ)
+      _fetchDetailsInBatches(openShortages);
     } catch (e) {
       debugPrint('Error loading shortages: $e');
     } finally {
       state = state.copyWith(isLoading: false);
+    }
+  }
+
+  void _fetchDetailsInBatches(List<ShortageLogModel> openShortages) async {
+    final Map<int, List<Map<String, dynamic>>> newSuggestions = {};
+    final Map<int, Map<String, dynamic>?> newQuantities = {};
+
+    for (var i = 0; i < openShortages.length; i++) {
+      final item = openShortages[i];
+      
+      // Stagger DB load to prevent connection pool exhaustion
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      try {
+        newSuggestions[item.id] = await _repo.getCheapestSupplierSuggestions(item.itemName);
+      } catch (e) {
+        debugPrint('❌ [Suggestion Error] ${item.itemName}: $e');
+      }
+
+      try {
+        newQuantities[item.id] = await _repo.getProductStockByName(item.itemName);
+      } catch (_) {}
+
+      // Batch UI updates every 15 items, or on the last item, to drastically reduce rebuilds.
+      if ((i > 0 && i % 15 == 0) || i == openShortages.length - 1) {
+        state = state.copyWith(
+          priceSuggestions: {...state.priceSuggestions, ...newSuggestions},
+          stockQuantities: {...state.stockQuantities, ...newQuantities},
+        );
+      }
     }
   }
 
