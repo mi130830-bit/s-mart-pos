@@ -13,7 +13,7 @@ class OverrideClockinDialog extends ConsumerStatefulWidget {
   /// หัวข้อเหตุผลที่สามารถเพิ่มได้ในอนาคต โดยเพิ่มรายการใน list นี้
   static const List<String> presetReasons = [
     'มือถือหาย/ลืม',
-    'ลืมแสกนตอนเช้า',
+    'ลืมแสกนเข้า/ออก',
   ];
 
   /// ค่าพิเศษสำหรับ "อื่นๆ (ระบุเอง)"
