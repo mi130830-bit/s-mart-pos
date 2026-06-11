@@ -76,13 +76,7 @@ class PaymentPointSection extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: OutlinedButton.icon(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        '🕒 ระบบแคตตาล็อกแลกของรางวัลกำลังพัฒนาสำหรับ Line Web-App พบกันเร็วๆ นี้!'),
-                    backgroundColor: Colors.blue,
-                  ),
-                );
+                SnackbarUtils.showLeft(context, '🕒 ระบบแคตตาล็อกแลกของรางวัลกำลังพัฒนาสำหรับ Line Web-App พบกันเร็วๆ นี้!');
               },
               icon: const Icon(Icons.card_giftcard, color: Colors.blueAccent),
               label: const Text(

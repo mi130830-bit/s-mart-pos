@@ -5,6 +5,7 @@ import '../../../models/hr/employee_profile.dart';
 import '../../../models/hr/leave_request.dart';
 import '../../../state/hr/employee_provider.dart';
 import '../../../state/hr/leave_provider.dart';
+import '../../../utils/snackbar_utils.dart';
 
 class LeaveFormDialog extends ConsumerStatefulWidget {
   const LeaveFormDialog({super.key});
@@ -99,27 +100,11 @@ class _LeaveFormDialogState extends ConsumerState<LeaveFormDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedEmployee == null) {
-      final screenWidth = MediaQuery.of(context).size.width;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('กรุณาเลือกพนักงาน'), 
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(left: 16, bottom: 16, right: screenWidth > 350 ? screenWidth - 332 : 16),
-        ),
-      );
+      SnackbarUtils.showLeft(context, 'กรุณาเลือกพนักงาน', isError: true);
       return;
     }
     if (_totalDays <= 0) {
-      final screenWidth = MediaQuery.of(context).size.width;
-       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('จำนวนวันลาไม่ถูกต้อง'), 
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(left: 16, bottom: 16, right: screenWidth > 350 ? screenWidth - 332 : 16),
-        ),
-      );
+      SnackbarUtils.showLeft(context, 'จำนวนวันลาไม่ถูกต้อง', isError: true);
       return;
     }
 
@@ -153,27 +138,11 @@ class _LeaveFormDialogState extends ConsumerState<LeaveFormDialog> {
       await ref.read(leaveProvider.notifier).create(request);
       if (mounted) {
         Navigator.pop(context, true);
-        final screenWidth = MediaQuery.of(context).size.width;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('บันทึกใบลาสำเร็จ'), 
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(left: 16, bottom: 16, right: screenWidth > 350 ? screenWidth - 332 : 16),
-          ),
-        );
+        SnackbarUtils.showLeft(context, 'บันทึกใบลาสำเร็จ');
       }
     } catch (e) {
       if (mounted) {
-        final screenWidth = MediaQuery.of(context).size.width;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'), 
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(left: 16, bottom: 16, right: screenWidth > 350 ? screenWidth - 332 : 16),
-          ),
-        );
+        SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
       }
     }
   }

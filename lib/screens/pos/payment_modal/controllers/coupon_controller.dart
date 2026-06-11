@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import '../../../../repositories/reward_repository.dart';
 import '../../pos_state_manager.dart';
@@ -50,11 +51,7 @@ mixin CouponControllerMixin<T extends StatefulWidget> on State<T> {
       onUpdateRemainingAmount();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              '🎟️ ใช้คูปอง ${result.couponCode} — ลด ฿${result.discountValue?.toStringAsFixed(2)}'),
-          backgroundColor: Colors.green,
-        ));
+        SnackbarUtils.showLeft(context, '🎟️ ใช้คูปอง ${result.couponCode} — ลด ฿${result.discountValue?.toStringAsFixed(2)}');
       }
     }
   }

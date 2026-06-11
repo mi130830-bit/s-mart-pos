@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -96,9 +97,7 @@ class RewardPendingTab extends ConsumerWidget {
     if (confirm == true) {
       final ok = await controller.fulfillRedemption(record.id);
       if (ok && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ บันทึกการให้ของรางวัลเรียบร้อย'), backgroundColor: Colors.green),
-        );
+        SnackbarUtils.showLeft(context, '✅ บันทึกการให้ของรางวัลเรียบร้อย');
       }
     }
   }

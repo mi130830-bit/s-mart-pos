@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import '../../controllers/connection_settings_controller.dart';
 import '../../widgets/common/custom_buttons.dart';
@@ -52,12 +53,7 @@ class ConnectionSettingsScreen extends ConsumerWidget {
                 child: CustomButton(
                   onPressed: () {
                     notifier.saveSettings();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('บันทึกการตั้งค่าทั้งหมดแล้ว'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                    SnackbarUtils.showLeft(context, 'บันทึกการตั้งค่าทั้งหมดแล้ว');
                   },
                   label: 'บันทึกทั้งหมด',
                   type: ButtonType.primary,

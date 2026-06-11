@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -162,15 +163,11 @@ class RewardCatalogTab extends ConsumerWidget {
           if (success) {
             if (dialogContext.mounted) Navigator.pop(dialogContext);
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('✅ บันทึกของรางวัลสำเร็จ'), backgroundColor: Colors.green),
-              );
+              SnackbarUtils.showLeft(context, '✅ บันทึกของรางวัลสำเร็จ');
             }
           } else {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('❌ เกิดข้อผิดพลาดในการบันทึก'), backgroundColor: Colors.red),
-              );
+              SnackbarUtils.showLeft(context, '❌ เกิดข้อผิดพลาดในการบันทึก', isError: true);
             }
           }
         },
@@ -197,9 +194,7 @@ class RewardCatalogTab extends ConsumerWidget {
     if (confirm == true) {
       final success = await controller.deleteReward(reward.id);
       if (success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('🗑️ ลบข้อมูลเรียบร้อย'), backgroundColor: Colors.orange),
-        );
+        SnackbarUtils.showLeft(context, '🗑️ ลบข้อมูลเรียบร้อย');
       }
     }
   }

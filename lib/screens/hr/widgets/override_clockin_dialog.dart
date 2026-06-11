@@ -115,27 +115,11 @@ class _OverrideClockinDialogState extends ConsumerState<OverrideClockinDialog> {
 
       if (mounted) {
         Navigator.pop(context, true);
-        final screenWidth = MediaQuery.of(context).size.width;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('บันทึกการลงเวลาแทนสำเร็จ'), 
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(left: 16, bottom: 16, right: screenWidth > 350 ? screenWidth - 332 : 16),
-          ),
-        );
+        SnackbarUtils.showLeft(context, 'บันทึกการลงเวลาแทนสำเร็จ');
       }
     } catch (e) {
       if (mounted) {
-        final screenWidth = MediaQuery.of(context).size.width;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'), 
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(left: 16, bottom: 16, right: screenWidth > 350 ? screenWidth - 332 : 16),
-          ),
-        );
+        SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
       }
     }
   }

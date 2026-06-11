@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -128,9 +129,7 @@ class PromotionListScreen extends ConsumerWidget {
                                 if (confirm == true) {
                                   await controller.deletePromotion(p.id);
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('🗑️ ลบข้อมูลโปรโมชั่นเรียบร้อย'), backgroundColor: Colors.orange),
-                                    );
+                                    SnackbarUtils.showLeft(context, '🗑️ ลบข้อมูลโปรโมชั่นเรียบร้อย');
                                   }
                                 }
                               },

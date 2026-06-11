@@ -1,4 +1,5 @@
 // ignore_for_file: deprecated_member_use
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,17 +35,13 @@ class _AdvanceFormDialogState extends ConsumerState<AdvanceFormDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedEmployee == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาเลือกพนักงาน'), backgroundColor: Colors.red),
-      );
+      SnackbarUtils.showLeft(context, 'กรุณาเลือกพนักงาน', isError: true);
       return;
     }
 
     final amount = double.tryParse(_amountController.text.replaceAll(',', ''));
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('จำนวนเงินต้องมากกว่า 0'), backgroundColor: Colors.red),
-      );
+      SnackbarUtils.showLeft(context, 'จำนวนเงินต้องมากกว่า 0', isError: true);
       return;
     }
 
@@ -52,15 +49,11 @@ class _AdvanceFormDialogState extends ConsumerState<AdvanceFormDialog> {
     if (_isInstallment) {
       installmentAmount = double.tryParse(_installmentController.text.replaceAll(',', ''));
       if (installmentAmount == null || installmentAmount <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาระบุจำนวนเงินที่ต้องการหักต่อรอบให้ถูกต้อง'), backgroundColor: Colors.red),
-        );
+        SnackbarUtils.showLeft(context, 'กรุณาระบุจำนวนเงินที่ต้องการหักต่อรอบให้ถูกต้อง', isError: true);
         return;
       }
       if (installmentAmount > amount) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('จำนวนหักต่อรอบต้องไม่เกินยอดเบิกทั้งหมด'), backgroundColor: Colors.red),
-        );
+        SnackbarUtils.showLeft(context, 'จำนวนหักต่อรอบต้องไม่เกินยอดเบิกทั้งหมด', isError: true);
         return;
       }
     }
@@ -74,15 +67,11 @@ class _AdvanceFormDialogState extends ConsumerState<AdvanceFormDialog> {
       );
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('บันทึกคำขอเบิกเงินล่วงหน้าสำเร็จ'), backgroundColor: Colors.green),
-        );
+        SnackbarUtils.showLeft(context, 'บันทึกคำขอเบิกเงินล่วงหน้าสำเร็จ');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red),
-        );
+        SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
       }
     }
   }

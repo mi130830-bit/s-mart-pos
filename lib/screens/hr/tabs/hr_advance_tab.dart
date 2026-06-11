@@ -147,9 +147,7 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
                 children: [
                   ElevatedButton.icon(
                     onPressed: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('กำลังซิงค์ข้อมูลเบิกเงินล่วงหน้าจากคลาวด์...'), duration: Duration(seconds: 1)),
-                      );
+                      SnackbarUtils.showLeft(context, 'กำลังซิงค์ข้อมูลเบิกเงินล่วงหน้าจากคลาวด์...');
                       await AdvanceSyncService().syncAdvanceRequestsFromCloud();
                       if (context.mounted) {
                         ref.read(advanceProvider.notifier).loadPending();

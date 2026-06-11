@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -411,13 +412,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
         final editedOrderId = await posState.saveOrderAsEdit();
         if (mounted) {
           Navigator.of(context).pop(true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ บันทึกการแก้ไขบิล #$editedOrderId เรียบร้อย'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+          SnackbarUtils.showLeft(context, '✅ บันทึกการแก้ไขบิล #$editedOrderId เรียบร้อย');
         }
         return;
       }

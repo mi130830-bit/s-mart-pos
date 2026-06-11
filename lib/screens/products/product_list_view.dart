@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import '../../models/product.dart';
 import '../../models/unit.dart';
@@ -127,15 +128,11 @@ class _ProductListSectionState extends ConsumerState<ProductListSection> {
 
     if (allProducts.isNotEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                'ดึงข้อมูลสำเร็จ ${allProducts.length} รายการ (Updated Isar)')));
+        SnackbarUtils.showLeft(context, 'ดึงข้อมูลสำเร็จ ${allProducts.length} รายการ (Updated Isar)');
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'ไม่สามารถเชื่อมต่อ Server ได้ (แสดงข้อมูล Offline ล่าสุด)')));
+        SnackbarUtils.showLeft(context, 'ไม่สามารถเชื่อมต่อ Server ได้ (แสดงข้อมูล Offline ล่าสุด)');
       }
     }
 

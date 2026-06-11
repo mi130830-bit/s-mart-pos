@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'controllers/reward_management_controller.dart';
@@ -48,15 +49,11 @@ class _RewardManagementScreenState extends ConsumerState<RewardManagementScreen>
           if (success) {
             if (dialogContext.mounted) Navigator.pop(dialogContext);
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('✅ บันทึกของรางวัลสำเร็จ'), backgroundColor: Colors.green),
-              );
+              SnackbarUtils.showLeft(context, '✅ บันทึกของรางวัลสำเร็จ');
             }
           } else {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('❌ เกิดข้อผิดพลาดในการบันทึก'), backgroundColor: Colors.red),
-              );
+              SnackbarUtils.showLeft(context, '❌ เกิดข้อผิดพลาดในการบันทึก', isError: true);
             }
           }
         },

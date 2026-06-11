@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/hr/employee_provider.dart';
@@ -101,9 +102,7 @@ class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
                 icon: const Icon(Icons.refresh),
                 onPressed: () async {
                   // แสดง loading indicator ขนาดย่อมหรือบอกให้ผู้ใช้รอได้ แต่ที่นี่ทำให้ง่ายคือสั่งรัน
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('กำลังซิงค์ข้อมูลจากคลาวด์...'), duration: Duration(seconds: 1)),
-                  );
+                  SnackbarUtils.showLeft(context, 'กำลังซิงค์ข้อมูลจากคลาวด์...');
                   await AttendanceSyncService().syncAttendanceFromCloud(force: true);
                   if (context.mounted) {
                     ref.invalidate(dashboardAttendanceProvider);
