@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/hr/employee_profile.dart';
@@ -151,7 +152,7 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        SnackbarUtils.showLeft(context, 'Error: $e', isError: true);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

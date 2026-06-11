@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -96,11 +97,11 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
           _loadDeductions();
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('อนุมัติเบิกล่วงหน้าสำเร็จ')));
+          SnackbarUtils.showLeft(context, 'อนุมัติเบิกล่วงหน้าสำเร็จ');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
         }
       }
     }
@@ -147,11 +148,11 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
           );
         });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ปฏิเสธรายการสำเร็จ')));
+          SnackbarUtils.showLeft(context, 'ปฏิเสธรายการสำเร็จ');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e'), backgroundColor: Colors.red));
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
         }
       }
     }

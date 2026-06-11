@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -161,11 +162,7 @@ class DashboardOrderDetailDialog {
                   // ✅ Switch tab to POS screen (index 0)
                   container.read(mainNavigationProvider.notifier).state = 0;
                 } else if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('ไม่สามารถโหลดบิลนี้ได้'),
-                        backgroundColor: Colors.red),
-                  );
+                  SnackbarUtils.showLeft(context, 'ไม่สามารถโหลดบิลนี้ได้', isError: true);
                 }
               },
             ),

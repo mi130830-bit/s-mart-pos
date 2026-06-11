@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/hr/employee_profile.dart';
@@ -76,17 +77,13 @@ class _OverrideClockinDialogState extends ConsumerState<OverrideClockinDialog> {
     if (authState.currentUser == null) return;
 
     if (_selectedReason == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาเลือกเหตุผลในการลงเวลาแทน')),
-      );
+      SnackbarUtils.showLeft(context, 'กรุณาเลือกเหตุผลในการลงเวลาแทน');
       return;
     }
 
     if (_selectedReason == OverrideClockinDialog._customReasonKey &&
         _customReasonController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาระบุเหตุผลในการลงเวลาแทน')),
-      );
+      SnackbarUtils.showLeft(context, 'กรุณาระบุเหตุผลในการลงเวลาแทน');
       return;
     }
 

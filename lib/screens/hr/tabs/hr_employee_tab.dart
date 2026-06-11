@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/hr/employee_provider.dart';
@@ -88,9 +89,9 @@ class HrEmployeeTab extends ConsumerWidget {
                                           if (confirm == true) {
                                             try {
                                               await ref.read(employeeProvider.notifier).deactivate(emp.id);
-                                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ลบพนักงานเรียบร้อยแล้ว')));
+                                              if (context.mounted) SnackbarUtils.showLeft(context, 'ลบพนักงานเรียบร้อยแล้ว');
                                             } catch (e) {
-                                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                                              if (context.mounted) SnackbarUtils.showLeft(context, 'Error: $e', isError: true);
                                             }
                                           }
                                         },

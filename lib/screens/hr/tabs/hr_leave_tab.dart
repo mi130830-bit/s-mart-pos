@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -85,11 +86,11 @@ class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
       try {
         await ref.read(leaveProvider.notifier).approve(req.id, authState.currentUser!.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('อนุมัติใบลาสำเร็จ')));
+          SnackbarUtils.showLeft(context, 'อนุมัติใบลาสำเร็จ');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
         }
       }
     }
@@ -135,11 +136,11 @@ class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
       try {
         await ref.read(leaveProvider.notifier).reject(req.id, result.isEmpty ? 'ไม่ระบุเหตุผล' : result);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ปฏิเสธใบลาสำเร็จ')));
+          SnackbarUtils.showLeft(context, 'ปฏิเสธใบลาสำเร็จ');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('เกิดข้อผิดพลาด: $e')));
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
         }
       }
     }

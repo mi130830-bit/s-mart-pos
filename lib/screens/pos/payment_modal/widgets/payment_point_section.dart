@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../models/customer.dart';
@@ -37,11 +38,9 @@ class PaymentPointSection extends StatelessWidget {
                   ? onOpenRedemptionDialog
                   : () {
                       if (!isRealCustomer) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('กรุณาเลือกลูกค้า (มุมขวาบน) ก่อนใช้แต้ม')));
+                        SnackbarUtils.showLeft(context, 'กรุณาเลือกลูกค้า (มุมขวาบน) ก่อนใช้แต้ม');
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('ลูกค้าท่านนี้ยังไม่มีแต้มเพียงพอ')));
+                        SnackbarUtils.showLeft(context, 'ลูกค้าท่านนี้ยังไม่มีแต้มเพียงพอ');
                       }
                     },
               icon: Icon(

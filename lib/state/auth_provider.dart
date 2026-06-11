@@ -210,7 +210,7 @@ class AuthNotifier extends AutoDisposeNotifier<AuthState> {
         
         // Log Activity
         ActivityRepository().log(
-          userId: row['id'],
+          userId: int.tryParse(row['id'].toString()),
           action: row['role'] == 'ADMIN' ? 'ADMIN_LOGIN' : 'USER_LOGIN',
           details: 'User $username logged in locally.',
         );

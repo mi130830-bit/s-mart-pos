@@ -1,3 +1,4 @@
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 
 import 'tabs/hr_attendance_tab.dart';
@@ -42,15 +43,11 @@ class _HrScreenState extends State<HrScreen> with SingleTickerProviderStateMixin
       await AdvanceSyncService().syncAdvanceRequestsFromCloud();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ซิงค์ข้อมูลจากคลาวด์เรียบร้อยแล้ว')),
-        );
+        SnackbarUtils.showLeft(context, 'ซิงค์ข้อมูลจากคลาวด์เรียบร้อยแล้ว');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการซิงค์: $e')),
-        );
+        SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาดในการซิงค์: $e', isError: true);
       }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
