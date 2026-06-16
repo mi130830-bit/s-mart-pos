@@ -1,5 +1,5 @@
 import '../../services/mysql_service.dart';
-import 'package:flutter/foundation.dart';
+//import 'package:flutter/foundation.dart';
 import '../../models/hr/leave_request.dart';
 
 class LeaveRepository {
@@ -26,12 +26,7 @@ class LeaveRepository {
     ''');
     
     // Auto-migrate: Add leave_format column if it doesn't exist
-    try {
-      await _db.execute("ALTER TABLE leave_request ADD COLUMN leave_format VARCHAR(50) DEFAULT 'FULL_DAY' AFTER leave_type");
-      debugPrint('Added leave_format column to leave_request table');
-    } catch (_) {
-      // Column probably already exists, ignore
-    }
+    await _db.ensureColumn('leave_request', 'leave_format', "VARCHAR(50) DEFAULT 'FULL_DAY' AFTER leave_type");
   }
 
   Future<int> create(LeaveRequest req) async {

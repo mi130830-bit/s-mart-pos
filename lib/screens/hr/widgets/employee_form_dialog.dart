@@ -191,9 +191,13 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
                             child: Text('-- ไม่เชื่อมโยงบัญชี --'),
                           ),
                           ..._slinkUsers.map((u) {
+                            final name = u['name'] ?? 'ไม่มีชื่อ';
+                            final role = u['role'] ?? 'ไม่ระบุตำแหน่ง';
+                            final uid = u['id'].toString();
+                            final shortUid = uid.length > 8 ? '${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}' : uid;
                             return DropdownMenuItem<String>(
-                              value: u['id'].toString(), // firebase uid
-                              child: Text('📱 ${u['name'] ?? 'ไม่มีชื่อ'}'),
+                              value: uid, // firebase uid
+                              child: Text('📱 $name ($role) [UID: $shortUid]'),
                             );
                           }),
                           ..._systemUsers.map((u) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/expense.dart';
 import '../../repositories/expense_repository.dart';
 
@@ -19,6 +20,8 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
   List<Expense> _expenses = [];
   bool _isLoading = false;
 
+  List<String> _customCategories = [];
+
   // Stats
   double _totalIncome = 0.0;
   double _totalExpense = 0.0;
@@ -29,7 +32,22 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     final now = DateTime.now();
     _startDate = DateTime(now.year, now.month, 1);
     _endDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    _loadCustomCategories();
     _loadData();
+  }
+
+  Future<void> _loadCustomCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _customCategories = prefs.getStringList('custom_expense_categories') ?? [];
+      });
+    }
+  }
+
+  Future<void> _saveCustomCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('custom_expense_categories', _customCategories);
   }
 
   Future<void> _loadData() async {
@@ -70,6 +88,34 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     }
   }
 
+  Future<String?> _showAddCategoryDialog(BuildContext context) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('เพิ่มหมวดหมู่ใหม่'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'ชื่อหมวดหมู่',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('เพิ่ม'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickDateRange(BuildContext context) async {
     final picked = await showDateRangePicker(
       context: context,
@@ -97,6 +143,8 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
     String category = expense?.category ?? 'ทั่วไป';
     String type = expense?.type ?? 'EXPENSE'; // Default to Expense
     DateTime selectedDate = expense?.date ?? DateTime.now();
+
+    int dropdownKeyId = 0;
 
     await showDialog(
       context: context,
@@ -146,30 +194,54 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
                       border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  key: ValueKey(
-                      'dropdown_$type'), // Force rebuild on type change
-                  initialValue: category,
-                  items: <String>{
-                    'ทั่วไป',
-                    'ค่าน้ำ/ไฟ',
-                    'ค่าเช่า',
-                    'เงินเดือน',
-                    'อุปกรณ์',
-                    'สินค้าสิ้นเปลือง',
-                    'อื่นๆ',
-                    if (type == 'INCOME') ...{
-                      'ขายของเก่า',
-                      'ดอกเบี้ย',
-                      'เงินคืน',
-                      'อื่นๆ(รายรับ)'
-                    },
+                Builder(
+                  builder: (ctx) {
+                    final Set<String> defaultCategories = type == 'INCOME'
+                        ? {'ขายของเก่า', 'ดอกเบี้ย', 'เงินคืน', 'อื่นๆ(รายรับ)'}
+                        : {'ทั่วไป', 'ค่าน้ำ/ไฟ', 'ค่าเช่า', 'เงินเดือน', 'อุปกรณ์', 'สินค้าสิ้นเปลือง', 'อื่นๆ'};
+
+                    final List<String> validCategories = {
+                      ...defaultCategories,
+                      ..._customCategories,
+                      if (category.isNotEmpty && category != '+_ADD_NEW_+') category,
+                    }.toList();
+
+                    return DropdownButtonFormField<String>(
+                      key: ValueKey('dropdown_${type}_$dropdownKeyId'), // Force rebuild on type change or reset
+                      initialValue: validCategories.contains(category) ? category : validCategories.first,
+                      items: [
+                        ...validCategories.map((e) => DropdownMenuItem(value: e, child: Text(e))),
+                        const DropdownMenuItem(
+                          value: '+_ADD_NEW_+',
+                          child: Text('+ เพิ่มหมวดหมู่ใหม่', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                      onChanged: (v) async {
+                        if (v == '+_ADD_NEW_+') {
+                          final newCat = await _showAddCategoryDialog(context);
+                          if (newCat != null && newCat.isNotEmpty) {
+                            setState(() {
+                              if (!_customCategories.contains(newCat) && !defaultCategories.contains(newCat)) {
+                                _customCategories.add(newCat);
+                                _saveCustomCategories();
+                              }
+                              category = newCat;
+                              dropdownKeyId++;
+                            });
+                          } else {
+                            // Trick to reset the dropdown visual if canceled
+                            setState(() {
+                              dropdownKeyId++;
+                            }); 
+                          }
+                        } else {
+                          setState(() => category = v!);
+                        }
+                      },
+                      decoration: const InputDecoration(
+                          labelText: 'หมวดหมู่', border: OutlineInputBorder()),
+                    );
                   }
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) => setState(() => category = v!),
-                  decoration: const InputDecoration(
-                      labelText: 'หมวดหมู่', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 ListTile(

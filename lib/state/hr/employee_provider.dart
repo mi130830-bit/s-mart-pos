@@ -114,15 +114,13 @@ class EmployeeNotifier extends AutoDisposeNotifier<EmployeeState> {
       final emp = await _repo.getById(id);
       await _repo.deactivate(id);
       if (emp != null) {
-        await _syncToFirestore(EmployeeProfile(
-          id: emp.id, 
-          firebaseUid: emp.firebaseUid,
-          roleType: emp.roleType,
-          wageType: emp.wageType,
-          isActive: false, 
-          displayName: emp.displayName,
-          phone: emp.phone,
-        ));
+        if (emp.firebaseUid != null && emp.firebaseUid!.isNotEmpty) {
+          try {
+            await FirestoreRestService.deleteDocument('users', emp.firebaseUid!);
+          } catch (e) {
+            debugPrint('Firestore Delete Error: $e');
+          }
+        }
       }
       await loadAll();
     } catch (e) {

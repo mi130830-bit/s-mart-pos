@@ -55,18 +55,22 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<void> loadByPeriod(DateTime start, DateTime end) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final records = await _repo.getByPeriod(start, end);
+      final records = await _repo.getUnpaidByPeriod(start, end);
       state = state.copyWith(records: records, isLoading: false);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
   }
 
-  Future<void> calculateForPeriod(DateTime start, DateTime end) async {
+  Future<bool> hasHistoryInPeriod(DateTime start, DateTime end) async {
+    return await _repo.hasConfirmedOrPaidInPeriod(start, end);
+  }
+
+  Future<void> calculateForPeriod(DateTime start, DateTime end, {String? payCycleFilter, bool skipAdvanceDeduction = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       // 1. Calculate drafts
-      final calculatedDrafts = await _service.calculateAllForPeriod(start, end);
+      final calculatedDrafts = await _service.calculateAllForPeriod(start, end, payCycleFilter: payCycleFilter, skipAdvanceDeduction: skipAdvanceDeduction);
       
       // 2. See if existing DRAFTs exist, update them or insert new
       final existingRecords = await _repo.getByPeriod(start, end);
@@ -159,6 +163,16 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<void> markPaid(int id) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      final payrollRecord = state.records.firstWhere((r) => r.id == id);
+      if (payrollRecord.status == 'DRAFT' && payrollRecord.advanceDeductions > 0) {
+        final advanceService = AdvanceService();
+        await advanceService.deductFromPayroll(
+          payrollRecord.employeeId,
+          id,
+          payrollRecord.advanceDeductions,
+        );
+      }
+
       await _repo.markPaid(id);
       
       ActivityRepository().log(
@@ -192,6 +206,9 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<void> deleteRecord(int id) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      final advanceService = AdvanceService();
+      await advanceService.revertDeductionsForPayroll(id);
+
       await _repo.delete(id);
       
       final updatedRecords = state.records.where((r) => r.id != id).toList();
@@ -253,6 +270,15 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<int> markAllPaidForPeriod(DateTime start, DateTime end) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
+      // Find drafts that will be transitioned directly to PAID
+      final draftsToBePaid = state.records.where((r) => r.status == 'DRAFT' && r.advanceDeductions > 0).toList();
+      if (draftsToBePaid.isNotEmpty) {
+        final advanceService = AdvanceService();
+        for (var draft in draftsToBePaid) {
+          await advanceService.deductFromPayroll(draft.employeeId, draft.id, draft.advanceDeductions);
+        }
+      }
+
       final count = await _repo.markAllPaidForPeriod(start, end);
       // Update local state
       final updatedRecords = state.records.map((r) {

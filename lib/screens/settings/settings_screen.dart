@@ -18,6 +18,7 @@ import 'connection_settings_screen.dart';
 import 'activity_log_screen.dart';
 import 'fuel_management_screen.dart';
 import '../promotions/reward_management_screen.dart';
+import 'fingerprint_settings_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -238,6 +239,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       context,
                       MaterialPageRoute(
                           builder: (_) => const RewardManagementScreen())),
+                ));
+              }
+
+              // 👆 Fingerprint Scanner Settings
+              if (auth.hasPermission('settings_system')) {
+                menuItems.add(_buildMenuCard(
+                  context,
+                  label: 'แสกนลายนิ้วมือ\n(Fingerprint)',
+                  icon: Icons.fingerprint,
+                  color: Colors.deepPurple,
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const FingerprintSettingsScreen())),
                 ));
               }
 

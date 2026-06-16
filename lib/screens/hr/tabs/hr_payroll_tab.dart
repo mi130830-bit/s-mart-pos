@@ -17,7 +17,8 @@ class HrPayrollTab extends ConsumerStatefulWidget {
 class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
   String _selectedView = 'CURRENT'; // 'CURRENT' or 'HISTORY'
   DateTime _startDate = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1)); // Start of week (Monday)
-  DateTime _endDate = DateTime.now().add(Duration(days: 7 - DateTime.now().weekday)); // End of week (Sunday)
+  DateTime _endDate = DateTime.now().add(Duration(days: 6 - DateTime.now().weekday)); // End of week (Saturday)
+  String _payCycleFilter = 'ALL'; // 'ALL', 'DAILY', 'WEEKLY', 'MONTHLY'
 
   // History filter state
   DateTime _historyStart = DateTime.now().subtract(const Duration(days: 90));
@@ -137,25 +138,88 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
   }
 
   Future<void> _calculatePayroll() async {
+    final hasHistory = await ref.read(payrollProvider.notifier).hasHistoryInPeriod(_startDate, _endDate);
+    if (!mounted) return;
+
+    if (hasHistory) {
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('ทำรายการซ้ำ'),
+            ],
+          ),
+          content: Text(
+            'รอบวันที่ ${DateFormat('dd/MM/yyyy').format(_startDate)} - ${DateFormat('dd/MM/yyyy').format(_endDate)}\n'
+            'มีการคำนวณและยืนยันการจ่ายไปแล้วบางส่วน หรือทั้งหมด\n\n'
+            'ระบบไม่อนุญาตให้คำนวณซ้ำ กรุณาไปตรวจสอบที่ "ประวัติจ่ายเงิน"'
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('ปิด')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _selectedView = 'HISTORY';
+                  _historyStart = _startDate;
+                  _historyEnd = _endDate;
+                });
+                _loadHistory();
+              },
+              child: const Text('ไปที่ประวัติจ่ายเงิน')
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    bool skipAdvanceDeduction = false;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('⚙️ คำนวณเงินเดือน'),
-        content: Text('ระบบจะคำนวณเงินเดือนของพนักงานทุกคนในช่วงวันที่\n${DateFormat('dd/MM/yyyy').format(_startDate)} - ${DateFormat('dd/MM/yyyy').format(_endDate)}\n\nต้องการดำเนินการต่อหรือไม่?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true), 
-            child: const Text('คำนวณเลย')
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('⚙️ คำนวณเงินเดือน'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ระบบจะคำนวณเงินเดือนของพนักงานทุกคนในช่วงวันที่\n${DateFormat('dd/MM/yyyy').format(_startDate)} - ${DateFormat('dd/MM/yyyy').format(_endDate)}\n\nต้องการดำเนินการต่อหรือไม่?'),
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  title: const Text('งดหักเงินเบิกล่วงหน้ารอบนี้ (ยกเว้นชั่วคราว)'),
+                  value: skipAdvanceDeduction,
+                  onChanged: (val) {
+                    setState(() {
+                      skipAdvanceDeduction = val ?? false;
+                    });
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(context, true), 
+                child: const Text('คำนวณเลย')
+              ),
+            ],
+          );
+        }
       ),
     );
 
     if (confirm == true) {
       try {
-        await ref.read(payrollProvider.notifier).calculateForPeriod(_startDate, _endDate);
+        await ref.read(payrollProvider.notifier).calculateForPeriod(_startDate, _endDate, payCycleFilter: _payCycleFilter, skipAdvanceDeduction: skipAdvanceDeduction);
         if (mounted) {
           _showToast('คำนวณเงินเดือนสำเร็จ',
             backgroundColor: const Color(0xFF2E7D32),
@@ -388,6 +452,41 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
               ),
               Row(
                 children: _selectedView == 'CURRENT' ? [
+                  Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _payCycleFilter,
+                        items: const [
+                          DropdownMenuItem(value: 'ALL', child: Text('รวมทุกรอบจ่าย', style: TextStyle(fontSize: 14))),
+                          DropdownMenuItem(value: 'DAILY', child: Text('รายวัน', style: TextStyle(fontSize: 14))),
+                          DropdownMenuItem(value: 'WEEKLY', child: Text('รายสัปดาห์', style: TextStyle(fontSize: 14))),
+                          DropdownMenuItem(value: 'MONTHLY', child: Text('รายเดือน', style: TextStyle(fontSize: 14))),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() {
+                              _payCycleFilter = v;
+                              if (v == 'DAILY') {
+                                _startDate = DateTime.now();
+                                _endDate = DateTime.now();
+                              } else {
+                                _startDate = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
+                                _endDate = DateTime.now().add(Duration(days: 6 - DateTime.now().weekday));
+                              }
+                            });
+                            _loadData();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   OutlinedButton.icon(
                     onPressed: () => _selectDateRange(context),
                     icon: const Icon(Icons.calendar_month),
@@ -547,8 +646,8 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
                                   final confirm = await showDialog<bool>(
                                     context: context,
                                     builder: (context) => AlertDialog(
-                                      title: const Text('ยืนยันการลบ'),
-                                      content: const Text('ต้องการลบรายการเงินเดือนฉบับร่างนี้ใช่หรือไม่?\n\n*สามารถลบได้เฉพาะรายการที่ยังไม่ได้จ่ายเงินเท่านั้น'),
+                                      title: const Text('ยืนยันการลบและคืนค่ายอดเบิก'),
+                                      content: const Text('ต้องการลบรายการเงินเดือนนี้ใช่หรือไม่?\n\n*หากมีการหักยอดเงินเบิกล่วงหน้าไปแล้ว ระบบจะทำการคืนยอดเงินเบิกกลับให้อัตโนมัติ เพื่อให้สามารถนำมาหักใหม่ได้ (สำหรับใช้ทดสอบ)'),
                                       actions: [
                                         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
                                         ElevatedButton(
@@ -723,9 +822,63 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
                                   ],
                                 ),
                               ),
-                              trailing: Icon(
-                                isExpanded ? Icons.expand_less : Icons.expand_more,
-                                color: Colors.grey,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_sweep, color: Colors.red),
+                                    tooltip: 'ล้างประวัติรอบนี้ (สำหรับทดสอบ)',
+                                    onPressed: () async {
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('ยืนยันล้างประวัติทั้งรอบ'),
+                                          content: Text('ต้องการลบประวัติเงินเดือนรอบ ${dateFormat.format(periodStart)} - ${dateFormat.format(periodEnd)} ทั้งหมดใช่หรือไม่?\n\n* ยอดเงินเบิกของทุกคนในรอบนี้จะถูกคืนกลับให้อัตโนมัติ (สำหรับใช้ทดสอบ)\n* ระบบจะลบประวัติรายการที่เคยลงบันทึกใน "บัญชีรายจ่าย" ให้อัตโนมัติด้วย'),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                              onPressed: () => Navigator.pop(context, true), 
+                                              child: const Text('ล้างประวัติ')
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true) {
+                                        if (!context.mounted) return;
+                                        try {
+                                          // Delete all records in this period, which will also revert their advances
+                                          for (var rec in periodRecords) {
+                                            await ref.read(payrollProvider.notifier).deleteRecord(rec.id);
+                                          }
+                                          // Also delete linked expense
+                                          try {
+                                            final title = 'จ่ายเงินเดือนรอบ ${dateFormat.format(periodStart)} - ${dateFormat.format(periodEnd)}';
+                                            await ExpenseRepository().deleteExpenseByTitle(title);
+                                          } catch (e) {
+                                            debugPrint('Failed to delete linked expense: $e');
+                                          }
+                                          _loadHistory();
+                                          if (context.mounted) {
+                                            _showToast('ล้างประวัติสำเร็จ',
+                                              backgroundColor: const Color(0xFF2E7D32),
+                                              icon: Icons.check_circle_outline);
+                                          }
+                                        } catch (e) {
+                                          if (context.mounted) {
+                                            _showToast('เกิดข้อผิดพลาด: $e',
+                                              backgroundColor: const Color(0xFFC62828),
+                                              icon: Icons.error_outline);
+                                          }
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  Icon(
+                                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                                    color: Colors.grey,
+                                  ),
+                                ],
                               ),
                               onTap: () {
                                 setState(() {
@@ -759,7 +912,7 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
                                           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                                         ),
                                         subtitle: Text(
-                                          'ทำงาน: ${rec.workDays} วัน | ลา: ${rec.leaveDays} วัน${rec.tripCount > 0 ? ' | เที่ยว: ${rec.tripCount}' : ''}',
+                                          'ทำงาน: ${rec.workDays} วัน | ลา: ${rec.leaveDays} วัน',
                                           style: const TextStyle(fontSize: 12),
                                         ),
                                         trailing: Row(
@@ -781,6 +934,45 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
                                               ],
                                             ),
                                             const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                              tooltip: 'ลบรายการนี้ (ใช้ทดสอบ)',
+                                              onPressed: () async {
+                                                final confirm = await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (context) => AlertDialog(
+                                                    title: const Text('ยืนยันการลบและคืนค่ายอดเบิก'),
+                                                    content: const Text('ต้องการลบรายการประวัติเงินเดือนนี้ใช่หรือไม่?\n\n*ระบบจะทำการคืนยอดเงินเบิกกลับให้อัตโนมัติ เพื่อให้สามารถนำมาหักใหม่ได้ (สำหรับใช้ทดสอบ)'),
+                                                    actions: [
+                                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+                                                      ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                                        onPressed: () => Navigator.pop(context, true), 
+                                                        child: const Text('ลบรายการ')
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (confirm == true) {
+                                                  if (!context.mounted) return;
+                                                  try {
+                                                    await ref.read(payrollProvider.notifier).deleteRecord(rec.id);
+                                                    _loadHistory();
+                                                    if (context.mounted) {
+                                                      _showToast('ลบรายการสำเร็จ',
+                                                        backgroundColor: const Color(0xFF2E7D32),
+                                                        icon: Icons.check_circle_outline);
+                                                    }
+                                                  } catch (e) {
+                                                    if (context.mounted) {
+                                                      _showToast('เกิดข้อผิดพลาด: $e',
+                                                        backgroundColor: const Color(0xFFC62828),
+                                                        icon: Icons.error_outline);
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                            ),
                                             IconButton(
                                               icon: const Icon(Icons.info_outline, size: 18, color: Colors.grey),
                                               tooltip: 'ดูรายละเอียด',

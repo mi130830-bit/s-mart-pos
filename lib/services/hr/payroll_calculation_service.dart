@@ -3,21 +3,29 @@ import '../../repositories/hr/employee_repository.dart';
 import '../../repositories/hr/attendance_repository.dart';
 import '../../repositories/hr/leave_repository.dart';
 import '../../repositories/hr/advance_repository.dart';
-import '../../repositories/hr/payroll_repository.dart';
 
 class PayrollCalculationService {
   final EmployeeRepository _employeeRepo = EmployeeRepository();
   final AttendanceRepository _attendanceRepo = AttendanceRepository();
   final LeaveRepository _leaveRepo = LeaveRepository();
   final AdvanceRepository _advanceRepo = AdvanceRepository();
-  final PayrollRepository _payrollRepo = PayrollRepository();
 
-  Future<List<PayrollRecord>> calculateAllForPeriod(DateTime start, DateTime end) async {
+  Future<List<PayrollRecord>> calculateAllForPeriod(DateTime start, DateTime end, {String? payCycleFilter, bool skipAdvanceDeduction = false}) async {
     final employees = await _employeeRepo.getAll(activeOnly: true);
     List<PayrollRecord> records = [];
 
     for (var emp in employees) {
-      final record = await calculatePayroll(emp.id, start, end);
+      // ✅ กรองเฉพาะคนที่ตรงกับรอบบิลที่เลือก
+      if (payCycleFilter != null && payCycleFilter != 'ALL' && emp.payCycle != payCycleFilter) {
+        continue;
+      }
+      
+      // ✅ ถ้ารวมทุกรอบจ่าย (ALL) ให้ดึงแค่ รายวัน กับ รายสัปดาห์ (ข้ามรายเดือน)
+      if (payCycleFilter == 'ALL' && emp.payCycle == 'MONTHLY') {
+        continue;
+      }
+
+      final record = await calculatePayroll(emp.id, start, end, isAllCycle: payCycleFilter == 'ALL', skipAdvanceDeduction: skipAdvanceDeduction);
       if (record != null) {
         records.add(record);
       }
@@ -25,20 +33,31 @@ class PayrollCalculationService {
     return records;
   }
 
-  Future<PayrollRecord?> calculatePayroll(int employeeId, DateTime periodStart, DateTime periodEnd) async {
+  Future<PayrollRecord?> calculatePayroll(int employeeId, DateTime periodStart, DateTime periodEnd, {bool isAllCycle = false, bool skipAdvanceDeduction = false}) async {
     // 1. Get Employee Profile
     final emp = await _employeeRepo.getById(employeeId);
     if (emp == null) return null;
 
-    // 2. Count Work Days from Attendance
-    final workDays = await _attendanceRepo.countWorkDays(employeeId, periodStart, periodEnd);
+    // 2. Adjust Period based on Pay Cycle
+    DateTime calcStart = periodStart;
+    DateTime calcEnd = periodEnd;
+
+    if (emp.payCycle == 'DAILY' && isAllCycle) {
+      // ✅ ถ้ารวมทุกรอบจ่าย พนักงานรายวันให้คิดเฉพาะวันสุดท้ายของรอบ (end date)
+      // เพื่อป้องกันการจ่ายซ้ำซ้อนกับวันก่อนหน้าที่จ่ายไปแล้ว และรองรับการคิดย้อนหลัง
+      calcStart = periodEnd;
+      calcEnd = periodEnd;
+    }
+
+    // 3. Count Work Days from Attendance
+    final workDays = await _attendanceRepo.countWorkDays(employeeId, calcStart, calcEnd);
     
     // We'll skip absent/late calc for now to keep it simple unless needed.
     final int absentDays = 0; 
     final int lateCount = 0;
 
-    // 3. Get Leave Days (Paid)
-    final leaves = await _leaveRepo.getApprovedInRange(employeeId, periodStart, periodEnd);
+    // 4. Get Leave Days (Paid)
+    final leaves = await _leaveRepo.getApprovedInRange(employeeId, calcStart, calcEnd);
     double leaveDays = 0;
     for (var l in leaves) {
       // In a real system, we'd calculate intersection of leave date range and period date range
@@ -46,15 +65,11 @@ class PayrollCalculationService {
       leaveDays += l.totalDays;
     }
 
-    // 4. Get Trip Count (If Driver)
+    // 5. Get Trip Count (If Driver) - ยกเลิกตามที่พี่ติสั่ง ไม่คิดรวมในนี้
     int tripCount = 0;
     double tripTotalFee = 0.0;
-    if (emp.roleType == 'DRIVER' && emp.displayName != null && emp.displayName!.isNotEmpty) {
-      tripCount = await _payrollRepo.getDriverTrips(emp.displayName!, periodStart, periodEnd);
-      tripTotalFee = tripCount * emp.tripRate;
-    }
 
-    // 5. Calculate Gross Pay
+    // 6. Calculate Gross Pay
     double dailyWageTotal = 0.0;
     double baseSalary = 0.0;
     
@@ -78,22 +93,24 @@ class PayrollCalculationService {
     double actualDeducted = 0.0;
 
     // For simplicity, let's try to deduct up to grossPay
-    for (var adv in outstandingAdvances) {
-      if (actualDeducted >= grossPay) break;
-      
-      // If installmentAmount is set, we only deduct up to installmentAmount per period
-      // Otherwise we try to deduct the full remainingAmount
-      double targetDeduction = adv.installmentAmount ?? adv.remainingAmount;
-      if (targetDeduction > adv.remainingAmount) {
-        targetDeduction = adv.remainingAmount;
+    if (!skipAdvanceDeduction) {
+      for (var adv in outstandingAdvances) {
+        if (actualDeducted >= grossPay) break;
+        
+        // If installmentAmount is set, we only deduct up to installmentAmount per period
+        // Otherwise we try to deduct the full remainingAmount
+        double targetDeduction = adv.installmentAmount ?? adv.remainingAmount;
+        if (targetDeduction > adv.remainingAmount) {
+          targetDeduction = adv.remainingAmount;
+        }
+        
+        double canDeduct = targetDeduction;
+        if (actualDeducted + canDeduct > grossPay) {
+          canDeduct = grossPay - actualDeducted; // Only deduct what's left of salary
+        }
+        
+        actualDeducted += canDeduct;
       }
-      
-      double canDeduct = targetDeduction;
-      if (actualDeducted + canDeduct > grossPay) {
-        canDeduct = grossPay - actualDeducted; // Only deduct what's left of salary
-      }
-      
-      actualDeducted += canDeduct;
     }
 
     double socialSecurity = 0.0; // Implement SS logic if needed (e.g. 5% max 750)
@@ -107,7 +124,7 @@ class PayrollCalculationService {
       id: 0,
       employeeId: employeeId,
       payCycle: emp.payCycle,
-      periodStart: periodStart,
+      periodStart: periodStart, // ใช้ periodStart เดิมเพื่อให้แสดงใน UI รวมทุกรอบจ่ายได้
       periodEnd: periodEnd,
       workDays: workDays,
       absentDays: absentDays,

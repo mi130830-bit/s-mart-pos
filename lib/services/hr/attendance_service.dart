@@ -2,6 +2,7 @@ import 'package:dbcrypt/dbcrypt.dart';
 import '../../models/hr/employee_profile.dart';
 import '../../repositories/hr/attendance_repository.dart';
 import '../../repositories/hr/employee_repository.dart';
+import 'attendance_calculation_service.dart';
 
 class AttendanceService {
   final AttendanceRepository _attendanceRepo = AttendanceRepository();
@@ -32,8 +33,13 @@ class AttendanceService {
       throw Exception('พนักงานลงเวลาเข้างานไปแล้วสำหรับวันนี้');
     }
 
-    // 3. Clock In
-    await _attendanceRepo.clockIn(matchedEmployee.id, 'PIN');
+    // 3. คำนวณสถานะ LATE/ON_TIME ตาม role ของพนักงาน
+    final status = AttendanceCalculationService.isLate(DateTime.now(), matchedEmployee.roleType)
+        ? 'LATE'
+        : 'ON_TIME';
+
+    // 4. Clock In
+    await _attendanceRepo.clockIn(matchedEmployee.id, 'PIN', status: status);
     return matchedEmployee;
   }
 
@@ -44,13 +50,22 @@ class AttendanceService {
       throw Exception('พนักงานลงเวลาเข้างานไปแล้วสำหรับวันนี้');
     }
 
-    // 2. Clock In
+    // 2. ดึง roleType เพื่อคำนวณสถานะ
+    final employees = await _employeeRepo.getAll(activeOnly: false);
+    final emp = employees.where((e) => e.id == employeeId).firstOrNull;
+    final status = emp != null &&
+            AttendanceCalculationService.isLate(overrideTime, emp.roleType)
+        ? 'LATE'
+        : 'ON_TIME';
+
+    // 3. Clock In
     await _attendanceRepo.clockIn(
-      employeeId, 
-      'ADMIN_OVERRIDE', 
+      employeeId,
+      'ADMIN_OVERRIDE',
       overrideReason: reason,
       overrideBy: overrideByUserId,
       overrideTime: overrideTime,
+      status: status,
     );
   }
 
@@ -106,9 +121,9 @@ class AttendanceService {
     );
   }
 
-  bool isLate(DateTime clockInTime) {
-    // Default config: 08:30 is late. Could be moved to settings table later.
-    final lateTime = DateTime(clockInTime.year, clockInTime.month, clockInTime.day, 8, 30);
-    return clockInTime.isAfter(lateTime);
+  /// ตรวจสอบว่าเข้างานสายตาม role ของพนักงาน
+  /// ใช้ [AttendanceCalculationService.isLate] ที่แมป roleType → เวลากะ
+  bool isLate(DateTime clockInTime, String roleType) {
+    return AttendanceCalculationService.isLate(clockInTime, roleType);
   }
 }

@@ -110,8 +110,6 @@ class _PayrollDetailDialogState extends ConsumerState<PayrollDetailDialog> {
                   Text('จำนวนครั้งที่มาสาย: ${r.lateCount} ครั้ง'),
                 ],
               ),
-              if (r.tripCount > 0)
-                Text('จำนวนเที่ยววิ่งรถ: ${r.tripCount} เที่ยว'),
               
               const Divider(height: 32),
               
@@ -119,7 +117,6 @@ class _PayrollDetailDialogState extends ConsumerState<PayrollDetailDialog> {
               const SizedBox(height: 8),
               if (r.baseSalary > 0) _buildSummaryRow('เงินเดือนพื้นฐาน', r.baseSalary),
               if (r.dailyWageTotal > 0) _buildSummaryRow('ค่าแรงรายวัน (${r.workDays + r.leaveDays} วัน)', r.dailyWageTotal),
-              if (r.tripTotalFee > 0) _buildSummaryRow('ค่าเที่ยว', r.tripTotalFee),
               if (r.overtimePay > 0) _buildSummaryRow('ค่าล่วงเวลา (OT)', r.overtimePay),
               if (r.bonus > 0) _buildSummaryRow('โบนัส/เบี้ยเลี้ยง', r.bonus),
               const Divider(),

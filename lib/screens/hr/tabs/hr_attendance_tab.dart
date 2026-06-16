@@ -61,6 +61,18 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
                   const CircularProgressIndicator(),
                 Row(
                   children: [
+                    // ปุ่มวันหยุดพิเศษ
+                    IconButton(
+                      icon: const Icon(Icons.beach_access, color: Colors.teal),
+                      tooltip: 'จัดการวันหยุดพิเศษ',
+                      onPressed: _showSpecialHolidayDialog,
+                    ),
+                    // ปุ่มปิดร้านฉุกเฉิน
+                    IconButton(
+                      icon: const Icon(Icons.warning_amber_rounded, color: Colors.deepOrange),
+                      tooltip: 'ปิดร้านฉุกเฉิน (Clock Out ทุกคน)',
+                      onPressed: _emergencyClose,
+                    ),
                     IconButton(
                       icon: const Icon(Icons.refresh),
                       tooltip: 'รีเฟรชข้อมูลจากคลาวด์',
@@ -83,6 +95,9 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
               ],
             ),
             const Divider(height: 32),
+
+            // ส่วนแสดงวันหยุดพิเศษ (ถ้ามี)
+            if (attendanceState.specialHolidays.isNotEmpty) ..._buildSpecialHolidayBanner(attendanceState.specialHolidays),
             
             Expanded(
               child: ListView.separated(
@@ -166,6 +181,145 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
     return '${d.inMinutes} นาที';
   }
 
+  // ---------------------------------------------------------------------------
+  // Emergency Close Shop
+  // ---------------------------------------------------------------------------
+
+  void _emergencyClose() async {
+    final isAuthorized = await AdminPinDialog.show(
+      context,
+      title: '🚨 ปิดร้านฉุกเฉิน',
+      message: 'กรุณากรอกรหัสผ่านแอดมินเพื่อยืนยัน',
+    );
+    if (!isAuthorized) {
+      if (mounted) AlertService.show(context: context, message: 'ยกเลิกการทำรายการ', type: 'error');
+      return;
+    }
+
+    if (!mounted) return;
+    // รับหมายเหตุการปิด
+    final reasonController = TextEditingController(text: 'ปิดร้านฉุกเฉิน');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.deepOrange),
+            SizedBox(width: 8),
+            Text('ยืนยันปิดร้านฉุกเฉิน', style: TextStyle(color: Colors.deepOrange)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('ระบบจะ Clock Out พนักงานทุกคนที่ยังเข้างานอยู่ทันที'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'หมายเหตุ',
+                border: OutlineInputBorder(),
+                hintText: 'เช่น ไฟดับ, ปิดร้านฉุกเฉิน',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.power_settings_new),
+            label: const Text('ปิดร้านเลย'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        final reason = reasonController.text.trim().isEmpty ? 'EMERGENCY_CLOSE' : reasonController.text.trim();
+        final count = await ref.read(attendanceProvider.notifier).emergencyCloseShop(reason);
+        if (mounted) {
+          AlertService.show(
+            context: context,
+            message: count > 0
+                ? 'ปิดร้านเรียบร้อย! Clock Out $count คน 🟢'
+                : 'ไม่มีพนักงานที่ต้องปิดร้าน (ทุกคนเลิกงานหมดแล้ว)',
+            type: count > 0 ? 'success' : 'info',
+          );
+        }
+      } catch (e) {
+        if (mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Special Holiday Dialog
+  // ---------------------------------------------------------------------------
+
+  void _showSpecialHolidayDialog() async {
+    final isAuthorized = await AdminPinDialog.show(
+      context,
+      title: '🏖️ วันหยุดพิเศษ',
+      message: 'กรุณากรอกรหัสผ่านแอดมินเพื่อจัดการวันหยุดพิเศษ',
+    );
+    if (!isAuthorized) {
+      if (mounted) AlertService.show(context: context, message: 'ยกเลิกการทำรายการ', type: 'error');
+      return;
+    }
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => _SpecialHolidayDialog(),
+    );
+    // โหลดข้อมูลใหม่หลังปิด dialog
+    if (mounted) ref.read(attendanceProvider.notifier).loadToday();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Special Holiday Banner (แสดงในรายการถ้าวันนี้เป็นวันหยุดพิเศษ)
+  // ---------------------------------------------------------------------------
+
+  List<Widget> _buildSpecialHolidayBanner(List<dynamic> holidays) {
+    final today = DateTime.now();
+    final todayHoliday = holidays.where((h) {
+      final d = h.date;
+      return d.year == today.year && d.month == today.month && d.day == today.day;
+    }).firstOrNull;
+
+    if (todayHoliday == null) return [];
+    return [
+      Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.teal.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.teal.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.beach_access, color: Colors.teal),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '🏖️ วันหยุดพิเศษ: ${todayHoliday.name} — พนักงานรายเดือนไม่นับขาดงานวันนี้',
+                style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
   Widget _buildEmployeeRow(EmployeeProfile emp, AttendanceLog? log, bool isOnTempLeave) {
     String status = 'ยังไม่เข้างาน';
     IconData icon = Icons.person_off;
@@ -218,11 +372,44 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
           trailing: PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'จัดการลงเวลาให้',
-            onSelected: (actionType) {
-              showDialog(
-                context: context,
-                builder: (context) => OverrideClockinDialog(employee: emp, actionType: actionType),
-              );
+            onSelected: (actionType) async {
+              if (actionType == 'DELETE_TODAY') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('ล้างข้อมูลการลงเวลาวันนี้'),
+                    content: Text('คุณต้องการล้างข้อมูลการเข้า-ออกงานวันนี้ของ "${emp.displayName}" ใช่หรือไม่?\n(ใช้ในการทดสอบระบบเพื่อให้สามารถทดสอบสแกนนิ้วใหม่ได้)'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('ล้างข้อมูล'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && mounted) {
+                  try {
+                    await ref.read(attendanceProvider.notifier).deleteTodayLog(emp.id);
+                    if (mounted) {
+                      AlertService.show(context: context, message: 'ล้างข้อมูลของ ${emp.displayName} เรียบร้อยแล้วครับ 🟢', type: 'success');
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e ❌', type: 'error');
+                    }
+                  }
+                }
+              } else {
+                showDialog(
+                  context: context,
+                  builder: (context) => OverrideClockinDialog(employee: emp, actionType: actionType),
+                );
+              }
             },
             itemBuilder: (context) => [
               if (log == null)
@@ -233,6 +420,11 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
                 const PopupMenuItem(value: 'TEMP_LEAVE', child: Text('ออกชั่วคราว')),
               if (isOnTempLeave)
                 const PopupMenuItem(value: 'TEMP_RETURN', child: Text('กลับเข้างาน')),
+              if (log != null)
+                const PopupMenuItem(
+                  value: 'DELETE_TODAY',
+                  child: Text('ล้างข้อมูลวันนี้ (ใช้ทดสอบ)', style: TextStyle(color: Colors.red)),
+                ),
             ],
           ),
         ),
@@ -409,6 +601,182 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// =============================================================================
+// _SpecialHolidayDialog: Dialog จัดการวันหยุดพิเศษ (เพิ่ม / ลบ)
+// =============================================================================
+
+class _SpecialHolidayDialog extends ConsumerStatefulWidget {
+  const _SpecialHolidayDialog();
+
+  @override
+  ConsumerState<_SpecialHolidayDialog> createState() => _SpecialHolidayDialogState();
+}
+
+class _SpecialHolidayDialogState extends ConsumerState<_SpecialHolidayDialog> {
+  final _nameController = TextEditingController();
+  DateTime _selectedDate = DateTime.now();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) setState(() => _selectedDate = picked);
+  }
+
+  Future<void> _addHoliday() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      AlertService.show(context: context, message: 'กรุณาระบุชื่อวันหยุด', type: 'error');
+      return;
+    }
+    try {
+      await ref.read(attendanceProvider.notifier).addSpecialHoliday(_selectedDate, name);
+      if (mounted) {
+        _nameController.clear();
+        AlertService.show(
+          context: context,
+          message: 'เพิ่มวันหยุดพิเศษ "$name" (${DateFormat('d MMM yyyy').format(_selectedDate)}) เรียบร้อย 🟢',
+          type: 'success',
+        );
+      }
+    } catch (e) {
+      if (mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+    }
+  }
+
+  Future<void> _removeHoliday(DateTime date, String name) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยันการลบวันหยุด'),
+        content: Text('ต้องการลบวันหยุดพิเศษ "$name" ออกจากระบบใช่หรือไม่?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ลบ'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      try {
+        await ref.read(attendanceProvider.notifier).removeSpecialHoliday(date);
+        if (mounted) AlertService.show(context: context, message: 'ลบวันหยุดพิเศษเรียบร้อย', type: 'success');
+      } catch (e) {
+        if (mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final holidays = ref.watch(attendanceProvider).specialHolidays;
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.beach_access, color: Colors.teal),
+          SizedBox(width: 8),
+          Text('จัดการวันหยุดพิเศษ', style: TextStyle(color: Colors.teal)),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ส่วนเพิ่มวันหยุดใหม่
+            const Text('เพิ่มวันหยุดพิเศษ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                // ปุ่มเลือกวันที่
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: Text(DateFormat('d MMM yyyy').format(_selectedDate)),
+                  onPressed: _pickDate,
+                ),
+                const SizedBox(width: 8),
+                // ช่องชื่อวันหยุด
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'ชื่อวันหยุด',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      hintText: 'เช่น ปิดร้านกะทันหัน',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('เพิ่ม'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                  onPressed: _addHoliday,
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            // รายการวันหยุดพิเศษที่มีอยู่
+            const Text('รายการวันหยุดพิเศษ', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            if (holidays.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text('ยังไม่มีวันหยุดพิเศษในระบบ', style: TextStyle(color: Colors.grey)),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 250),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: holidays.length,
+                  itemBuilder: (context, index) {
+                    final h = holidays[index];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.beach_access, color: Colors.teal, size: 20),
+                      title: Text(h.name),
+                      subtitle: Text(DateFormat('EEEE d MMMM yyyy', 'th').format(h.date)),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        tooltip: 'ลบวันหยุดนี้',
+                        onPressed: () => _removeHoliday(h.date, h.name),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('ปิด'),
+        ),
+      ],
     );
   }
 }

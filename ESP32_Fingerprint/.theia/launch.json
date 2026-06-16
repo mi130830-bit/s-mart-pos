@@ -1,0 +1,59 @@
+#include <SoftwareSerial.h>
+
+// ตั้งค่าจำลองพินดิจิทัล 2 (RX) และ 3 (TX) สำหรับบลูทูธ
+SoftwareSerial BT(2, 3); 
+
+// กำหนดพินควบคุมมอเตอร์ของ FunduMoto Shield
+int dirA = 12;  // ขากำหนดทิศทาง Motor A (มอเตอร์ขับเคลื่อนล้อ)
+int pwmA = 10;  // ขากำหนดความเร็ว Motor A
+
+int dirB = 13;  // ขากำหนดทิศทาง Motor B (เซอร์โวเลโก้สำหรับเลี้ยว)
+int pwmB = 11;  // ขากำหนดความเร็ว/กำลัง Motor B
+
+void setup() {
+  // เปิดพอร์ตสำหรับดูข้อมูลในคอมพิวเตอร์
+  Serial.begin(9600);
+  
+  // เปิดพอร์ตบลูทูธ HM-10 (ความเร็วมาตรฐานจากโรงงานคือ 9600)
+  BT.begin(9600); 
+  
+  // ตั้งค่าพินมอเตอร์ทั้งหมดเป็นเอาต์พุต
+  pinMode(dirA, OUTPUT);
+  pinMode(pwmA, OUTPUT);
+  pinMode(dirB, OUTPUT);
+  pinMode(pwmB, OUTPUT);
+  
+  Serial.println("Lego Bluetooth Car Ready!");
+}
+
+void loop() {
+  // ถ้ามีข้อมูลส่งมาจากบลูทูธในมือถือ
+  if (BT.available()) {
+    char command = BT.read(); // อ่านตัวอักษรที่ส่งมาทีละตัว
+    
+    Serial.print("Received Command: ");
+    Serial.println(command); // แสดงตัวอักษรบนหน้าจอคอมพิวเตอร์เพื่อเช็ก
+    
+    // วงจรเงื่อนไขควบคุมรถตามตัวอักษรที่ส่งมา
+    if (command == 'F') {         // F = Forward (เดินหน้า)
+      digitalWrite(dirA, HIGH);
+      analogWrite(pwmA, 200);     // ตั้งความเร็วรถ (0 - 255)
+    } 
+    else if (command == 'B') {    // B = Backward (ถอยหลัง)
+      digitalWrite(dirA, LOW);
+      analogWrite(pwmA, 200);
+    } 
+    else if (command == 'L') {    // L = Left (เลี้ยวซ้าย)
+      digitalWrite(dirB, HIGH);
+      analogWrite(pwmB, 255);     // จ่ายไฟเต็มที่ให้เซอร์โวเลโก้บิดเลี้ยว
+    } 
+    else if (command == 'R') {    // R = Right (เลี้ยวขวา)
+      digitalWrite(dirB, LOW);
+      analogWrite(pwmB, 255);
+    } 
+    else if (command == 'S') {    // S = Stop (หยุดทุกอย่าง)
+      analogWrite(pwmA, 0);       // มอเตอร์ขับเคลื่อนหยุดหมุน
+      analogWrite(pwmB, 0);       // เซอร์โวเลโก้ไม่มีไฟจ่าย จะเด้งกลับมาตรงกลางเอง
+    }
+  }
+}

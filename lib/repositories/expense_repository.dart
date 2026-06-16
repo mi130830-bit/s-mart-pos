@@ -87,6 +87,12 @@ class ExpenseRepository {
     return res.affectedRows.toInt() > 0;
   }
 
+  Future<bool> deleteExpenseByTitle(String title) async {
+    final res = await _dbService
+        .execute('DELETE FROM expense WHERE title = :title', {'title': title});
+    return res.affectedRows.toInt() > 0;
+  }
+
   /// Get Total Expenses (Type = EXPENSE)
   Future<double> getTotalExpensesByDateRange(
       DateTime start, DateTime end) async {

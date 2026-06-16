@@ -34,27 +34,39 @@ class EmployeeRepository {
       )
     ''');
 
-    // Auto-migrate schema changes
-    try {
+    // Auto-migrate schema changes (safe checks)
+    final checkNickname = await _db.query("SHOW COLUMNS FROM employee_profile LIKE 'nickname'");
+    if (checkNickname.isNotEmpty) {
       await _db.execute("ALTER TABLE employee_profile CHANGE nickname display_name VARCHAR(100) NULL");
-    } catch (_) {}
-    try {
+    }
+
+    final checkEmpType = await _db.query("SHOW COLUMNS FROM employee_profile LIKE 'employee_type'");
+    if (checkEmpType.isNotEmpty) {
       await _db.execute("ALTER TABLE employee_profile CHANGE employee_type role_type VARCHAR(50) DEFAULT 'OFFICE'");
-    } catch (_) {}
+    }
 
     // Run migration if table exists from before
     try {
       await _db.execute('ALTER TABLE employee_profile MODIFY user_id INT NULL;');
     } catch (_) {}
-    try {
-      await _db.execute('ALTER TABLE employee_profile ADD COLUMN firebase_uid VARCHAR(128) NULL;');
-    } catch (_) {}
-    try {
-      await _db.execute('ALTER TABLE employee_profile ADD COLUMN sort_order INT DEFAULT 0;');
-    } catch (_) {}
+
+    await _db.ensureColumn('employee_profile', 'firebase_uid', 'VARCHAR(128) NULL');
+    await _db.ensureColumn('employee_profile', 'sort_order', 'INT DEFAULT 0');
+
     try {
       await _db.execute('UPDATE employee_profile SET pin_code = "000000" WHERE pin_code IS NULL;');
     } catch (_) {}
+
+    await _db.execute('''
+      CREATE TABLE IF NOT EXISTS employee_fingerprint (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        employee_id INT NOT NULL,
+        fingerprint_slot_id INT NOT NULL UNIQUE,
+        finger_name VARCHAR(50) DEFAULT 'Right Index',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employee_profile(id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<List<EmployeeProfile>> getAll({bool activeOnly = true}) async {
@@ -223,5 +235,53 @@ class EmployeeRepository {
         {'sort': i, 'id': orderedIds[i]}
       );
     }
+  }
+
+  Future<int?> getEmployeeIdByFingerprint(int fingerprintSlotId) async {
+    final results = await _db.query(
+      'SELECT employee_id FROM employee_fingerprint WHERE fingerprint_slot_id = :slot_id LIMIT 1',
+      {'slot_id': fingerprintSlotId}
+    );
+    if (results.isEmpty) return null;
+    return int.tryParse(results.first['employee_id']?.toString() ?? '');
+  }
+
+  /// ดึง slot_id ตัวแรกที่ผูกกับพนักงาน (ใช้สำหรับ UI แสดงสถานะ)
+  Future<int?> getFingerprintBaseSlotByEmployee(int employeeId) async {
+    final results = await _db.query(
+      'SELECT MIN(fingerprint_slot_id) as base_slot FROM employee_fingerprint WHERE employee_id = :employee_id',
+      {'employee_id': employeeId}
+    );
+    if (results.isEmpty) return null;
+    return int.tryParse(results.first['base_slot']?.toString() ?? '');
+  }
+
+  /// ดึง slot_id ทั้งหมดที่ผูกกับพนักงาน (เพื่อตรวจสอบว่าลงทะเบียนแล้ว)
+  Future<int?> getFingerprintSlotIdByEmployee(int employeeId) async {
+    return getFingerprintBaseSlotByEmployee(employeeId);
+  }
+
+  /// ผูก fingerprint slot กับพนักงาน (รองรับหลาย slots ต่อคน)
+  /// ระบบใหม่ใช้ 4 slots ต่อคน: RIGHT_1, RIGHT_2, LEFT_1, LEFT_2
+  Future<void> assignFingerprintToEmployee(
+      int employeeId, int fingerprintSlotId, String fingerName) async {
+    await _db.execute(
+      'INSERT INTO employee_fingerprint (employee_id, fingerprint_slot_id, finger_name) '
+      'VALUES (:employee_id, :slot_id, :finger_name) '
+      'ON DUPLICATE KEY UPDATE employee_id = :employee_id, finger_name = :finger_name',
+      {
+        'employee_id': employeeId,
+        'slot_id': fingerprintSlotId,
+        'finger_name': fingerName
+      }
+    );
+  }
+
+  /// ลบข้อมูลลายนิ้วมือทั้งหมด (ทุก slots) ของพนักงานคนนั้น
+  Future<void> removeFingerprint(int employeeId) async {
+    await _db.execute(
+      'DELETE FROM employee_fingerprint WHERE employee_id = :employee_id',
+      {'employee_id': employeeId}
+    );
   }
 }

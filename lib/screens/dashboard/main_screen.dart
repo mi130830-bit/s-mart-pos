@@ -23,6 +23,9 @@ import '../../services/integration/delivery_integration_service.dart';
 import '../pos/pos_state_manager.dart';
 import 'package:auto_updater/auto_updater.dart';
 import '../../services/alert_service.dart';
+import '../../services/hr/fingerprint_attendance_service.dart';
+import '../../widgets/fingerprint/fingerprint_action_card.dart';
+import '../../state/hr/attendance_provider.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -36,6 +39,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
   Key _refreshKey = UniqueKey(); // ✅ Key สำหรับบังคับ Rebuild
   late TabController _tabController;
 
+  // Fingerprint action overlay (non-blocking floating card)
+  OverlayEntry? _fingerprintActionOverlay;
+
   // ✅ Task 5: สร้าง Delivery Service (ใช้ Singleton Pattern เดียวกับส่วนอื่นใน app)
   final DeliveryIntegrationService _deliveryService = DeliveryIntegrationService(
     MySQLService(),
@@ -48,6 +54,48 @@ class _MainScreenState extends ConsumerState<MainScreen>
     windowManager.addListener(this); // ✅ Add Listener
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabSelection);
+
+    // ดักฟังการแสกนลายนิ้วมือเพื่อแสดง Toast แจ้งเตือนบนจอ POS
+    FingerprintAttendanceService().onAttendanceRecorded = (name, type) {
+      if (mounted) {
+        AlertService.show(
+          context: context,
+          message: 'บันทึกสำเร็จ: คุณ $name ได้ทำการ $type แล้วครับ 🟢',
+          type: 'success',
+          duration: const Duration(seconds: 4),
+        );
+        ref.read(attendanceProvider.notifier).loadToday(); // รีเฟรชหน้าประวัติลงเวลาทำงานทันที
+      }
+    };
+    FingerprintAttendanceService().onUnknownFingerprint = (msg) {
+      if (mounted) {
+        AlertService.show(
+          context: context,
+          message: msg,
+          type: 'warning',
+          duration: const Duration(seconds: 5),
+        );
+      }
+    };
+
+    // ดักฟังกรณีสแกนนิ้วในสถานะกึ่งกลาง → แสดง floating card ที่มุมล่างขวา (ไม่ขวาง POS)
+    // ⚠️ card จะขึ้นเฉพาะเครื่องที่ login ด้วย role ADMIN เท่านั้น
+    FingerprintAttendanceService().onActionRequired = (name, currentStatus, onActionSelected) {
+      if (!mounted) return;
+      final authState = ref.read(authProvider);
+      if (!authState.isAdmin) {
+        // ไม่ใช่ Admin → แค่แจ้งเตือน Toast เงียบๆ ไม่ขึ้น card ให้กด
+        final statusText = currentStatus == 'CLOCK_IN' ? 'กำลังทำงานอยู่' : 'ออกชั่วคราวอยู่';
+        AlertService.show(
+          context: context,
+          message: '👆 $name สแกนนิ้วแล้ว ($statusText)',
+          type: 'info',
+          duration: const Duration(seconds: 3),
+        );
+        return;
+      }
+      _showFingerprintActionOverlay(name, currentStatus, onActionSelected);
+    };
   }
 
   void _handleTabSelection() {
@@ -61,7 +109,61 @@ class _MainScreenState extends ConsumerState<MainScreen>
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     _deliveryService.dispose(); // ✅ Task 5: ยกเลิก Timer
+    FingerprintAttendanceService().onAttendanceRecorded = null;
+    FingerprintAttendanceService().onUnknownFingerprint = null;
+    FingerprintAttendanceService().onActionRequired = null;
+    _fingerprintActionOverlay?.remove();
+    _fingerprintActionOverlay = null;
     super.dispose();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fingerprint Action Overlay
+  // ---------------------------------------------------------------------------
+
+  /// แสดง floating card ที่มุมล่างขวา โดยไม่ขวางหน้าจอ POS
+  void _showFingerprintActionOverlay(
+    String name,
+    String currentStatus,
+    void Function(String action) onActionSelected,
+  ) {
+    // ถ้ามี overlay เก่าอยู่ ให้เอาออกก่อน (เผื่อสแกนซ้อนกัน)
+    _fingerprintActionOverlay?.remove();
+    _fingerprintActionOverlay = null;
+
+    // Toast แจ้งเตือนเล็กๆ ด้านซ้ายล่างว่ามีคนสแกน
+    final statusText = currentStatus == 'CLOCK_IN' ? 'กำลังทำงานอยู่' : 'ออกชั่วคราวอยู่';
+    AlertService.show(
+      context: context,
+      message: '👆 $name สแกนนิ้วแล้ว ($statusText)',
+      type: 'info',
+      duration: const Duration(seconds: 3),
+    );
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        bottom: 20,
+        right: 20,
+        child: FingerprintActionCard(
+          employeeName: name,
+          currentStatus: currentStatus,
+          autoTimeoutSeconds: 300, // 5 นาที
+          onActionSelected: (action) {
+            entry.remove();
+            if (_fingerprintActionOverlay == entry) {
+              _fingerprintActionOverlay = null;
+            }
+            if (action != 'DISMISS') {
+              onActionSelected(action);
+            }
+          },
+        ),
+      ),
+    );
+
+    _fingerprintActionOverlay = entry;
+    Overlay.of(context).insert(entry);
   }
 
   // ... (rest of initState / _checkAutoOpenDisplay) ...
@@ -162,6 +264,12 @@ class _MainScreenState extends ConsumerState<MainScreen>
     
     final bool canAccessHR = isUserAdmin || isUserHR;
 
+    // ✅ Payday Alert Check (แจ้งเตือนวันจ่ายเงิน)
+    final today = DateTime.now();
+    final bool isWeeklyPayday = today.weekday == DateTime.saturday;
+    final bool isMonthlyPayday = today.day == 1;
+    final bool hasPaydayAlert = isWeeklyPayday || isMonthlyPayday;
+
     // ✅ 1. เรียงลำดับหน้าจอ (Screens) ใหม่ตามคำขอ
     final List<Widget> screens = [
       const PosCheckoutScreen(), // 1. จุดขาย
@@ -208,9 +316,14 @@ class _MainScreenState extends ConsumerState<MainScreen>
           label: Text('จัดการผู้ขาย'),
         ),
       if (canAccessHR)
-        const NavigationRailDestination(
-          icon: Icon(Icons.badge),
-          label: Text('บุคคล'),
+        NavigationRailDestination(
+          icon: hasPaydayAlert 
+              ? const Badge(
+                  label: Text('!'), 
+                  child: Icon(Icons.badge)
+                ) 
+              : const Icon(Icons.badge),
+          label: const Text('บุคคล'),
         ),
       if (canAccessSettings)
         const NavigationRailDestination(

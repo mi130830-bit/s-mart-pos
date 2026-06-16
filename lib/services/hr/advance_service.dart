@@ -53,4 +53,7 @@ class AdvanceService {
       remainingToDeduct -= deductAmount;
     }
   }
+  Future<void> revertDeductionsForPayroll(int payrollId) async {
+    await _advanceRepo.revertDeductionsForPayroll(payrollId);
+  }
 }

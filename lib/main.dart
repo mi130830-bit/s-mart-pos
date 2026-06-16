@@ -34,6 +34,7 @@ import 'services/command_service.dart';
 import 'services/alert_service.dart';
 import 'services/hr/attendance_sync_service.dart';
 import 'services/hr/advance_sync_service.dart';
+import 'services/hr/fingerprint_attendance_service.dart';
 
 void main(List<String> args) {
   runZonedGuarded(
@@ -195,6 +196,10 @@ void main(List<String> args) {
           
           // ✅ Start sync for mobile advance money requests
           AdvanceSyncService().startSyncTimer();
+
+          // ✅ Start fingerprint background listener (Global, no UI needed)
+          // ⚠️ Fail-Safe: ถ้าไม่มีอุปกรณ์ต่ออยู่จะ Skip เงียบๆ ไม่ทำให้แอปพัง
+          FingerprintAttendanceService().start();
         } catch (e) {
           debugPrint('⚠️ [Background Init Error]: $e');
         }

@@ -43,11 +43,27 @@ class _DatabaseConfigScreenState extends State<DatabaseConfigScreen> {
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('db_mode', _selectedMode);
-    await prefs.setString('db_host', _hostCtrl.text.trim());
-    await prefs.setInt('db_port', int.tryParse(_portCtrl.text) ?? 3306);
-    await prefs.setString('db_user', _userCtrl.text.trim());
-    await prefs.setString('db_pass', _passCtrl.text);
-    await prefs.setString('db_name', _dbCtrl.text.trim());
+    
+    final host = _hostCtrl.text.trim();
+    final port = int.tryParse(_portCtrl.text) ?? 3306;
+    final user = _userCtrl.text.trim();
+    final pass = _passCtrl.text;
+    final db = _dbCtrl.text.trim();
+
+    await prefs.setString('db_host', host);
+    await prefs.setInt('db_port', port);
+    await prefs.setString('db_user', user);
+    await prefs.setString('db_pass', pass);
+    await prefs.setString('db_name', db);
+
+    // ✅ Sync to MySQL Service (SecureStorage) so the connection pool actually uses it!
+    await MySQLService().saveConfig(
+      host: host,
+      port: port,
+      user: user,
+      pass: pass,
+      db: db,
+    );
   }
 
   void _applyMode(String mode) {

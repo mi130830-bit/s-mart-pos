@@ -182,6 +182,37 @@ class PayrollRepository {
     return results.map((row) => PayrollRecord.fromJson(row)).toList();
   }
 
+  Future<bool> hasConfirmedOrPaidInPeriod(DateTime start, DateTime end) async {
+    final results = await _db.query('''
+      SELECT COUNT(*) as cnt
+      FROM payroll_record
+      WHERE period_start = :start AND period_end = :end
+        AND status IN ('CONFIRMED', 'PAID')
+    ''', {
+      'start': start.toIso8601String().split('T')[0],
+      'end': end.toIso8601String().split('T')[0],
+    });
+    if (results.isEmpty) return false;
+    final cnt = int.tryParse(results.first['cnt']?.toString() ?? '0') ?? 0;
+    return cnt > 0;
+  }
+
+  Future<List<PayrollRecord>> getUnpaidByPeriod(DateTime start, DateTime end) async {
+    final results = await _db.query('''
+      SELECT p.*, COALESCE(e.display_name, u.displayName) as employeeName
+      FROM payroll_record p
+      JOIN employee_profile e ON p.employee_id = e.id
+      LEFT JOIN user u ON e.user_id = u.id
+      WHERE p.period_start = :start AND p.period_end = :end
+        AND p.status != 'PAID'
+      ORDER BY u.displayName ASC
+    ''', {
+      'start': start.toIso8601String().split('T')[0],
+      'end': end.toIso8601String().split('T')[0],
+    });
+    return results.map((row) => PayrollRecord.fromJson(row)).toList();
+  }
+
   Future<List<PayrollRecord>> getByEmployee(int employeeId, {int limit = 12}) async {
     final results = await _db.query('''
       SELECT p.*, COALESCE(e.display_name, u.displayName) as employeeName
@@ -223,8 +254,8 @@ class PayrollRepository {
       JOIN employee_profile e ON p.employee_id = e.id
       LEFT JOIN user u ON e.user_id = u.id
       WHERE p.status IN ('CONFIRMED', 'PAID')
-        AND p.period_start >= :start
-        AND p.period_end <= :end
+        AND p.period_start <= :end
+        AND p.period_end >= :start
     ''';
     final params = <String, dynamic>{
       'start': startDate.toIso8601String().split('T')[0],
@@ -255,8 +286,8 @@ class PayrollRepository {
         MAX(paid_at) as last_paid_at
       FROM payroll_record
       WHERE status IN ('CONFIRMED', 'PAID')
-        AND period_start >= :start
-        AND period_end <= :end
+        AND period_start <= :end
+        AND period_end >= :start
       GROUP BY period_start, period_end
       ORDER BY period_end DESC
     ''', {

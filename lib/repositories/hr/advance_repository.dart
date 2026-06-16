@@ -24,9 +24,7 @@ class AdvanceRepository {
     ''');
     
     // Auto-migrate
-    try {
-      await _db.execute("ALTER TABLE advance_payment ADD COLUMN installment_amount DECIMAL(15,2) NULL AFTER remaining_amount");
-    } catch (_) {}
+    await _db.ensureColumn('advance_payment', 'installment_amount', 'DECIMAL(15,2) NULL AFTER remaining_amount');
 
     await _db.execute('''
       CREATE TABLE IF NOT EXISTS advance_deduction (
@@ -147,6 +145,31 @@ class AdvanceRepository {
       ORDER BY a.request_date DESC
     ''', {'emp_id': employeeId});
     return results.map((row) => AdvancePayment.fromJson(row)).toList();
+  }
+
+  Future<void> revertDeductionsForPayroll(int payrollId) async {
+    final deductions = await _db.query('''
+      SELECT * FROM advance_deduction WHERE payroll_id = :pay_id
+    ''', {'pay_id': payrollId});
+
+    for (var d in deductions) {
+      final advId = d['advance_id'];
+      final amt = d['deducted_amount'];
+      
+      await _db.execute('''
+        UPDATE advance_payment
+        SET remaining_amount = remaining_amount + :amt,
+            status = CASE 
+              WHEN remaining_amount + :amt >= amount THEN 'APPROVED'
+              ELSE 'PARTIAL'
+            END
+        WHERE id = :adv_id
+      ''', {'adv_id': advId, 'amt': amt});
+    }
+
+    await _db.execute('''
+      DELETE FROM advance_deduction WHERE payroll_id = :pay_id
+    ''', {'pay_id': payrollId});
   }
 
   Future<List<AdvancePayment>> getAllHistory() async {

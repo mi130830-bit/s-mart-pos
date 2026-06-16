@@ -1,6 +1,7 @@
 import '../../services/mysql_service.dart';
 import '../../models/hr/attendance_log.dart';
 import '../../services/hr/attendance_calculation_service.dart';
+import 'special_holiday_repository.dart';
 
 class AttendanceRepository {
   final MySQLService _db = MySQLService();
@@ -28,24 +29,37 @@ class AttendanceRepository {
         UNIQUE KEY idx_emp_date (employee_id, date)
       )
     ''');
-    try {
-      await _db.execute('ALTER TABLE attendance_log ADD COLUMN temp_out DATETIME NULL;');
-      await _db.execute('ALTER TABLE attendance_log ADD COLUMN back_to_work DATETIME NULL;');
-    } catch (_) {}
+    await _db.ensureColumn('attendance_log', 'temp_out', 'DATETIME NULL');
+    await _db.ensureColumn('attendance_log', 'back_to_work', 'DATETIME NULL');
+    // สร้างตาราง special_holiday ด้วยถ้ายังไม่มี
+    await SpecialHolidayRepository().initTable();
   }
 
-  Future<int> clockIn(int employeeId, String method, {String? deviceInfo, String? overrideReason, int? overrideBy, DateTime? overrideTime}) async {
+  Future<int> clockIn(int employeeId, String method, {
+    String? deviceInfo,
+    String? overrideReason,
+    int? overrideBy,
+    DateTime? overrideTime,
+    String status = 'ON_TIME', // คำนวณแล้วส่งมาจาก AttendanceService
+  }) async {
     final now = overrideTime ?? DateTime.now();
     final timeStr = overrideTime != null ? ':override_time' : 'NOW()';
     final sql = '''
       INSERT INTO attendance_log (employee_id, date, clock_in, method, device_info, status, override_reason, override_by)
       VALUES (:employee_id, CURDATE(), $timeStr, :method, :device_info, :status, :override_reason, :override_by)
+      ON DUPLICATE KEY UPDATE
+        clock_in = IF(clock_in IS NULL, VALUES(clock_in), clock_in),
+        method = IFNULL(VALUES(method), method),
+        device_info = IFNULL(VALUES(device_info), device_info),
+        status = IFNULL(VALUES(status), status),
+        override_reason = IFNULL(VALUES(override_reason), override_reason),
+        override_by = IFNULL(VALUES(override_by), override_by)
     ''';
     final params = {
       'employee_id': employeeId,
       'method': method,
       'device_info': deviceInfo,
-      'status': 'ON_TIME', // Placeholder logic, could calculate based on shift time
+      'status': status,
       'override_reason': overrideReason,
       'override_by': overrideBy,
     };
@@ -145,6 +159,15 @@ class AttendanceRepository {
   }
 
   Future<double> countWorkDays(int employeeId, DateTime start, DateTime end) async {
+    // ดึง roleType ของพนักงาน เพื่อใช้คำนวณเวลากะเข้างานที่ถูกต้อง
+    final empResult = await _db.query(
+      'SELECT role_type FROM employee_profile WHERE id = :id LIMIT 1',
+      {'id': employeeId},
+    );
+    final roleType = empResult.isNotEmpty
+        ? (empResult.first['role_type']?.toString() ?? 'REQUESTER')
+        : 'REQUESTER';
+
     final results = await _db.query('''
       SELECT *
       FROM attendance_log 
@@ -159,14 +182,49 @@ class AttendanceRepository {
     });
     
     if (results.isEmpty) return 0.0;
+
+    // ดึงรายการวันหยุดพิเศษในช่วงเวลานั้น เพื่อข้ามออกจากการนับวันทำงาน
+    final holidays = await SpecialHolidayRepository().getHolidaysInRange(start, end);
+    final holidayDates = holidays.map((h) => h.date.toIso8601String().split('T')[0]).toSet();
     
     double totalDays = 0.0;
     for (var row in results) {
       final log = AttendanceLog.fromJson(row);
-      totalDays += AttendanceCalculationService.calculateFractionalDays(log);
+      final logDateStr = log.date.toIso8601String().split('T')[0];
+      if (holidayDates.contains(logDateStr)) continue;
+      bool isFinalDay = log.date.year == end.year &&
+          log.date.month == end.month &&
+          log.date.day == end.day;
+      totalDays += AttendanceCalculationService.calculateFractionalDays(
+        log,
+        isFinalDay: isFinalDay,
+        roleType: roleType,
+      );
     }
     
     return totalDays;
+  }
+
+  /// Emergency Close: Clock Out พนักงานทุกคนที่ยังเข้างานอยู่ในวันนี้
+  /// ใช้เมื่อปิดร้านฉุกเฉิน หรือไฟดับ
+  Future<int> emergencyClockOutAll({String reason = 'EMERGENCY_CLOSE', int? overrideBy}) async {
+    final now = DateTime.now();
+    final timeStr = now.toIso8601String().replaceAll('T', ' ').substring(0, 19);
+    final result = await _db.execute('''
+      UPDATE attendance_log
+      SET clock_out = :time,
+          method = 'EMERGENCY',
+          override_reason = :reason,
+          override_by = :by
+      WHERE date = CURDATE()
+        AND clock_in IS NOT NULL
+        AND clock_out IS NULL
+    ''', {
+      'time': timeStr,
+      'reason': reason,
+      'by': overrideBy,
+    });
+    return result.affectedRows.toInt();
   }
 
   Future<bool> hasClockInToday(int employeeId) async {
@@ -226,7 +284,8 @@ class AttendanceRepository {
 
     final sql = '''
       SELECT 
-        e.id as employee_id, 
+        e.id as employee_id,
+        e.role_type,
         COALESCE(e.display_name, u.displayName) as employeeName,
         (SELECT clock_in FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_in,
         (SELECT clock_out FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_out,
@@ -242,13 +301,21 @@ class AttendanceRepository {
     
     final employees = await _db.query(sql);
     
+    // สร้าง map: employee_id → role_type เพื่อใช้ในการคำนวณ calculateFractionalDays
+    final Map<int, String> roleTypeMap = {};
+    for (var emp in employees) {
+      final id = int.tryParse(emp['employee_id']?.toString() ?? '0') ?? 0;
+      roleTypeMap[id] = emp['role_type']?.toString() ?? 'REQUESTER';
+    }
+
     final logsSql = 'SELECT * FROM attendance_log WHERE $dateCondition AND clock_in IS NOT NULL';
     final logsResult = await _db.query(logsSql);
     
     final Map<int, double> presentDaysMap = {};
     for (var row in logsResult) {
       final log = AttendanceLog.fromJson(row);
-      final days = AttendanceCalculationService.calculateFractionalDays(log);
+      final roleType = roleTypeMap[log.employeeId] ?? 'REQUESTER';
+      final days = AttendanceCalculationService.calculateFractionalDays(log, roleType: roleType);
       presentDaysMap[log.employeeId] = (presentDaysMap[log.employeeId] ?? 0.0) + days;
     }
     
@@ -274,5 +341,23 @@ class AttendanceRepository {
   Future<int> clearAll() async {
     final result = await _db.execute('DELETE FROM attendance_log');
     return result.affectedRows.toInt();
+  }
+
+  Future<int> deleteTodayLog(int employeeId) async {
+    final result = await _db.execute('''
+      DELETE FROM attendance_log 
+      WHERE employee_id = :emp_id AND date = CURDATE()
+    ''', {'emp_id': employeeId});
+    return result.affectedRows.toInt();
+  }
+
+  Future<AttendanceLog?> getTodayLogByEmployee(int employeeId) async {
+    final results = await _db.query('''
+      SELECT * FROM attendance_log 
+      WHERE employee_id = :emp_id AND date = CURDATE()
+      LIMIT 1
+    ''', {'emp_id': employeeId});
+    if (results.isEmpty) return null;
+    return AttendanceLog.fromJson(results.first);
   }
 }

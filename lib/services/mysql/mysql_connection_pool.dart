@@ -19,6 +19,20 @@ class MySQLConnectionManager {
   /// Checks if the connection is currently open and healthy.
   bool isConnected() => connection != null && connection!.connected;
 
+  /// ปิด connection เก่าที่อาจ stale แล้ว reconnect ใหม่สด
+  /// ใช้เมื่อ query ล้มเหลวด้วย SocketException หรือ semaphore timeout
+  Future<void> resetAndReconnect() async {
+    if (connection != null) {
+      try {
+        await connection!.close();
+      } catch (_) {}
+      connection = null;
+    }
+    _isConnecting = false;
+    _connectionCompleter = null;
+    await connect();
+  }
+
   /// Retrieves the current database configuration from SecureStorage.
   Future<Map<String, String?>> getConfig() async {
     const storage = FlutterSecureStorage();

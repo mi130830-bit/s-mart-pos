@@ -60,6 +60,21 @@ class AttendanceSyncService {
         final tempOutStr = logData['temp_out_time']?.toString();
         final backToWorkStr = logData['back_to_work_time']?.toString();
         
+        // Helper for parsing time strings that might only be time (e.g., "09:00:00")
+        DateTime? parseTimeFallback(String? timeStr, String baseDate) {
+          if (timeStr == null || timeStr.isEmpty) return null;
+          final dt = DateTime.tryParse(timeStr);
+          if (dt != null) return dt;
+          final combined = DateTime.tryParse('$baseDate $timeStr');
+          if (combined != null) return combined;
+          // Try adding seconds if it's just "HH:mm"
+          if (timeStr.length <= 5 && timeStr.contains(':')) {
+            final withSeconds = DateTime.tryParse('$baseDate $timeStr:00');
+            if (withSeconds != null) return withSeconds;
+          }
+          return null;
+        }
+
         // Find employee by firebase_uid
         final emp = await _employeeRepo.getByFirebaseUid(userId);
         if (emp != null) {
@@ -67,10 +82,10 @@ class AttendanceSyncService {
             id: 0,
             employeeId: emp.id,
             date: DateTime.tryParse(date) ?? DateTime.now(),
-            clockIn: checkInStr != null ? DateTime.tryParse(checkInStr) : null,
-            clockOut: checkOutStr != null ? DateTime.tryParse(checkOutStr) : null,
-            tempOut: tempOutStr != null ? DateTime.tryParse(tempOutStr) : null,
-            backToWork: backToWorkStr != null ? DateTime.tryParse(backToWorkStr) : null,
+            clockIn: parseTimeFallback(checkInStr, date),
+            clockOut: parseTimeFallback(checkOutStr, date),
+            tempOut: parseTimeFallback(tempOutStr, date),
+            backToWork: parseTimeFallback(backToWorkStr, date),
             method: 'MOBILE_GPS',
             latitude: double.tryParse(logData['check_in_lat']?.toString() ?? ''),
             longitude: double.tryParse(logData['check_in_lng']?.toString() ?? ''),
