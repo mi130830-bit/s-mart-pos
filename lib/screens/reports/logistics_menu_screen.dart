@@ -127,7 +127,7 @@ class LogisticsMenuScreen extends StatelessWidget {
         splashColor: color.withValues(alpha: 0.2),
         child: Container(
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: color, width: 6)),
+            border: Border(bottom: BorderSide(color: color, width: 6)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
           child: Column(

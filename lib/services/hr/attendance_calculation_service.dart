@@ -81,16 +81,31 @@ class AttendanceCalculationService {
       earlyMinutes = standardOut.difference(actualOut).inMinutes;
     }
 
-    // 3. ออกชั่วคราว (พักกลางวัน/ธุระ)
+    // 3. ออกชั่วคราว (บวกทุกรอบ)
     int tempOutMinutes = 0;
+    // รอบที่ 1
     if (log.tempOut != null) {
       DateTime outTime  = log.tempOut!;
       DateTime backTime = log.backToWork ?? actualOut;
       if (backTime.isAfter(actualOut)) backTime = actualOut;
       if (outTime.isBefore(actualIn)) outTime = actualIn;
-      if (outTime.isBefore(backTime)) {
-        tempOutMinutes = backTime.difference(outTime).inMinutes;
-      }
+      if (outTime.isBefore(backTime)) tempOutMinutes += backTime.difference(outTime).inMinutes;
+    }
+    // รอบที่ 2
+    if (log.tempOut2 != null) {
+      DateTime outTime  = log.tempOut2!;
+      DateTime backTime = log.backToWork2 ?? actualOut;
+      if (backTime.isAfter(actualOut)) backTime = actualOut;
+      if (outTime.isBefore(actualIn)) outTime = actualIn;
+      if (outTime.isBefore(backTime)) tempOutMinutes += backTime.difference(outTime).inMinutes;
+    }
+    // รอบที่ 3
+    if (log.tempOut3 != null) {
+      DateTime outTime  = log.tempOut3!;
+      DateTime backTime = log.backToWork3 ?? actualOut;
+      if (backTime.isAfter(actualOut)) backTime = actualOut;
+      if (outTime.isBefore(actualIn)) outTime = actualIn;
+      if (outTime.isBefore(backTime)) tempOutMinutes += backTime.difference(outTime).inMinutes;
     }
 
     // รวมเวลาที่ขาดหายไป

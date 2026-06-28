@@ -40,7 +40,10 @@ class LeaveNotifier extends AutoDisposeNotifier<LeaveState> {
   @override
   LeaveState build() {
     ref.keepAlive();
-    Future.microtask(() => loadPending());
+    Future.microtask(() {
+      loadPending();
+      loadAllHistory();
+    });
     return LeaveState(isLoading: true);
   }
 
@@ -49,6 +52,16 @@ class LeaveNotifier extends AutoDisposeNotifier<LeaveState> {
     try {
       final pending = await _repo.getPending();
       state = state.copyWith(pending: pending, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(error: e.toString(), isLoading: false);
+    }
+  }
+
+  Future<void> loadAllHistory() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final history = await _repo.getAllHistory();
+      state = state.copyWith(history: history, isLoading: false);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
@@ -69,6 +82,7 @@ class LeaveNotifier extends AutoDisposeNotifier<LeaveState> {
     try {
       await _repo.create(request);
       await loadPending();
+      await loadAllHistory();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
       rethrow;
@@ -80,6 +94,7 @@ class LeaveNotifier extends AutoDisposeNotifier<LeaveState> {
     try {
       await _repo.approve(id, approvedBy);
       await loadPending();
+      await loadAllHistory();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
       rethrow;
@@ -91,6 +106,7 @@ class LeaveNotifier extends AutoDisposeNotifier<LeaveState> {
     try {
       await _repo.reject(id, reason);
       await loadPending();
+      await loadAllHistory();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
       rethrow;

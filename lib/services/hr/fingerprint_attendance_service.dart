@@ -39,7 +39,7 @@ class FingerprintAttendanceService {
   // Public State
   // ---------------------------------------------------------------------------
   bool _started = false;
-  
+
   // ป้องกันการแสกนซ้ำซ้อนภายในระยะเวลาอันสั้น (Cooldown 60 วินาที)
   final Map<int, DateTime> _lastScanMap = {};
 
@@ -73,7 +73,7 @@ class FingerprintAttendanceService {
   bool _isEndOfDay() {
     final now = DateTime.now();
     final startMinute = 16 * 60 + 40; // 16:40
-    final endMinute   = 17 * 60 + 30; // 17:30
+    final endMinute = 17 * 60 + 30; // 17:30
     final currentMinute = now.hour * 60 + now.minute;
     return currentMinute >= startMinute && currentMinute <= endMinute;
   }
@@ -94,6 +94,9 @@ class FingerprintAttendanceService {
 
     // ตั้งค่า Callbacks
     _network.onMatchDetected = _handleFingerprintMatch;
+    _network.onClockOutDetected = _handleClockOutMatch;
+    _network.onBreakStartDetected =
+        _handleClockOutMatch; // กดปุ่ม = เลิกงานนอกเวลา
     _network.onAlertReceived = (msg) {
       debugPrint('⚠️ [FingerprintAttendance] Alert: $msg');
       onUnknownFingerprint?.call(msg);
@@ -105,13 +108,15 @@ class FingerprintAttendanceService {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedHost = prefs.getString(_keyFingerprintHost) ?? 'fingerprint.local';
+      final savedHost =
+          prefs.getString(_keyFingerprintHost) ?? 'fingerprint.local';
 
       debugPrint('🔌 [FingerprintAttendance] ลองเชื่อมต่อ WiFi: $savedHost');
       final connected = await _network.connect(savedHost);
 
       if (!connected) {
-        debugPrint('⚠️ [FingerprintAttendance] ไม่พบอุปกรณ์แสกนลายนิ้วมือที่ $savedHost');
+        debugPrint(
+            '⚠️ [FingerprintAttendance] ไม่พบอุปกรณ์แสกนลายนิ้วมือที่ $savedHost');
       } else {
         await prefs.setString(_keyFingerprintHost, savedHost);
       }
@@ -148,26 +153,30 @@ class FingerprintAttendanceService {
   Future<void> _handleFingerprintMatch(int fingerprintSlotId) async {
     try {
       // 1. หา employeeId จาก fingerprintSlotId
-      final employeeId = await _employeeRepo.getEmployeeIdByFingerprint(fingerprintSlotId);
+      final employeeId =
+          await _employeeRepo.getEmployeeIdByFingerprint(fingerprintSlotId);
       if (employeeId == null) {
-        debugPrint('⚠️ [FingerprintAttendance] ไม่พบ Employee ที่ผูกกับ Fingerprint ID: $fingerprintSlotId');
-        onUnknownFingerprint?.call('ไม่พบข้อมูลพนักงานที่ผูกกับลายนิ้วมือนี้ (Slot #$fingerprintSlotId)');
+        debugPrint(
+            '⚠️ [FingerprintAttendance] ไม่พบ Employee ที่ผูกกับ Fingerprint ID: $fingerprintSlotId');
+        onUnknownFingerprint?.call(
+            'ไม่พบข้อมูลพนักงานที่ผูกกับลายนิ้วมือนี้ (Slot #$fingerprintSlotId)');
         return;
       }
 
       // 1.5 ตรวจสอบ Cooldown (60 วินาที) เพื่อป้องกันการแตะเบิ้ลโดยไม่ตั้งใจ
       final now = DateTime.now();
-      if (_lastScanMap.containsKey(employeeId)) {
-        final lastScan = _lastScanMap[employeeId]!;
-        final difference = now.difference(lastScan).inSeconds;
-        if (difference < 60) {
-          final employee = await _employeeRepo.getById(employeeId);
-          final name = employee?.displayName ?? 'พนักงาน #$employeeId';
-          debugPrint('⚠️ [FingerprintAttendance] คุณ $name เพิ่งสแกนไปเมื่อ $difference วินาทีก่อน ข้ามการสแกนซ้ำ');
-          onUnknownFingerprint?.call('คุณ $name เพิ่งบันทึกเวลาไปเมื่อ $difference วินาทีก่อน (กรุณารออีก ${60 - difference} วินาที)');
-          return;
-        }
-      }
+      // ปิด Cooldown ชั่วคราวสำหรับการทดสอบ
+      // if (_lastScanMap.containsKey(employeeId)) {
+      //   final lastScan = _lastScanMap[employeeId]!;
+      //   final difference = now.difference(lastScan).inSeconds;
+      //   if (difference < 60) {
+      //     final employee = await _employeeRepo.getById(employeeId);
+      //     final name = employee?.displayName ?? 'พนักงาน #$employeeId';
+      //     debugPrint('⚠️ [FingerprintAttendance] คุณ $name เพิ่งสแกนไปเมื่อ $difference วินาทีก่อน ข้ามการสแกนซ้ำ');
+      //     onUnknownFingerprint?.call('คุณ $name เพิ่งบันทึกเวลาไปเมื่อ $difference วินาทีก่อน (กรุณารออีก ${60 - difference} วินาที)');
+      //     return;
+      //   }
+      // }
 
       // 2. ดึงประวัติการบันทึกเวลางานของวันนี้
       final todayLog = await _attendanceRepo.getTodayLogByEmployee(employeeId);
@@ -175,89 +184,103 @@ class FingerprintAttendanceService {
       final name = employee?.displayName ?? 'พนักงาน #$employeeId';
 
       if (todayLog == null) {
-        // สถานะ 1: ยังไม่ได้เช็คอินวันนี้ -> ดำเนินการเข้างานอัตโนมัติ (Auto Clock In)
+        // สถานะ 1: ยังไม่ได้เช็คอินวันนี้ -> เข้างานอัตโนมัติ (Auto Clock In)
         await _attendanceRepo.clockIn(
           employeeId,
           'FINGERPRINT',
           deviceInfo: 'ESP32+R307S',
         );
         _lastScanMap[employeeId] = now;
-        debugPrint('✅ [FingerprintAttendance] Auto Clock In: Employee #$employeeId');
+        debugPrint(
+            '✅ [FingerprintAttendance] Auto Clock In: Employee #$employeeId');
         onAttendanceRecorded?.call(name, 'เข้างาน');
       } else if (todayLog.clockOut != null) {
-        // สถานะ 5: เลิกงานไปแล้วสำหรับวันนี้
-        onUnknownFingerprint?.call('คุณ $name ได้ทำการบันทึกเลิกงานสำหรับวันนี้ไปแล้วครับ 🟢');
-      } else if (todayLog.tempOut == null) {
-        // สถานะ 2: เช็คอินเข้างานแล้ว แต่ยังไม่ได้ออกชั่วคราว
-        // ถ้าอยู่ในช่วงเวลาเลิกงาน → Auto Clock Out ทันที ไม่ขึ้น card
+        // สถานะ: เลิกงานไปแล้วสำหรับวันนี้
+        onUnknownFingerprint
+            ?.call('คุณ $name ได้ทำการบันทึกเลิกงานสำหรับวันนี้ไปแล้วครับ 🟢');
+      } else if (todayLog.activeTempLeaveRound != null) {
+        // สถานะ: กำลังออกพักอยู่ (รอบใดก็ตาม) -> สแกนปกติแปลว่า กลับเข้างาน
+        final activeRound = todayLog.activeTempLeaveRound!;
         if (_isEndOfDay()) {
           await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT');
           _lastScanMap[employeeId] = now;
-          debugPrint('🌆 [FingerprintAttendance] End-of-Day Auto Clock Out: Employee #$employeeId');
+          debugPrint(
+              '🌆 [FingerprintAttendance] End-of-Day Auto Clock Out (from TempLeave): Employee #$employeeId');
           onAttendanceRecorded?.call(name, 'เลิกงาน (Auto)');
-        } else if (onActionRequired != null) {
-          // นอกช่วงเวลาเลิกงาน → ขึ้น floating card ให้เลือก
-          onActionRequired?.call(name, 'CLOCK_IN', (action) async {
-            final actionTime = DateTime.now();
-            if (action == 'TEMP_LEAVE') {
-              await _attendanceRepo.startTempLeave(employeeId, method: 'FINGERPRINT', overrideTime: actionTime);
-              _lastScanMap[employeeId] = actionTime;
-              debugPrint('✅ [FingerprintAttendance] Temp Out: Employee #$employeeId');
-              onAttendanceRecorded?.call(name, 'ออกชั่วคราว');
-            } else if (action == 'CLOCK_OUT') {
-              await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT', overrideTime: actionTime);
-              _lastScanMap[employeeId] = actionTime;
-              debugPrint('✅ [FingerprintAttendance] Clock Out: Employee #$employeeId');
-              onAttendanceRecorded?.call(name, 'เลิกงาน');
-            }
-          });
         } else {
-          // Fallback หากไม่มี UI สแตนด์บายตอบรับ → บันทึกเลิกงานทันที
-          await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT');
-          _lastScanMap[employeeId] = now;
-          debugPrint('✅ [FingerprintAttendance] Fallback Clock Out: Employee #$employeeId');
-          onAttendanceRecorded?.call(name, 'ออกงาน');
-        }
-      } else if (todayLog.backToWork == null) {
-        // สถานะ 3: อยู่ระหว่างออกไปธุระชั่วคราว
-        // ถ้าอยู่ในช่วงเวลาเลิกงาน → Auto Clock Out ทันที ไม่ขึ้น card
-        if (_isEndOfDay()) {
-          await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT');
-          _lastScanMap[employeeId] = now;
-          debugPrint('🌆 [FingerprintAttendance] End-of-Day Auto Clock Out (from TempLeave): Employee #$employeeId');
-          onAttendanceRecorded?.call(name, 'เลิกงาน (Auto)');
-        } else if (onActionRequired != null) {
-          // นอกช่วงเวลาเลิกงาน → ขึ้น floating card ให้เลือก
-          onActionRequired?.call(name, 'TEMP_LEAVE', (action) async {
-            final actionTime = DateTime.now();
-            if (action == 'TEMP_RETURN') {
-              await _attendanceRepo.endTempLeave(employeeId, method: 'FINGERPRINT', overrideTime: actionTime);
-              _lastScanMap[employeeId] = actionTime;
-              debugPrint('✅ [FingerprintAttendance] Temp Return: Employee #$employeeId');
-              onAttendanceRecorded?.call(name, 'กลับเข้างาน');
-            } else if (action == 'CLOCK_OUT') {
-              await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT', overrideTime: actionTime);
-              _lastScanMap[employeeId] = actionTime;
-              debugPrint('✅ [FingerprintAttendance] Clock Out: Employee #$employeeId');
-              onAttendanceRecorded?.call(name, 'เลิกงาน');
-            }
-          });
-        } else {
-          // Fallback
           await _attendanceRepo.endTempLeave(employeeId, method: 'FINGERPRINT');
           _lastScanMap[employeeId] = now;
-          debugPrint('✅ [FingerprintAttendance] Fallback Temp Return: Employee #$employeeId');
+          debugPrint(
+              '✅ [FingerprintAttendance] Temp Return (Round $activeRound): Employee #$employeeId');
           onAttendanceRecorded?.call(name, 'กลับเข้างาน');
         }
+      } else if (todayLog.canStartNewTempLeave) {
+        // สถานะ: เข้างานแล้ว หรือกลับเข้างานแล้ว และยังออกพักได้อีก
+        if (_isEndOfDay()) {
+          await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT');
+          _lastScanMap[employeeId] = now;
+          debugPrint(
+              '🌆 [FingerprintAttendance] End-of-Day Auto Clock Out: Employee #$employeeId');
+          onAttendanceRecorded?.call(name, 'เลิกงาน (Auto)');
+        } else {
+          final nextRound = todayLog.completedTempLeaveRounds + 1;
+          await _attendanceRepo.startTempLeave(employeeId,
+              method: 'FINGERPRINT');
+          _lastScanMap[employeeId] = now;
+          final roundLabel = nextRound > 1 ? ' (รอบ $nextRound)' : '';
+          debugPrint(
+              '✅ [FingerprintAttendance] Temp Out (Round $nextRound): Employee #$employeeId');
+          onAttendanceRecorded?.call(name, 'ออกชั่วคราว$roundLabel');
+        }
       } else {
-        // สถานะ 4: ผ่านกระบวนการออกชั่วคราวและกลับเข้างานครบถ้วนแล้ว -> เลิกงานทันที
-        await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT');
-        _lastScanMap[employeeId] = now;
-        debugPrint('✅ [FingerprintAttendance] Auto Clock Out: Employee #$employeeId');
-        onAttendanceRecorded?.call(name, 'ออกงาน');
+        // สถานะ: ออกพักครบ 3 รอบแล้ว -> ต้องเลิกงาน
+        if (_isEndOfDay()) {
+          await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT');
+          _lastScanMap[employeeId] = now;
+          onAttendanceRecorded?.call(name, 'เลิกงาน (Auto)');
+        } else {
+          onUnknownFingerprint?.call(
+              'คุณ $name ออกพักชั่วคราวครบ 3 รอบแล้วครับ หากต้องการเลิกงาน กรุณาสแกนในช่วงเวลาเลิกงาน 🔔');
+        }
       }
     } catch (e) {
-      // ⚠️ ป้องกันไม่ให้ Error จาก DB ทำให้ระบบ Serial Listener หยุดทำงาน
+      debugPrint('❌ [FingerprintAttendance] DB Error: $e');
+    }
+  }
+
+  Future<void> _handleClockOutMatch(int fingerprintSlotId) async {
+    try {
+      final employeeId =
+          await _employeeRepo.getEmployeeIdByFingerprint(fingerprintSlotId);
+      if (employeeId == null) {
+        onUnknownFingerprint?.call(
+            'ไม่พบข้อมูลพนักงานที่ผูกกับลายนิ้วมือนี้ (Slot #$fingerprintSlotId)');
+        return;
+      }
+
+      final now = DateTime.now();
+      // ปิด Cooldown ชั่วคราวสำหรับการทดสอบ
+      // if (_lastScanMap.containsKey(employeeId)) {
+      //   final lastScan = _lastScanMap[employeeId]!;
+      //   if (now.difference(lastScan).inSeconds < 60) return;
+      // }
+
+      final todayLog = await _attendanceRepo.getTodayLogByEmployee(employeeId);
+      final employee = await _employeeRepo.getById(employeeId);
+      final name = employee?.displayName ?? 'พนักงาน #$employeeId';
+
+      if (todayLog == null) {
+        onUnknownFingerprint
+            ?.call('คุณ $name ยังไม่ได้เข้างาน ไม่สามารถเลิกงานได้ครับ ❌');
+        return;
+      }
+
+      await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT_BTN');
+      _lastScanMap[employeeId] = now;
+      debugPrint(
+          '✅ [FingerprintAttendance] Clock Out (Button): Employee #$employeeId');
+      onAttendanceRecorded?.call(name, 'เลิกงาน');
+    } catch (e) {
       debugPrint('❌ [FingerprintAttendance] DB Error: $e');
     }
   }

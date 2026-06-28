@@ -84,6 +84,18 @@ class LeaveRepository {
     return results.map((row) => LeaveRequest.fromJson(row)).toList();
   }
 
+  Future<List<LeaveRequest>> getAllHistory() async {
+    final results = await _db.query('''
+      SELECT l.*, COALESCE(e.display_name, u.displayName) as employeeName
+      FROM leave_request l
+      JOIN employee_profile e ON l.employee_id = e.id
+      LEFT JOIN user u ON e.user_id = u.id
+      WHERE l.status != 'PENDING'
+      ORDER BY l.start_date DESC
+    ''');
+    return results.map((row) => LeaveRequest.fromJson(row)).toList();
+  }
+
   Future<List<LeaveRequest>> getByEmployee(int employeeId, {int? year}) async {
     String sql = '''
       SELECT l.*, COALESCE(e.display_name, u.displayName) as employeeName
@@ -117,6 +129,22 @@ class LeaveRepository {
       'emp_id': employeeId,
       'start': start.toIso8601String().replaceAll('T', ' ').substring(0, 19),
       'end': end.toIso8601String().replaceAll('T', ' ').substring(0, 19),
+    });
+    return results.map((row) => LeaveRequest.fromJson(row)).toList();
+  }
+
+  Future<List<LeaveRequest>> getApprovedLeavesForDate(DateTime date) async {
+    final dateStr = date.toIso8601String().split('T')[0];
+    final results = await _db.query('''
+      SELECT l.*, COALESCE(e.display_name, u.displayName) as employeeName
+      FROM leave_request l
+      JOIN employee_profile e ON l.employee_id = e.id
+      LEFT JOIN user u ON e.user_id = u.id
+      WHERE l.status = 'APPROVED'
+        AND DATE(l.start_date) <= :date
+        AND DATE(l.end_date) >= :date
+    ''', {
+      'date': dateStr,
     });
     return results.map((row) => LeaveRequest.fromJson(row)).toList();
   }

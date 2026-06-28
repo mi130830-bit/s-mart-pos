@@ -289,8 +289,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         splashColor: color.withValues(alpha: 0.1),
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade100),
-            borderRadius: BorderRadius.circular(20),
+            border: Border(
+              top: BorderSide(color: Colors.grey.shade100),
+              left: BorderSide(color: Colors.grey.shade100),
+              right: BorderSide(color: Colors.grey.shade100),
+              bottom: BorderSide(color: color, width: 4),
+            ),
           ),
           child: FittedBox(
             fit: BoxFit.scaleDown,

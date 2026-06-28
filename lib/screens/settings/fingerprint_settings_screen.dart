@@ -43,7 +43,7 @@ class _FingerprintSettingsScreenState
   // State ระหว่างลงทะเบียน
   int? _enrollingEmployeeId;
   String _enrollStatus = '';
-  int _enrollStep = 0; // 0-10: 5 ครั้งต่อนิ้ว x 2 นิ้ว
+  int _enrollStep = 0; // 0-6: 3 ครั้งต่อนิ้ว x 2 นิ้ว
   bool _isEnrolling = false;
 
   // ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ class _FingerprintSettingsScreenState
               ),
             _infoRow(Icons.person, 'พนักงาน', name),
             _infoRow(Icons.storage, 'Slot ที่จะใช้',
-                '#$baseSlot – #${baseSlot + 3} (รวม 4 slots)'),
+                '#$baseSlot – #${baseSlot + 2} (รวม 3 slots)'),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(10),
@@ -263,8 +263,8 @@ class _FingerprintSettingsScreenState
                   Text('📋 ขั้นตอนการลงทะเบียน:',
                       style: TextStyle(fontWeight: FontWeight.bold)),
                   SizedBox(height: 6),
-                  Text('นิ้วชี้มือขวา  3 ครั้ง  (สแกน 2 ยืนยัน 1)'),
-                  Text('นิ้วชี้มือซ้าย  3 ครั้ง  (สแกน 2 ยืนยัน 1)'),
+                  Text('สแกนนิ้วเดียวกัน 3 มุม (มุมตรง, เอียงซ้าย, เอียงขวา)'),
+                  Text('แต่ละมุมต้องแตะนิ้ว 2 ครั้ง'),
                   SizedBox(height: 4),
                   Text('รวมวางนิ้วทั้งหมด: 6 ครั้ง',
                       style: TextStyle(
@@ -332,15 +332,12 @@ class _FingerprintSettingsScreenState
         final emp =
             _employees.firstWhere((e) => e.id == _enrollingEmployeeId);
 
-        // บันทึก 4 slots ลงฐานข้อมูล
-        await _employeeRepo.assignFingerprintToEmployee(
-            _enrollingEmployeeId!, baseSlot, 'RIGHT_1');
-        await _employeeRepo.assignFingerprintToEmployee(
-            _enrollingEmployeeId!, baseSlot + 1, 'RIGHT_2');
-        await _employeeRepo.assignFingerprintToEmployee(
-            _enrollingEmployeeId!, baseSlot + 2, 'LEFT_1');
-        await _employeeRepo.assignFingerprintToEmployee(
-            _enrollingEmployeeId!, baseSlot + 3, 'LEFT_2');
+        // บันทึก 3 slots ลงฐานข้อมูล
+        final List<String> angles = ['มุมตรง', 'เอียงซ้าย', 'เอียงขวา'];
+        for (int i = 0; i < 3; i++) {
+          await _employeeRepo.assignFingerprintToEmployee(
+              _enrollingEmployeeId!, baseSlot + i, angles[i]);
+        }
 
         if (mounted) {
           setState(() {
@@ -694,12 +691,8 @@ class _FingerprintSettingsScreenState
   }
 
   Widget _buildEnrollProgressCard() {
-    // Progress 0-10: 5 steps per finger x 2 fingers
-    final progress = _enrollStep / 10.0;
-    final finger =
-        _enrollStep <= 5 ? 'นิ้วชี้มือขวา' : 'นิ้วชี้มือซ้าย';
-    final round = _enrollStep <= 5 ? _enrollStep : _enrollStep - 5;
-
+    // Progress 0-6: 3 มุม x 2 ครั้ง
+    final progress = _enrollStep / 6.0;
     return Card(
       color: Colors.blue.shade50,
       shape: RoundedRectangleBorder(
@@ -760,12 +753,12 @@ class _FingerprintSettingsScreenState
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _enrollStep > 0 ? '$finger ครั้งที่ $round/5' : '',
+                  _enrollStep > 0 ? 'ขั้นตอนที่ $_enrollStep/6' : '',
                   style: TextStyle(
                       fontSize: 12, color: Colors.blue.shade600),
                 ),
                 Text(
-                  '${(_enrollStep / 10 * 100).round()}%',
+                  '${(_enrollStep / 6 * 100).round()}%',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,

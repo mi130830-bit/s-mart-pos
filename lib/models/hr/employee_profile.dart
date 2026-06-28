@@ -4,6 +4,7 @@ class EmployeeProfile {
   final String? firebaseUid;
   final String? employeeCode;
   final String? displayName;
+  final String? displayNameEn;
   final String? idCard;
   final String? phone;
   final String? position;
@@ -33,6 +34,7 @@ class EmployeeProfile {
     this.firebaseUid,
     this.employeeCode,
     this.displayName,
+    this.displayNameEn,
     this.idCard,
     this.phone,
     this.position,
@@ -62,6 +64,7 @@ class EmployeeProfile {
       firebaseUid: json['firebase_uid']?.toString(),
       employeeCode: json['employee_code']?.toString(),
       displayName: json['display_name']?.toString() ?? json['nickname']?.toString(),
+      displayNameEn: json['display_name_en']?.toString(),
       idCard: json['id_card']?.toString(),
       phone: json['phone']?.toString(),
       position: json['position']?.toString(),
@@ -92,6 +95,7 @@ class EmployeeProfile {
       'firebase_uid': firebaseUid,
       'employee_code': employeeCode,
       'display_name': displayName,
+      'display_name_en': displayNameEn,
       'id_card': idCard,
       'phone': phone,
       'position': position,

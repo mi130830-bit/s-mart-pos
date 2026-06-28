@@ -16,6 +16,7 @@ part 'firestore/firestore_rest_logs.dart';
 part 'firestore/firestore_rest_users.dart';
 part 'firestore/firestore_rest_attendance.dart';
 part 'firestore/firestore_rest_advance.dart';
+part 'firestore/firestore_rest_leave.dart';
 
 class FirestoreResult<T> {
   final T? data;

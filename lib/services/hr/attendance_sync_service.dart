@@ -14,7 +14,7 @@ class AttendanceSyncService {
 
   void startSyncTimer() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(hours: 1), (timer) {
+    _syncTimer = Timer.periodic(const Duration(hours: 4), (timer) {
       syncAttendanceFromCloud();
     });
     // Trigger immediately on start
@@ -52,7 +52,7 @@ class AttendanceSyncService {
       final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
       for (var logData in logs) {
-        final docId = logData['name']?.toString().split('/').last ?? '';
+        final docId = logData['id']?.toString() ?? '';
         final userId = logData['user_id']?.toString() ?? '';
         final date = logData['date']?.toString() ?? '';
         final checkInStr = logData['check_in_time']?.toString();

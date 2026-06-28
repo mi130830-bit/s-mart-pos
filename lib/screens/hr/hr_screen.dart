@@ -10,15 +10,22 @@ import 'tabs/hr_summary_tab.dart';
 
 import '../../services/hr/attendance_sync_service.dart';
 import '../../services/hr/advance_sync_service.dart';
+import '../../services/hr/leave_sync_service.dart';
 
-class HrScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../state/hr/attendance_provider.dart';
+import '../../state/hr/advance_provider.dart';
+import '../../state/hr/leave_provider.dart';
+import '../../state/hr/dashboard_attendance_provider.dart';
+
+class HrScreen extends ConsumerStatefulWidget {
   const HrScreen({super.key});
 
   @override
-  State<HrScreen> createState() => _HrScreenState();
+  ConsumerState<HrScreen> createState() => _HrScreenState();
 }
 
-class _HrScreenState extends State<HrScreen> with SingleTickerProviderStateMixin {
+class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isSyncing = false;
 
@@ -41,8 +48,15 @@ class _HrScreenState extends State<HrScreen> with SingleTickerProviderStateMixin
     try {
       await AttendanceSyncService().syncAttendanceFromCloud();
       await AdvanceSyncService().syncAdvanceRequestsFromCloud();
+      await LeaveSyncService().syncLeaveRequestsFromCloud();
       
       if (mounted) {
+        ref.read(attendanceProvider.notifier).loadToday();
+        ref.read(advanceProvider.notifier).loadPending();
+        ref.read(advanceProvider.notifier).loadAllHistory();
+        ref.read(leaveProvider.notifier).loadPending();
+        ref.read(leaveProvider.notifier).loadAllHistory();
+        ref.invalidate(dashboardAttendanceProvider);
         SnackbarUtils.showLeft(context, 'ซิงค์ข้อมูลจากคลาวด์เรียบร้อยแล้ว');
       }
     } catch (e) {

@@ -66,7 +66,6 @@ class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
             ],
           ),
           const SizedBox(height: 32),
-          const SizedBox(height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -184,7 +183,11 @@ class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
                   
                   String status = 'ขาด / ยังไม่เข้า';
                   Color statusColor = Colors.grey;
-                  if (s.todayIn != null && s.todayOut == null) {
+                  
+                  if (s.isLeaveToday) {
+                    status = 'ลางาน';
+                    statusColor = Colors.orange;
+                  } else if (s.todayIn != null && s.todayOut == null) {
                     status = 'กำลังทำงาน';
                     statusColor = Colors.green;
                   } else if (s.todayIn != null && s.todayOut != null) {
@@ -225,15 +228,18 @@ class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
     );
   }
 
-  /// Cell สรุปเวลาออกชั่วคราว
+  /// Cell สรุปเวลาออกชั่วคราว (รองรับ 3 รอบ)
   Widget _buildTempLeaveCell(DashboardAttendanceSummary s) {
     final timeFormat = DateFormat('HH:mm');
 
-    // กำลังออกชั่วคราวอยู่ (temp_out มี แต่ back_to_work ยังไม่มี)
-    if (s.todayTempOut != null && s.todayBackToWork == null) {
-      final elapsed = DateTime.now().difference(s.todayTempOut!).inMinutes;
+    // กำลังออกชั่วคราวอยู่ (รอบใดก็ตาม)
+    final activeRound = s.activeTempLeaveRound;
+    final activeOut = s.activeTempOutTime;
+    if (activeRound != null && activeOut != null) {
+      final elapsed = DateTime.now().difference(activeOut).inMinutes;
+      final roundSuffix = activeRound > 1 ? ' รอบ $activeRound' : '';
       return Tooltip(
-        message: 'ออกเมื่อ ${timeFormat.format(s.todayTempOut!)} • ยังไม่กลับ',
+        message: 'ออกเมื่อ ${timeFormat.format(activeOut)} (รอบ$activeRound) • ยังไม่กลับ',
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
@@ -247,7 +253,7 @@ class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
               const Icon(Icons.directions_run, size: 12, color: Colors.orange),
               const SizedBox(width: 4),
               Text(
-                '⏱ $elapsed นาที...',
+                '⏱$roundSuffix $elapsed นาที...',
                 style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
               ),
             ],
@@ -256,10 +262,22 @@ class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
       );
     }
 
-    // กลับแล้ว แสดงรวมนาที + tooltip เวลาออก-กลับ
-    if (s.todayTempOut != null && s.todayBackToWork != null) {
+    // สรุปยอดรวมทุกรอบที่กลับแล้ว
+    if (s.tempLeaveMinutes > 0) {
+      // สร้าง tooltip จากทุกรอบ
+      final List<String> roundDetails = [];
+      if (s.todayTempOut != null && s.todayBackToWork != null) {
+        roundDetails.add('รอบ1: ${timeFormat.format(s.todayTempOut!)} → ${timeFormat.format(s.todayBackToWork!)}');
+      }
+      if (s.todayTempOut2 != null && s.todayBackToWork2 != null) {
+        roundDetails.add('รอบ2: ${timeFormat.format(s.todayTempOut2!)} → ${timeFormat.format(s.todayBackToWork2!)}');
+      }
+      if (s.todayTempOut3 != null && s.todayBackToWork3 != null) {
+        roundDetails.add('รอบ3: ${timeFormat.format(s.todayTempOut3!)} → ${timeFormat.format(s.todayBackToWork3!)}');
+      }
+
       return Tooltip(
-        message: 'ออก ${timeFormat.format(s.todayTempOut!)} → กลับ ${timeFormat.format(s.todayBackToWork!)}',
+        message: roundDetails.join('\n'),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(

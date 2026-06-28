@@ -8,6 +8,11 @@ import '../../../state/hr/advance_provider.dart';
 import '../widgets/advance_form_dialog.dart';
 import '../widgets/advance_detail_dialog.dart';
 import '../../../services/hr/advance_sync_service.dart';
+import '../utils/hr_status_utils.dart';
+import '../widgets/hr_status_badge.dart';
+import '../widgets/hr_approve_reject_dialog.dart';
+import '../widgets/hr_tab_header.dart';
+import '../widgets/hr_view_segmented_button.dart';
 
 class HrAdvanceTab extends ConsumerStatefulWidget {
   const HrAdvanceTab({super.key});
@@ -28,95 +33,35 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
     });
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'APPROVED': return Colors.green;
-      case 'PARTIAL': return Colors.orange;
-      case 'DEDUCTED': return Colors.blue;
-      case 'REJECTED': return Colors.red;
-      default: return Colors.orange;
-    }
-  }
-
-  String _formatStatus(String status) {
-    switch (status) {
-      case 'APPROVED': return 'อนุมัติ (รอหัก)';
-      case 'PARTIAL': return 'หักบางส่วน';
-      case 'DEDUCTED': return 'หักครบแล้ว';
-      case 'REJECTED': return 'ปฏิเสธ';
-      default: return 'รออนุมัติ';
-    }
-  }
-
   Future<void> _showApproveDialog(AdvancePayment req) async {
     final authState = ref.read(authProvider);
     if (authState.currentUser == null) return;
 
-    final confirm = await showDialog<bool>(
+    HrApproveRejectDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('✅ อนุมัติเบิกล่วงหน้า'),
-        content: Text('ต้องการอนุมัติให้ ${req.employeeName ?? 'พนักงาน'} เบิกเงินจำนวน ฿${NumberFormat('#,##0.00').format(req.amount)} หรือไม่?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยันอนุมัติ'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
+      title: '✅ อนุมัติเบิกล่วงหน้า',
+      content: 'ต้องการอนุมัติให้ ${req.employeeName ?? 'พนักงาน'} เบิกเงินจำนวน ฿${NumberFormat('#,##0.00').format(req.amount)} หรือไม่?',
+      actionLabel: 'ยืนยันอนุมัติ',
+      actionColor: Colors.green,
+      onConfirm: (remark) async {
         await ref.read(advanceProvider.notifier).approve(req.id, authState.currentUser!.id);
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'อนุมัติเบิกล่วงหน้าสำเร็จ');
-        }
-      } catch (e) {
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
-        }
-      }
-    }
+        if (mounted) SnackbarUtils.showLeft(context, 'อนุมัติเบิกล่วงหน้าสำเร็จ');
+      },
+    );
   }
 
   Future<void> _showRejectDialog(AdvancePayment req) async {
-    final confirm = await showDialog<bool>(
+    HrApproveRejectDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('❌ ปฏิเสธเบิกล่วงหน้า'),
-        content: Text('ต้องการปฏิเสธคำขอเบิกเงินของ ${req.employeeName ?? 'พนักงาน'} หรือไม่?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยันปฏิเสธ'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
+      title: '❌ ปฏิเสธเบิกล่วงหน้า',
+      content: 'ต้องการปฏิเสธคำขอเบิกเงินของ ${req.employeeName ?? 'พนักงาน'} หรือไม่?',
+      actionLabel: 'ยืนยันปฏิเสธ',
+      actionColor: Colors.red,
+      onConfirm: (remark) async {
         await ref.read(advanceProvider.notifier).reject(req.id);
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'ปฏิเสธรายการสำเร็จ');
-        }
-      } catch (e) {
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
-        }
-      }
-    }
+        if (mounted) SnackbarUtils.showLeft(context, 'ปฏิเสธรายการสำเร็จ');
+      },
+    );
   }
 
   @override
@@ -136,66 +81,33 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      SnackbarUtils.showLeft(context, 'กำลังซิงค์ข้อมูลเบิกเงินล่วงหน้าจากคลาวด์...');
-                      await AdvanceSyncService().syncAdvanceRequestsFromCloud();
-                      if (context.mounted) {
-                        ref.read(advanceProvider.notifier).loadPending();
-                        ref.read(advanceProvider.notifier).loadAllHistory();
-                      }
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('รีเฟรช'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => const AdvanceFormDialog(),
-                      );
-                    },
-                    icon: const Icon(Icons.money),
-                    label: const Text('สร้างคำขอเบิกเงิน'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                  ),
-                ],
-              )
-            ],
+          HrTabHeader(
+            title: title,
+            onRefresh: () async {
+              SnackbarUtils.showLeft(context, 'กำลังซิงค์ข้อมูลเบิกเงินล่วงหน้าจากคลาวด์...');
+              await AdvanceSyncService().syncAdvanceRequestsFromCloud();
+              if (context.mounted) {
+                ref.read(advanceProvider.notifier).loadPending();
+                ref.read(advanceProvider.notifier).loadAllHistory();
+              }
+            },
+            onCreate: () {
+              showDialog(
+                context: context,
+                builder: (context) => const AdvanceFormDialog(),
+              );
+            },
+            createLabel: 'สร้างคำขอเบิกเงิน',
+            createIcon: Icons.money,
           ),
           const SizedBox(height: 16),
-          Center(
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'PENDING',
-                  icon: Icon(Icons.pending_actions),
-                  label: Text('รออนุมัติ'),
-                ),
-                ButtonSegment(
-                  value: 'ALL',
-                  icon: Icon(Icons.history),
-                  label: Text('ประวัติทั้งหมด'),
-                ),
-              ],
-              selected: {_selectedView},
-              onSelectionChanged: (value) {
-                setState(() {
-                  _selectedView = value.first;
-                });
-              },
-            ),
+          HrViewSegmentedButton(
+            selectedView: _selectedView,
+            onSelectionChanged: (value) {
+              setState(() {
+                _selectedView = value;
+              });
+            },
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -227,8 +139,11 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
                               },
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               leading: CircleAvatar(
-                                backgroundColor: Colors.orange.withValues(alpha: 0.1),
-                                child: const Icon(Icons.account_balance_wallet, color: Colors.orange),
+                                backgroundColor: HrStatusUtils.getStatusColor(req.status).withValues(alpha: 0.1),
+                                child: Icon(
+                                  req.status == 'APPROVED' || req.status == 'DEDUCTED' ? Icons.check_circle : req.status == 'REJECTED' ? Icons.cancel : Icons.money,
+                                  color: HrStatusUtils.getStatusColor(req.status),
+                                ),
                               ),
                               title: Row(
                                 children: [
@@ -237,17 +152,7 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                   ),
                                   const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(req.status).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      _formatStatus(req.status),
-                                      style: TextStyle(color: _getStatusColor(req.status), fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
+                                  HrStatusBadge(status: req.status, type: HrItemType.advance),
                                 ],
                               ),
                               subtitle: Column(

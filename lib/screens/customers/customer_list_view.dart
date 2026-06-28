@@ -311,77 +311,98 @@ class _CustomerListViewState extends State<CustomerListView> {
                         itemCount: _customers.length,
                         itemBuilder: (context, index) {
                           final c = _customers[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.indigo.shade100,
-                              child: Text(c.firstName.isNotEmpty
-                                  ? c.firstName[0]
-                                  : '?'),
+                          // ---- กำหนดสี theme ตามประเภทลูกค้า ----
+                          final Color themeColor = c.currentDebt > 0
+                              ? Colors.red
+                              : (c.lineUserId != null ? Colors.green : Colors.indigo);
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border(
+                                left: BorderSide(color: themeColor, width: 4),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: themeColor.withValues(alpha: 0.08),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            title: Row(
-                              children: [
-                                Text('${c.firstName} ${c.lastName ?? ""}'),
-                                if (c.lineUserId != null) ...[
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.check_circle,
-                                      color: Colors.green, size: 16),
-                                  const SizedBox(width: 4),
-                                  const Text('Line',
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green)),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: themeColor.withValues(alpha: 0.1),
+                                child: Text(
+                                  c.firstName.isNotEmpty ? c.firstName[0] : '?',
+                                  style: TextStyle(color: themeColor, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Row(
+                                children: [
+                                  Text('${c.firstName} ${c.lastName ?? ""}'),
+                                  if (c.lineUserId != null) ...[
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.check_circle,
+                                        color: Colors.green, size: 16),
+                                    const SizedBox(width: 4),
+                                    const Text('Line',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green)),
+                                  ],
                                 ],
-                              ],
-                            ),
-                            subtitle: Text(
-                              'Tel: ${c.phone ?? "-"} | แต้ม: ${c.currentPoints} | ระยะทาง: ${c.distanceKm > 0 ? c.distanceKm.toStringAsFixed(1) : "-"} กม.',
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (c.currentDebt > 0)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: Text(
-                                      'ค้างชำระ: ${c.currentDebt.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                          color: Colors.red,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-
-                                // 1. ดูประวัติ
-                                IconButton(
-                                  icon: const Icon(Icons.history,
-                                      color: Colors.orange),
-                                  tooltip: 'ดูประวัติการซื้อ',
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            CustomerHistoryScreen(customer: c),
+                              ),
+                              subtitle: Text(
+                                'Tel: ${c.phone ?? "-"} | แต้ม: ${c.currentPoints} | ระยะทาง: ${c.distanceKm > 0 ? c.distanceKm.toStringAsFixed(1) : "-"} กม.',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (c.currentDebt > 0)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 8.0),
+                                      child: Text(
+                                        'ค้างชำระ: ${c.currentDebt.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold),
                                       ),
-                                    );
-                                  },
-                                ),
-
-                                // 2. แก้ไข
-                                IconButton(
-                                  icon: const Icon(Icons.edit,
-                                      color: Colors.blue),
-                                  onPressed: () => _showCustomerDialog(c),
-                                ),
-
-                                // 3. ลบ
-                                IconButton(
-                                  icon: const Icon(Icons.delete,
-                                      color: Colors.red),
-                                  onPressed: () => _deleteCustomer(c),
-                                ),
-                              ],
-                            ),
+                                    ),
+  
+                                  // 1. ดูประวัติ
+                                  IconButton(
+                                    icon: const Icon(Icons.history,
+                                        color: Colors.orange),
+                                    tooltip: 'ดูประวัติการซื้อ',
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              CustomerHistoryScreen(customer: c),
+                                        ),
+                                      );
+                                    },
+                                  ),
+  
+                                  // 2. แก้ไข
+                                  IconButton(
+                                    icon: const Icon(Icons.edit,
+                                        color: Colors.blue),
+                                    onPressed: () => _showCustomerDialog(c),
+                                  ),
+  
+                                  // 3. ลบ
+                                  IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () => _deleteCustomer(c),
+                                  ),
+                                ],
+                              ),
                             onTap: () async {
                               await Navigator.push(
                                 context,
@@ -392,8 +413,9 @@ class _CustomerListViewState extends State<CustomerListView> {
                               );
                               _loadData();
                             },
-                          );
-                        },
+                          ), // end ListTile
+                        ); // end Container
+                      },
                       ),
           ),
 

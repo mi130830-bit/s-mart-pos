@@ -5,7 +5,13 @@ import 'package:intl/intl.dart';
 import '../../../models/hr/leave_request.dart';
 import '../../../state/auth_provider.dart';
 import '../../../state/hr/leave_provider.dart';
+import '../../../services/hr/leave_sync_service.dart';
 import '../widgets/leave_form_dialog.dart';
+import '../utils/hr_status_utils.dart';
+import '../widgets/hr_status_badge.dart';
+import '../widgets/hr_approve_reject_dialog.dart';
+import '../widgets/hr_tab_header.dart';
+import '../widgets/hr_view_segmented_button.dart';
 
 class HrLeaveTab extends ConsumerStatefulWidget {
   const HrLeaveTab({super.key});
@@ -15,10 +21,15 @@ class HrLeaveTab extends ConsumerStatefulWidget {
 }
 
 class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
+  String _selectedView = 'PENDING'; // 'PENDING' or 'ALL'
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(leaveProvider.notifier).loadPending());
+    Future.microtask(() {
+      ref.read(leaveProvider.notifier).loadPending();
+      ref.read(leaveProvider.notifier).loadAllHistory();
+    });
   }
 
   String _formatLeaveType(String type) {
@@ -41,109 +52,36 @@ class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'APPROVED': return Colors.green;
-      case 'REJECTED': return Colors.red;
-      case 'CANCELLED': return Colors.grey;
-      default: return Colors.orange;
-    }
-  }
-
-  String _formatStatus(String status) {
-    switch (status) {
-      case 'APPROVED': return 'อนุมัติแล้ว';
-      case 'REJECTED': return 'ปฏิเสธ';
-      case 'CANCELLED': return 'ยกเลิก';
-      default: return 'รออนุมัติ';
-    }
-  }
-
   Future<void> _showApproveDialog(LeaveRequest req) async {
     final authState = ref.read(authProvider);
     if (authState.currentUser == null) return;
 
-    final confirm = await showDialog<bool>(
+    HrApproveRejectDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('✅ อนุมัติใบลา'),
-        content: Text('ต้องการอนุมัติการลางานของ ${req.employeeName ?? 'พนักงาน'} หรือไม่?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยันอนุมัติ'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
+      title: '✅ อนุมัติใบลา',
+      content: 'ต้องการอนุมัติการลางานของ ${req.employeeName ?? 'พนักงาน'} หรือไม่?',
+      actionLabel: 'ยืนยันอนุมัติ',
+      actionColor: Colors.green,
+      onConfirm: (remark) async {
         await ref.read(leaveProvider.notifier).approve(req.id, authState.currentUser!.id);
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'อนุมัติใบลาสำเร็จ');
-        }
-      } catch (e) {
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
-        }
-      }
-    }
+        if (mounted) SnackbarUtils.showLeft(context, 'อนุมัติใบลาสำเร็จ');
+      },
+    );
   }
 
   Future<void> _showRejectDialog(LeaveRequest req) async {
-    final reasonController = TextEditingController();
-    
-    final result = await showDialog<String>(
+    HrApproveRejectDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('❌ ปฏิเสธใบลา'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('เหตุผลที่ปฏิเสธการลาของ ${req.employeeName ?? 'พนักงาน'}:'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'กรอกเหตุผล...',
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, reasonController.text.trim()),
-            child: const Text('ยืนยันปฏิเสธ'),
-          ),
-        ],
-      ),
+      title: '❌ ปฏิเสธใบลา',
+      content: 'เหตุผลที่ปฏิเสธการลาของ ${req.employeeName ?? 'พนักงาน'}:',
+      actionLabel: 'ยืนยันปฏิเสธ',
+      actionColor: Colors.red,
+      onConfirm: (remark) async {
+        String finalRemark = remark.trim().isEmpty ? 'ไม่ระบุเหตุผล (ไม่อนุมัติ)' : '${remark.trim()} (ไม่อนุมัติ)';
+        await ref.read(leaveProvider.notifier).reject(req.id, finalRemark);
+        if (mounted) SnackbarUtils.showLeft(context, 'ปฏิเสธใบลาสำเร็จ');
+      },
     );
-
-    if (result != null) {
-      try {
-        await ref.read(leaveProvider.notifier).reject(req.id, result.isEmpty ? 'ไม่ระบุเหตุผล' : result);
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'ปฏิเสธใบลาสำเร็จ');
-        }
-      } catch (e) {
-        if (mounted) {
-          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
-        }
-      }
-    }
   }
 
   @override
@@ -152,61 +90,76 @@ class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
     final dateOnlyFormat = DateFormat('dd/MM/yyyy');
 
+    final title = _selectedView == 'PENDING'
+        ? 'รายการใบลาที่รออนุมัติ'
+        : 'ประวัติการลาทั้งหมด';
+
+    final list = _selectedView == 'PENDING' ? leaveState.pending : leaveState.history;
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'รายการใบลาที่รออนุมัติ',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => ref.read(leaveProvider.notifier).loadPending(),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('รีเฟรช'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => const LeaveFormDialog(),
-                      );
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('สร้างใบลา'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                  ),
-                ],
-              )
-            ],
+          HrTabHeader(
+            title: title,
+            onRefresh: () async {
+              try {
+                await LeaveSyncService().syncLeaveRequestsFromCloud();
+              } catch (_) {}
+              ref.read(leaveProvider.notifier).loadPending();
+              ref.read(leaveProvider.notifier).loadAllHistory();
+              if (context.mounted) {
+                SnackbarUtils.showLeft(context, 'ซิงค์ใบลาจากคลาวด์เรียบร้อย');
+              }
+            },
+            onCreate: () {
+              showDialog(
+                context: context,
+                builder: (context) => const LeaveFormDialog(),
+              );
+            },
+            createLabel: 'สร้างใบลา',
+            createIcon: Icons.add,
+          ),
+          const SizedBox(height: 16),
+          HrViewSegmentedButton(
+            selectedView: _selectedView,
+            onSelectionChanged: (value) {
+              setState(() {
+                _selectedView = value;
+              });
+            },
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: leaveState.isLoading && leaveState.pending.isEmpty
+            child: leaveState.isLoading && list.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : leaveState.pending.isEmpty
-                    ? const Center(child: Text('ไม่มีใบลาที่รอการอนุมัติ', style: TextStyle(color: Colors.grey, fontSize: 16)))
+                : list.isEmpty
+                    ? Center(
+                        child: Text(
+                          _selectedView == 'PENDING'
+                              ? 'ไม่มีใบลาที่รอการอนุมัติ'
+                              : 'ไม่มีประวัติการลา',
+                          style: const TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      )
                     : Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         child: ListView.separated(
-                          itemCount: leaveState.pending.length,
+                          itemCount: list.length,
                           separatorBuilder: (context, index) => const Divider(height: 1),
                           itemBuilder: (context, index) {
-                            final req = leaveState.pending[index];
+                            final req = list[index];
                             return ListTile(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               leading: CircleAvatar(
-                                backgroundColor: Colors.blue.withValues(alpha: 0.1),
-                                child: const Icon(Icons.description, color: Colors.blue),
+                                backgroundColor: HrStatusUtils.getStatusColor(req.status).withValues(alpha: 0.1),
+                                child: Icon(
+                                  req.status == 'APPROVED' ? Icons.check_circle : req.status == 'REJECTED' ? Icons.cancel : Icons.description,
+                                  color: HrStatusUtils.getStatusColor(req.status),
+                                ),
                               ),
                               title: Row(
                                 children: [
@@ -215,17 +168,7 @@ class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(req.status).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      _formatStatus(req.status),
-                                      style: TextStyle(color: _getStatusColor(req.status), fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
+                                  HrStatusBadge(status: req.status, type: HrItemType.leave),
                                 ],
                               ),
                               subtitle: Column(
@@ -239,24 +182,28 @@ class _HrLeaveTabState extends ConsumerState<HrLeaveTab> {
                                     Text('วันที่: ${dateOnlyFormat.format(req.startDate)} - ${dateOnlyFormat.format(req.endDate)}'),
                                   if (req.reason != null && req.reason!.isNotEmpty)
                                     Text('เหตุผล: ${req.reason}', style: const TextStyle(fontStyle: FontStyle.italic)),
+                                  if (req.status == 'REJECTED' && req.rejectReason != null && req.rejectReason!.isNotEmpty)
+                                    Text('เหตุผลที่ปฏิเสธ: ${req.rejectReason}', style: const TextStyle(color: Colors.red, fontStyle: FontStyle.italic)),
                                   Text('ยื่นเมื่อ: ${dateFormat.format(req.createdAt ?? DateTime.now())}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                                 ],
                               ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.check_circle, color: Colors.green),
-                                    tooltip: 'อนุมัติ',
-                                    onPressed: () => _showApproveDialog(req),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.cancel, color: Colors.red),
-                                    tooltip: 'ปฏิเสธ',
-                                    onPressed: () => _showRejectDialog(req),
-                                  ),
-                                ],
-                              ),
+                              trailing: req.status == 'PENDING'
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.check_circle, color: Colors.green),
+                                          tooltip: 'อนุมัติ',
+                                          onPressed: () => _showApproveDialog(req),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.cancel, color: Colors.red),
+                                          tooltip: 'ปฏิเสธ',
+                                          onPressed: () => _showRejectDialog(req),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
                             );
                           },
                         ),

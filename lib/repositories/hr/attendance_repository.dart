@@ -16,6 +16,10 @@ class AttendanceRepository {
         clock_out DATETIME NULL,
         temp_out DATETIME NULL,
         back_to_work DATETIME NULL,
+        temp_out_2 DATETIME NULL,
+        back_to_work_2 DATETIME NULL,
+        temp_out_3 DATETIME NULL,
+        back_to_work_3 DATETIME NULL,
         method VARCHAR(50) DEFAULT 'PIN',
         device_info VARCHAR(255) NULL,
         latitude DOUBLE NULL,
@@ -31,6 +35,10 @@ class AttendanceRepository {
     ''');
     await _db.ensureColumn('attendance_log', 'temp_out', 'DATETIME NULL');
     await _db.ensureColumn('attendance_log', 'back_to_work', 'DATETIME NULL');
+    await _db.ensureColumn('attendance_log', 'temp_out_2', 'DATETIME NULL');
+    await _db.ensureColumn('attendance_log', 'back_to_work_2', 'DATETIME NULL');
+    await _db.ensureColumn('attendance_log', 'temp_out_3', 'DATETIME NULL');
+    await _db.ensureColumn('attendance_log', 'back_to_work_3', 'DATETIME NULL');
     // สร้างตาราง special_holiday ด้วยถ้ายังไม่มี
     await SpecialHolidayRepository().initTable();
   }
@@ -87,34 +95,72 @@ class AttendanceRepository {
     });
   }
 
+  /// ออกพักชั่วคราว: เติมรอบที่ว่างถัดไป (สูงสุด 3 รอบ)
   Future<void> startTempLeave(int employeeId, {String? method, String? overrideReason, int? overrideBy, DateTime? overrideTime}) async {
     final now = overrideTime ?? DateTime.now();
+    final timeStr = now.toIso8601String().replaceAll('T', ' ').substring(0, 19);
+
+    // ดึงรอกปัจจุบันออกมาตรวจสอบก่อน
+    final log = await getTodayLogByEmployee(employeeId);
+    if (log == null) return;
+
+    if (!log.canStartNewTempLeave) {
+      return; // ออกพักครบ 3 รอบแล้ว
+    }
+
+    // เลือกคอลัมน์ที่จะเติม
+    final String tempOutCol;
+    if (log.tempOut == null) {
+      tempOutCol = 'temp_out';
+    } else if (log.tempOut2 == null) {
+      tempOutCol = 'temp_out_2';
+    } else {
+      tempOutCol = 'temp_out_3';
+    }
+
     await _db.execute('''
       UPDATE attendance_log 
-      SET temp_out = :time, method = IFNULL(:method, method), override_reason = IFNULL(:reason, override_reason), override_by = IFNULL(:by, override_by)
+      SET $tempOutCol = :time,
+          method = IFNULL(:method, method),
+          override_reason = IFNULL(:reason, override_reason),
+          override_by = IFNULL(:by, override_by)
       WHERE employee_id = :emp_id 
         AND date = CURDATE() 
-        AND temp_out IS NULL
+        AND $tempOutCol IS NULL
     ''', {
       'emp_id': employeeId,
-      'time': now.toIso8601String().replaceAll('T', ' ').substring(0, 19),
+      'time': timeStr,
       'method': method,
       'reason': overrideReason,
       'by': overrideBy,
     });
   }
 
+  /// กลับเข้างานหลังออกพัก: เติม back_to_work ของรอบที่กำลัง active อยู่
   Future<void> endTempLeave(int employeeId, {String? method, String? overrideReason, int? overrideBy, DateTime? overrideTime}) async {
     final now = overrideTime ?? DateTime.now();
+    final timeStr = now.toIso8601String().replaceAll('T', ' ').substring(0, 19);
+
+    final log = await getTodayLogByEmployee(employeeId);
+    if (log == null) return;
+
+    final round = log.activeTempLeaveRound;
+    if (round == null) return; // ไม่ได้ออกพักอยู่
+
+    final String backCol = round == 1 ? 'back_to_work' : 'back_to_work_$round';
+
     await _db.execute('''
       UPDATE attendance_log 
-      SET back_to_work = :time, method = IFNULL(:method, method), override_reason = IFNULL(:reason, override_reason), override_by = IFNULL(:by, override_by)
+      SET $backCol = :time,
+          method = IFNULL(:method, method),
+          override_reason = IFNULL(:reason, override_reason),
+          override_by = IFNULL(:by, override_by)
       WHERE employee_id = :emp_id 
         AND date = CURDATE() 
-        AND back_to_work IS NULL
+        AND $backCol IS NULL
     ''', {
       'emp_id': employeeId,
-      'time': now.toIso8601String().replaceAll('T', ' ').substring(0, 19),
+      'time': timeStr,
       'method': method,
       'reason': overrideReason,
       'by': overrideBy,
@@ -240,15 +286,23 @@ class AttendanceRepository {
     // Upsert logic for attendance from S-Link
     final sql = '''
       INSERT INTO attendance_log (
-        employee_id, date, clock_in, clock_out, temp_out, back_to_work, method, latitude, longitude, status
+        employee_id, date, clock_in, clock_out,
+        temp_out, back_to_work, temp_out_2, back_to_work_2, temp_out_3, back_to_work_3,
+        method, latitude, longitude, status
       ) VALUES (
-        :employee_id, :date, :clock_in, :clock_out, :temp_out, :back_to_work, :method, :latitude, :longitude, :status
+        :employee_id, :date, :clock_in, :clock_out,
+        :temp_out, :back_to_work, :temp_out_2, :back_to_work_2, :temp_out_3, :back_to_work_3,
+        :method, :latitude, :longitude, :status
       )
       ON DUPLICATE KEY UPDATE 
         clock_in = IF(VALUES(clock_in) IS NOT NULL, VALUES(clock_in), clock_in),
         clock_out = IF(VALUES(clock_out) IS NOT NULL, VALUES(clock_out), clock_out),
         temp_out = IF(VALUES(temp_out) IS NOT NULL, VALUES(temp_out), temp_out),
         back_to_work = IF(VALUES(back_to_work) IS NOT NULL, VALUES(back_to_work), back_to_work),
+        temp_out_2 = IF(VALUES(temp_out_2) IS NOT NULL, VALUES(temp_out_2), temp_out_2),
+        back_to_work_2 = IF(VALUES(back_to_work_2) IS NOT NULL, VALUES(back_to_work_2), back_to_work_2),
+        temp_out_3 = IF(VALUES(temp_out_3) IS NOT NULL, VALUES(temp_out_3), temp_out_3),
+        back_to_work_3 = IF(VALUES(back_to_work_3) IS NOT NULL, VALUES(back_to_work_3), back_to_work_3),
         latitude = IF(VALUES(latitude) IS NOT NULL, VALUES(latitude), latitude),
         longitude = IF(VALUES(longitude) IS NOT NULL, VALUES(longitude), longitude)
     ''';
@@ -260,6 +314,10 @@ class AttendanceRepository {
       'clock_out': log.clockOut?.toIso8601String().replaceAll('T', ' ').split('.')[0],
       'temp_out': log.tempOut?.toIso8601String().replaceAll('T', ' ').split('.')[0],
       'back_to_work': log.backToWork?.toIso8601String().replaceAll('T', ' ').split('.')[0],
+      'temp_out_2': log.tempOut2?.toIso8601String().replaceAll('T', ' ').split('.')[0],
+      'back_to_work_2': log.backToWork2?.toIso8601String().replaceAll('T', ' ').split('.')[0],
+      'temp_out_3': log.tempOut3?.toIso8601String().replaceAll('T', ' ').split('.')[0],
+      'back_to_work_3': log.backToWork3?.toIso8601String().replaceAll('T', ' ').split('.')[0],
       'method': log.method,
       'latitude': log.latitude,
       'longitude': log.longitude,
@@ -291,8 +349,13 @@ class AttendanceRepository {
         (SELECT clock_out FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_out,
         (SELECT temp_out FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_temp_out,
         (SELECT back_to_work FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_back_to_work,
+        (SELECT temp_out_2 FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_temp_out_2,
+        (SELECT back_to_work_2 FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_back_to_work_2,
+        (SELECT temp_out_3 FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_temp_out_3,
+        (SELECT back_to_work_3 FROM attendance_log WHERE employee_id = e.id AND date = CURDATE() ORDER BY clock_in DESC LIMIT 1) as today_back_to_work_3,
         0.0 as total_present,
-        (SELECT COALESCE(SUM(total_days), 0) FROM leave_request WHERE employee_id = e.id AND $leaveCondition AND status = 'APPROVED') as total_leave
+        (SELECT COALESCE(SUM(total_days), 0) FROM leave_request WHERE employee_id = e.id AND $leaveCondition AND status = 'APPROVED') as total_leave,
+        (SELECT COUNT(*) FROM leave_request WHERE employee_id = e.id AND DATE(start_date) <= CURDATE() AND DATE(end_date) >= CURDATE() AND status = 'APPROVED') as is_leave_today
       FROM employee_profile e
       LEFT JOIN user u ON e.user_id = u.id
       WHERE e.is_active = 1
@@ -319,12 +382,12 @@ class AttendanceRepository {
       presentDaysMap[log.employeeId] = (presentDaysMap[log.employeeId] ?? 0.0) + days;
     }
     
-    // คำนวณ temp_leave_minutes รวมสำหรับแต่ละพนักงาน
+    // คำนวณ temp_leave_minutes รวมสำหรับแต่ละพนักงาน (ทุกรอบ)
     final Map<int, int> tempLeaveMinutesMap = {};
     for (var row in logsResult) {
       final log = AttendanceLog.fromJson(row);
-      if (log.tempOut != null && log.backToWork != null) {
-        final mins = log.backToWork!.difference(log.tempOut!).inMinutes;
+      final mins = log.totalTempLeaveMinutes;
+      if (mins > 0) {
         tempLeaveMinutesMap[log.employeeId] = (tempLeaveMinutesMap[log.employeeId] ?? 0) + mins;
       }
     }

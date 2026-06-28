@@ -14,7 +14,7 @@ class AdvanceSyncService {
 
   void startSyncTimer() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(hours: 1), (timer) {
+    _syncTimer = Timer.periodic(const Duration(hours: 4), (timer) {
       syncAdvanceRequestsFromCloud();
     });
     // Trigger immediately on start
@@ -40,7 +40,7 @@ class AdvanceSyncService {
       final requests = result.data!;
 
       for (var reqData in requests) {
-        final docId = reqData['name']?.toString().split('/').last ?? '';
+        final docId = reqData['id']?.toString() ?? '';
         final status = reqData['status']?.toString() ?? '';
         final syncedToSql = reqData['synced_to_sql'] == true;
 

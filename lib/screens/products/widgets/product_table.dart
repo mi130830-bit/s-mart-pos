@@ -93,27 +93,43 @@ class ProductTable extends StatelessWidget {
                   )
                   .name;
 
-              return ListTile(
-                onTap: () => onEditProduct(p),
-                leading: CircleAvatar(
-                  backgroundColor: isExpired
-                      ? Colors.red.shade100
-                      : (isLowStock
-                          ? Colors.orange.shade100
-                          : Colors.teal.shade100),
-                  child: Icon(
-                    isExpired
-                        ? Icons.event_busy
-                        : (isLowStock
-                            ? Icons.warning_amber_rounded
-                            : Icons.inventory_2),
-                    color: isExpired
-                        ? Colors.red
-                        : (isLowStock
-                            ? Colors.deepOrange
-                            : Colors.teal),
+              // ---- กำหนดสี theme ตามสถานะสินค้า ----
+              final Color themeColor = isExpired
+                  ? Colors.red
+                  : (isLowStock ? Colors.deepOrange : Colors.teal);
+
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    left: BorderSide(color: themeColor, width: 4),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: themeColor.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
+                child: ListTile(
+                  onTap: () => onEditProduct(p),
+                  leading: CircleAvatar(
+                    backgroundColor: isExpired
+                        ? Colors.red.shade100
+                        : (isLowStock
+                            ? Colors.orange.shade100
+                            : Colors.teal.shade100),
+                    child: Icon(
+                      isExpired
+                          ? Icons.event_busy
+                          : (isLowStock
+                              ? Icons.warning_amber_rounded
+                              : Icons.inventory_2),
+                      color: themeColor,
+                    ),
+                  ),
                 title: Text(
                   p.name,
                   style: TextStyle(
@@ -227,8 +243,9 @@ class ProductTable extends StatelessWidget {
                     ],
                   ],
                 ),
-              );
-            },
+              ), // end ListTile
+            ); // end Container
+          },
           ),
         ),
         // Pagination Controls

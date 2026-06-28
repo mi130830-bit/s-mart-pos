@@ -32,6 +32,7 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
   String? _firebaseUid;
   late TextEditingController _codeCtrl;
   late TextEditingController _displayNameCtrl;
+  late TextEditingController _displayNameEnCtrl;
   late TextEditingController _phoneCtrl;
   late TextEditingController _positionCtrl;
   
@@ -62,6 +63,7 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
     _firebaseUid = emp?.firebaseUid;
     _codeCtrl = TextEditingController(text: emp?.employeeCode ?? '');
     _displayNameCtrl = TextEditingController(text: emp?.displayName ?? '');
+    _displayNameEnCtrl = TextEditingController(text: emp?.displayNameEn ?? '');
     _phoneCtrl = TextEditingController(text: emp?.phone ?? '');
     _positionCtrl = TextEditingController(text: emp?.position ?? '');
     String empType = emp?.roleType ?? 'REQUESTER';
@@ -112,6 +114,7 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
   void dispose() {
     _codeCtrl.dispose();
     _displayNameCtrl.dispose();
+    _displayNameEnCtrl.dispose();
     _phoneCtrl.dispose();
     _positionCtrl.dispose();
     _dailyWageCtrl.dispose();
@@ -132,6 +135,7 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
         firebaseUid: _firebaseUid,
         employeeCode: _codeCtrl.text,
         displayName: _displayNameCtrl.text,
+        displayNameEn: _displayNameEnCtrl.text,
         phone: _phoneCtrl.text,
         position: _positionCtrl.text,
         roleType: _empType,
@@ -254,6 +258,15 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
                     Expanded(child: TextFormField(
                       controller: _displayNameCtrl,
                       decoration: const InputDecoration(labelText: 'ชื่อเล่น', border: OutlineInputBorder()),
+                    )),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: TextFormField(
+                      controller: _displayNameEnCtrl,
+                      decoration: const InputDecoration(labelText: 'ชื่อภาษาอังกฤษ (สำหรับเครื่องแสกนนิ้ว)', border: OutlineInputBorder()),
                     )),
                   ],
                 ),

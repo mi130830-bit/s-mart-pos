@@ -25,7 +25,7 @@ class DeliveryCleanupService {
   void startAutoCleanupTimer() {
     LoggerService.info('DeliveryCleanup', 'Starting Auto-Cleanup Timer for Pickup Jobs...');
     _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 20), (timer) async {
+    _cleanupTimer = Timer.periodic(const Duration(hours: 1), (timer) async {
       await cleanupExpiredPickupJobs();
       await cleanupArchivableJobs();
     });

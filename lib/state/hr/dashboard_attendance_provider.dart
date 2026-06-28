@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/hr/dashboard_attendance_summary.dart';
 import '../../repositories/hr/attendance_repository.dart';
 
-final dashboardAttendanceFilterProvider = StateProvider<String>((ref) => 'MONTH');
+final dashboardAttendanceFilterProvider = StateProvider<String>((ref) => 'WEEK');
 
 final dashboardAttendanceProvider = FutureProvider.autoDispose<List<DashboardAttendanceSummary>>((ref) async {
   final filter = ref.watch(dashboardAttendanceFilterProvider);

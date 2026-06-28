@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_desktop/utils/snackbar_utils.dart';
 import '../../../state/hr/payroll_provider.dart';
-import '../../../state/hr/employee_provider.dart';
-import '../widgets/payroll_detail_dialog.dart';
+import '../widgets/payroll_current_view.dart';
+import '../widgets/payroll_history_view.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../models/expense.dart';
 
@@ -24,8 +25,6 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
   DateTime _historyStart = DateTime.now().subtract(const Duration(days: 90));
   DateTime _historyEnd = DateTime.now();
   int? _historyEmployeeFilter;
-  // Expanded period tracking for history detail
-  String? _expandedPeriodKey;
 
   @override
   void initState() {
@@ -68,57 +67,7 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
     }
   }
 
-  // ── Toast helper: แถบแจ้งเตือนเล็กๆ มุมซ้ายล่าง ──────────────────────────
-  void _showToast(
-    String message, {
-    Color backgroundColor = const Color(0xFF323232),
-    IconData icon = Icons.check_circle_outline,
-    Color iconColor = Colors.white,
-  }) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        margin: const EdgeInsets.only(left: 16, bottom: 20, right: 9999),
-        padding: EdgeInsets.zero,
-        duration: const Duration(seconds: 3),
-        content: Container(
-          constraints: const BoxConstraints(maxWidth: 320),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: iconColor, size: 16),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  message,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-  // ──────────────────────────────────────────────────────────────────────────
+  // Using SnackbarUtils instead of custom _showToast
 
   Future<void> _selectDateRange(BuildContext context) async {
     final picked = await showDateRangePicker(
@@ -221,15 +170,11 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
       try {
         await ref.read(payrollProvider.notifier).calculateForPeriod(_startDate, _endDate, payCycleFilter: _payCycleFilter, skipAdvanceDeduction: skipAdvanceDeduction);
         if (mounted) {
-          _showToast('คำนวณเงินเดือนสำเร็จ',
-            backgroundColor: const Color(0xFF2E7D32),
-            icon: Icons.check_circle_outline);
+          SnackbarUtils.showLeft(context, 'คำนวณเงินเดือนสำเร็จ');
         }
       } catch (e) {
         if (mounted) {
-          _showToast('เกิดข้อผิดพลาด: $e',
-            backgroundColor: const Color(0xFFC62828),
-            icon: Icons.error_outline);
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e');
         }
       }
     }
@@ -240,9 +185,7 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
     final draftCount = state.records.where((r) => r.status == 'DRAFT').length;
 
     if (draftCount == 0) {
-      _showToast('ไม่มีรายการฉบับร่างในรอบนี้',
-        backgroundColor: const Color(0xFF546E7A),
-        icon: Icons.info_outline);
+      SnackbarUtils.showLeft(context, 'ไม่มีรายการฉบับร่างในรอบนี้');
       return;
     }
 
@@ -280,15 +223,11 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
       try {
         final deleted = await ref.read(payrollProvider.notifier).deleteAllDraftsForPeriod(_startDate, _endDate);
         if (mounted) {
-          _showToast('ล้างรายการสำเร็จ $deleted รายการ',
-            backgroundColor: const Color(0xFFE65100),
-            icon: Icons.delete_sweep);
+          SnackbarUtils.showLeft(context, 'ล้างรายการสำเร็จ $deleted รายการ');
         }
       } catch (e) {
         if (mounted) {
-          _showToast('เกิดข้อผิดพลาด: $e',
-            backgroundColor: const Color(0xFFC62828),
-            icon: Icons.error_outline);
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e');
         }
       }
     }
@@ -297,17 +236,14 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
   Future<void> _saveTotalToExpense() async {
     final state = ref.read(payrollProvider);
     if (state.records.isEmpty) {
-      _showToast('ไม่มีข้อมูลเงินเดือนในรอบนี้',
-        backgroundColor: const Color(0xFF546E7A),
-        icon: Icons.info_outline);
+      SnackbarUtils.showLeft(context, 'ไม่มีข้อมูลเงินเดือนในรอบนี้');
       return;
     }
     
     double totalNetPay = state.records.fold(0.0, (sum, req) => sum + req.netPay);
     if (totalNetPay <= 0) {
-      _showToast('ยอดเงินเดือนรวมเป็น 0',
-        backgroundColor: const Color(0xFF546E7A),
-        icon: Icons.info_outline);
+        
+        
       return;
     }
 
@@ -405,29 +341,9 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
         }
       } catch (e) {
         if (mounted) {
-          _showToast('เกิดข้อผิดพลาด: $e',
-            backgroundColor: const Color(0xFFC62828),
-            icon: Icons.error_outline);
+          SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e');
         }
       }
-    }
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'DRAFT': return Colors.grey;
-      case 'CONFIRMED': return Colors.orange;
-      case 'PAID': return Colors.green;
-      default: return Colors.grey;
-    }
-  }
-
-  String _formatStatus(String status) {
-    switch (status) {
-      case 'DRAFT': return 'ฉบับร่าง';
-      case 'CONFIRMED': return 'ยืนยันแล้ว (รอจ่าย)';
-      case 'PAID': return 'จ่ายแล้ว';
-      default: return status;
     }
   }
 
@@ -557,481 +473,39 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
           const SizedBox(height: 16),
 
           // ── Content ──────────────────────────────────────────────
-          if (_selectedView == 'CURRENT') ..._buildCurrentView(state, dateFormat, currencyFormat)
-          else ..._buildHistoryView(state, dateFormat, currencyFormat),
-        ],
-      ),
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // ── CURRENT VIEW (ทำรายการ) ──────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════
-  List<Widget> _buildCurrentView(PayrollState state, DateFormat dateFormat, NumberFormat currencyFormat) {
-    return [
-
-      // Records list
-      Expanded(
-        child: state.isLoading && state.records.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.records.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.receipt_long, size: 64, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        Text('ยังไม่มีข้อมูลเงินเดือนในรอบ ${dateFormat.format(_startDate)} - ${dateFormat.format(_endDate)}', style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                        const SizedBox(height: 8),
-                        const Text('กดปุ่ม "คำนวณรอบนี้" เพื่อสร้างรายการใหม่', style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  )
-                : Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListView.separated(
-                      itemCount: state.records.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final req = state.records[index];
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: _getStatusColor(req.status).withValues(alpha: 0.1),
-                            child: Icon(Icons.person, color: _getStatusColor(req.status)),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(
-                                req.employeeName ?? 'พนักงาน (ID: ${req.employeeId})',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _getStatusColor(req.status).withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  _formatStatus(req.status),
-                                  style: TextStyle(color: _getStatusColor(req.status), fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text('รับ: ฿${currencyFormat.format(req.grossPay)}', style: const TextStyle(color: Colors.green)),
-                                  const SizedBox(width: 16),
-                                  Text('หัก: ฿${currencyFormat.format(req.totalDeductions)}', style: const TextStyle(color: Colors.red)),
-                                  const SizedBox(width: 16),
-                                  Text('สุทธิ: ฿${currencyFormat.format(req.netPay)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                ],
-                              ),
-                              Text('รอบจ่าย: ${req.payCycle} | ทำงาน: ${req.workDays} วัน | ลา: ${req.leaveDays} วัน'),
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                onPressed: () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('ยืนยันการลบและคืนค่ายอดเบิก'),
-                                      content: const Text('ต้องการลบรายการเงินเดือนนี้ใช่หรือไม่?\n\n*หากมีการหักยอดเงินเบิกล่วงหน้าไปแล้ว ระบบจะทำการคืนยอดเงินเบิกกลับให้อัตโนมัติ เพื่อให้สามารถนำมาหักใหม่ได้ (สำหรับใช้ทดสอบ)'),
-                                      actions: [
-                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-                                        ElevatedButton(
-                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                          onPressed: () => Navigator.pop(context, true), 
-                                          child: const Text('ลบรายการ')
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirm == true) {
-                                    if (!context.mounted) return;
-                                    try {
-                                      await ref.read(payrollProvider.notifier).deleteRecord(req.id);
-                                      if (mounted) {
-                                        _showToast('ลบรายการสำเร็จ',
-                                          backgroundColor: const Color(0xFF2E7D32),
-                                          icon: Icons.check_circle_outline);
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        _showToast('เกิดข้อผิดพลาด: $e',
-                                          backgroundColor: const Color(0xFFC62828),
-                                          icon: Icons.error_outline);
-                                      }
-                                    }
-                                  }
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => PayrollDetailDialog(record: req),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => PayrollDetailDialog(record: req),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-      ),
-    ];
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // ── HISTORY VIEW (ประวัติจ่ายเงิน) ───────────────────────────────
-  // ══════════════════════════════════════════════════════════════════
-  List<Widget> _buildHistoryView(PayrollState state, DateFormat dateFormat, NumberFormat currencyFormat) {
-    final employees = ref.watch(employeeProvider).employees;
-
-    return [
-      // ── Filter bar ──────────────────────────────────────────────
-      Row(
-        children: [
-          OutlinedButton.icon(
-            onPressed: () => _selectHistoryRange(context),
-            icon: const Icon(Icons.calendar_month),
-            label: Text('${dateFormat.format(_historyStart)} - ${dateFormat.format(_historyEnd)}'),
-          ),
-          const SizedBox(width: 8),
-          // Quick select buttons
-          _buildQuickRangeChip('สัปดาห์นี้', 7),
-          const SizedBox(width: 4),
-          _buildQuickRangeChip('เดือนนี้', 30),
-          const SizedBox(width: 4),
-          _buildQuickRangeChip('3 เดือน', 90),
-          const SizedBox(width: 12),
-          // Employee filter dropdown
-          SizedBox(
-            width: 180,
-            child: DropdownButtonFormField<int?>(
-              initialValue: _historyEmployeeFilter,
-              decoration: const InputDecoration(
-                labelText: 'พนักงาน',
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                const DropdownMenuItem<int?>(value: null, child: Text('ทั้งหมด')),
-                ...employees.map((e) => DropdownMenuItem<int?>(
-                  value: e.id,
-                  child: Text(e.displayName ?? 'ID: ${e.id}', overflow: TextOverflow.ellipsis),
-                )),
-              ],
-              onChanged: (val) {
-                setState(() { _historyEmployeeFilter = val; });
+          if (_selectedView == 'CURRENT')
+            PayrollCurrentView(
+              state: state,
+              dateFormat: dateFormat,
+              currencyFormat: currencyFormat,
+              startDate: _startDate,
+              endDate: _endDate,
+            )
+          else
+            PayrollHistoryView(
+              state: state,
+              dateFormat: dateFormat,
+              currencyFormat: currencyFormat,
+              historyStart: _historyStart,
+              historyEnd: _historyEnd,
+              historyEmployeeFilter: _historyEmployeeFilter,
+              onSelectHistoryRange: () => _selectHistoryRange(context),
+              onSelectQuickRange: (days) {
+                setState(() {
+                  _historyEnd = DateTime.now();
+                  _historyStart = DateTime.now().subtract(Duration(days: days));
+                });
                 _loadHistory();
               },
+              onEmployeeFilterChanged: (val) {
+                setState(() => _historyEmployeeFilter = val);
+                _loadHistory();
+              },
+              onLoadHistory: _loadHistory,
             ),
-          ),
         ],
       ),
-      const SizedBox(height: 16),
-
-      // ── Period summaries list ───────────────────────────────────
-      Expanded(
-        child: state.isLoading && state.periodSummaries.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.periodSummaries.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.history, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text('ยังไม่มีประวัติการจ่ายเงินในช่วงเวลาที่เลือก', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                      ],
-                    ),
-                  )
-                : Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: ListView.builder(
-                      itemCount: state.periodSummaries.length,
-                      itemBuilder: (context, index) {
-                        final summary = state.periodSummaries[index];
-                        final periodStart = DateTime.tryParse(summary['period_start']?.toString() ?? '') ?? DateTime.now();
-                        final periodEnd = DateTime.tryParse(summary['period_end']?.toString() ?? '') ?? DateTime.now();
-                        final employeeCount = int.tryParse(summary['employee_count']?.toString() ?? '0') ?? 0;
-                        final totalNet = double.tryParse(summary['total_net']?.toString() ?? '0') ?? 0.0;
-                        final totalGross = double.tryParse(summary['total_gross']?.toString() ?? '0') ?? 0.0;
-                        final totalDed = double.tryParse(summary['total_deductions']?.toString() ?? '0') ?? 0.0;
-                        final periodKey = '${periodStart.toIso8601String()}_${periodEnd.toIso8601String()}';
-                        final isExpanded = _expandedPeriodKey == periodKey;
-
-                        // Get matching detail records for this period
-                        final periodRecords = state.historyRecords.where((r) =>
-                          r.periodStart.year == periodStart.year &&
-                          r.periodStart.month == periodStart.month &&
-                          r.periodStart.day == periodStart.day &&
-                          r.periodEnd.year == periodEnd.year &&
-                          r.periodEnd.month == periodEnd.month &&
-                          r.periodEnd.day == periodEnd.day
-                        ).toList();
-
-                        return Column(
-                          children: [
-                            if (index > 0) const Divider(height: 1),
-                            // ── Period summary row ─────────────────────
-                            ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.green.withValues(alpha: 0.1),
-                                child: const Icon(Icons.calendar_today, color: Colors.green),
-                              ),
-                              title: Text(
-                                '📅 ${dateFormat.format(periodStart)} - ${dateFormat.format(periodEnd)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  children: [
-                                    Text('👥 $employeeCount คน', style: const TextStyle(fontSize: 13)),
-                                    const SizedBox(width: 12),
-                                    Text('รับ: ฿${currencyFormat.format(totalGross)}', style: const TextStyle(color: Colors.green, fontSize: 13)),
-                                    const SizedBox(width: 8),
-                                    Text('หัก: ฿${currencyFormat.format(totalDed)}', style: const TextStyle(color: Colors.red, fontSize: 13)),
-                                    const SizedBox(width: 8),
-                                    Text('สุทธิ: ฿${currencyFormat.format(totalNet)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_sweep, color: Colors.red),
-                                    tooltip: 'ล้างประวัติรอบนี้ (สำหรับทดสอบ)',
-                                    onPressed: () async {
-                                      final confirm = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: const Text('ยืนยันล้างประวัติทั้งรอบ'),
-                                          content: Text('ต้องการลบประวัติเงินเดือนรอบ ${dateFormat.format(periodStart)} - ${dateFormat.format(periodEnd)} ทั้งหมดใช่หรือไม่?\n\n* ยอดเงินเบิกของทุกคนในรอบนี้จะถูกคืนกลับให้อัตโนมัติ (สำหรับใช้ทดสอบ)\n* ระบบจะลบประวัติรายการที่เคยลงบันทึกใน "บัญชีรายจ่าย" ให้อัตโนมัติด้วย'),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                              onPressed: () => Navigator.pop(context, true), 
-                                              child: const Text('ล้างประวัติ')
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                      if (confirm == true) {
-                                        if (!context.mounted) return;
-                                        try {
-                                          // Delete all records in this period, which will also revert their advances
-                                          for (var rec in periodRecords) {
-                                            await ref.read(payrollProvider.notifier).deleteRecord(rec.id);
-                                          }
-                                          // Also delete linked expense
-                                          try {
-                                            final title = 'จ่ายเงินเดือนรอบ ${dateFormat.format(periodStart)} - ${dateFormat.format(periodEnd)}';
-                                            await ExpenseRepository().deleteExpenseByTitle(title);
-                                          } catch (e) {
-                                            debugPrint('Failed to delete linked expense: $e');
-                                          }
-                                          _loadHistory();
-                                          if (context.mounted) {
-                                            _showToast('ล้างประวัติสำเร็จ',
-                                              backgroundColor: const Color(0xFF2E7D32),
-                                              icon: Icons.check_circle_outline);
-                                          }
-                                        } catch (e) {
-                                          if (context.mounted) {
-                                            _showToast('เกิดข้อผิดพลาด: $e',
-                                              backgroundColor: const Color(0xFFC62828),
-                                              icon: Icons.error_outline);
-                                          }
-                                        }
-                                      }
-                                    },
-                                  ),
-                                  Icon(
-                                    isExpanded ? Icons.expand_less : Icons.expand_more,
-                                    color: Colors.grey,
-                                  ),
-                                ],
-                              ),
-                              onTap: () {
-                                setState(() {
-                                  _expandedPeriodKey = isExpanded ? null : periodKey;
-                                });
-                              },
-                            ),
-                            // ── Expanded detail (per employee) ────────
-                            if (isExpanded)
-                              Container(
-                                color: Colors.grey.withValues(alpha: 0.04),
-                                child: Column(
-                                  children: [
-                                    const Divider(height: 1),
-                                    if (periodRecords.isEmpty)
-                                      const Padding(
-                                        padding: EdgeInsets.all(16),
-                                        child: Text('ไม่พบรายละเอียดรายคน', style: TextStyle(color: Colors.grey)),
-                                      )
-                                    else
-                                      ...periodRecords.map((rec) => ListTile(
-                                        dense: true,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 2),
-                                        leading: const CircleAvatar(
-                                          radius: 16,
-                                          backgroundColor: Color(0xFFE3F2FD),
-                                          child: Icon(Icons.person, size: 18, color: Colors.blue),
-                                        ),
-                                        title: Text(
-                                          rec.employeeName ?? 'ID: ${rec.employeeId}',
-                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                                        ),
-                                        subtitle: Text(
-                                          'ทำงาน: ${rec.workDays} วัน | ลา: ${rec.leaveDays} วัน',
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        trailing: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              children: [
-                                                Text(
-                                                  '฿${currencyFormat.format(rec.netPay)}',
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 14),
-                                                ),
-                                                if (rec.totalDeductions > 0)
-                                                  Text(
-                                                    'หัก ฿${currencyFormat.format(rec.totalDeductions)}',
-                                                    style: const TextStyle(color: Colors.red, fontSize: 11),
-                                                  ),
-                                              ],
-                                            ),
-                                            const SizedBox(width: 8),
-                                            IconButton(
-                                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                                              tooltip: 'ลบรายการนี้ (ใช้ทดสอบ)',
-                                              onPressed: () async {
-                                                final confirm = await showDialog<bool>(
-                                                  context: context,
-                                                  builder: (context) => AlertDialog(
-                                                    title: const Text('ยืนยันการลบและคืนค่ายอดเบิก'),
-                                                    content: const Text('ต้องการลบรายการประวัติเงินเดือนนี้ใช่หรือไม่?\n\n*ระบบจะทำการคืนยอดเงินเบิกกลับให้อัตโนมัติ เพื่อให้สามารถนำมาหักใหม่ได้ (สำหรับใช้ทดสอบ)'),
-                                                    actions: [
-                                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
-                                                      ElevatedButton(
-                                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                                        onPressed: () => Navigator.pop(context, true), 
-                                                        child: const Text('ลบรายการ')
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                                if (confirm == true) {
-                                                  if (!context.mounted) return;
-                                                  try {
-                                                    await ref.read(payrollProvider.notifier).deleteRecord(rec.id);
-                                                    _loadHistory();
-                                                    if (context.mounted) {
-                                                      _showToast('ลบรายการสำเร็จ',
-                                                        backgroundColor: const Color(0xFF2E7D32),
-                                                        icon: Icons.check_circle_outline);
-                                                    }
-                                                  } catch (e) {
-                                                    if (context.mounted) {
-                                                      _showToast('เกิดข้อผิดพลาด: $e',
-                                                        backgroundColor: const Color(0xFFC62828),
-                                                        icon: Icons.error_outline);
-                                                    }
-                                                  }
-                                                }
-                                              },
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.info_outline, size: 18, color: Colors.grey),
-                                              tooltip: 'ดูรายละเอียด',
-                                              onPressed: () {
-                                                showDialog(
-                                                  context: context,
-                                                  builder: (context) => PayrollDetailDialog(record: rec),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                        onTap: () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) => PayrollDetailDialog(record: rec),
-                                          );
-                                        },
-                                      )),
-                                    // ── Summary footer ────────────────────
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.withValues(alpha: 0.05),
-                                        border: Border(top: BorderSide(color: Colors.blue.withValues(alpha: 0.2))),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          const Text('💰 ยอดสุทธิรวม: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                          Text(
-                                            '฿${currencyFormat.format(totalNet)}',
-                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-      ),
-    ];
-  }
-
-  Widget _buildQuickRangeChip(String label, int days) {
-    return ActionChip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      onPressed: () {
-        setState(() {
-          _historyEnd = DateTime.now();
-          _historyStart = DateTime.now().subtract(Duration(days: days));
-        });
-        _loadHistory();
-      },
     );
   }
 }
+

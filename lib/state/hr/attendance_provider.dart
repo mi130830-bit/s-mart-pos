@@ -13,6 +13,7 @@ class AttendanceState {
   final List<AttendanceLog> todayAttendance;
   final List<LeaveRequest> openTempLeaves;
   final List<SpecialHoliday> specialHolidays;
+  final List<LeaveRequest> todayApprovedLeaves;
   final bool isLoading;
   final String? error;
 
@@ -20,6 +21,7 @@ class AttendanceState {
     this.todayAttendance = const [],
     this.openTempLeaves = const [],
     this.specialHolidays = const [],
+    this.todayApprovedLeaves = const [],
     this.isLoading = false,
     this.error,
   });
@@ -28,6 +30,7 @@ class AttendanceState {
     List<AttendanceLog>? todayAttendance,
     List<LeaveRequest>? openTempLeaves,
     List<SpecialHoliday>? specialHolidays,
+    List<LeaveRequest>? todayApprovedLeaves,
     bool? isLoading,
     String? error,
   }) {
@@ -35,6 +38,7 @@ class AttendanceState {
       todayAttendance: todayAttendance ?? this.todayAttendance,
       openTempLeaves: openTempLeaves ?? this.openTempLeaves,
       specialHolidays: specialHolidays ?? this.specialHolidays,
+      todayApprovedLeaves: todayApprovedLeaves ?? this.todayApprovedLeaves,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -64,10 +68,18 @@ class AttendanceNotifier extends AutoDisposeNotifier<AttendanceState> {
       final logs = await _repo.getTodayAttendance();
       final tempLeaves = await _leaveRepo.getTodayOpenTempLeaves();
       final holidays = await _holidayRepo.getAllHolidays();
+      // Fetch approved leaves for today (start_date <= today and end_date >= today)
+      final now = DateTime.now();
+      final startOfToday = DateTime(now.year, now.month, now.day, 0, 0, 0);
+      
+      // Let's query approved leave requests that overlap with today
+      final results = await _leaveRepo.getApprovedLeavesForDate(startOfToday);
+
       state = state.copyWith(
         todayAttendance: logs, 
         openTempLeaves: tempLeaves,
         specialHolidays: holidays,
+        todayApprovedLeaves: results,
         isLoading: false,
       );
     } catch (e) {

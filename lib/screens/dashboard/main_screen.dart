@@ -24,6 +24,7 @@ import '../pos/pos_state_manager.dart';
 import 'package:auto_updater/auto_updater.dart';
 import '../../services/alert_service.dart';
 import '../../services/hr/fingerprint_attendance_service.dart';
+import '../../services/integration/fingerprint_network_service.dart';
 import '../../widgets/fingerprint/fingerprint_action_card.dart';
 import '../../state/hr/attendance_provider.dart';
 
@@ -41,6 +42,9 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   // Fingerprint action overlay (non-blocking floating card)
   OverlayEntry? _fingerprintActionOverlay;
+
+  // Fingerprint disconnect banner
+  OverlayEntry? _fingerprintDisconnectOverlay;
 
   // ✅ Task 5: สร้าง Delivery Service (ใช้ Singleton Pattern เดียวกับส่วนอื่นใน app)
   final DeliveryIntegrationService _deliveryService = DeliveryIntegrationService(
@@ -96,6 +100,18 @@ class _MainScreenState extends ConsumerState<MainScreen>
       }
       _showFingerprintActionOverlay(name, currentStatus, onActionSelected);
     };
+
+    // ดักฟังการเชื่อมต่อ/หลุดของเครื่องแสกนลายนิ้วมือ
+    FingerprintNetworkService().onConnectionChanged = (isConn, address) {
+      if (!mounted) return;
+      if (isConn) {
+        // เชื่อมต่อสำเร็จ → เอา banner แจ้งเตือนออก
+        _dismissFingerprintDisconnectBanner();
+      } else {
+        // หลุด → แสดง banner พร้อมปุ่มค้นหาใหม่
+        _showFingerprintDisconnectedBanner();
+      }
+    };
   }
 
   void _handleTabSelection() {
@@ -112,9 +128,59 @@ class _MainScreenState extends ConsumerState<MainScreen>
     FingerprintAttendanceService().onAttendanceRecorded = null;
     FingerprintAttendanceService().onUnknownFingerprint = null;
     FingerprintAttendanceService().onActionRequired = null;
+    FingerprintNetworkService().onConnectionChanged = null;
     _fingerprintActionOverlay?.remove();
     _fingerprintActionOverlay = null;
+    _fingerprintDisconnectOverlay?.remove();
+    _fingerprintDisconnectOverlay = null;
     super.dispose();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fingerprint Disconnect Banner
+  // ---------------------------------------------------------------------------
+
+  /// แสดง banner แจ้งเตือนที่มุมบนขวา เมื่อการเชื่อมต่อเครื่องสแกนหลุด
+  void _showFingerprintDisconnectedBanner() {
+    if (_fingerprintDisconnectOverlay != null) return; // มีอยู่แล้ว ไม่ซ้ำ
+
+    _fingerprintDisconnectOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        top: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: _FingerprintDisconnectBanner(
+            onReconnect: () async {
+              _dismissFingerprintDisconnectBanner();
+              // เริ่ม auto-discovery ใหม่ — จะต่อกลับทันทีเมื่อ ESP32 ตอบ
+              FingerprintNetworkService().startAutoDiscovery();
+              if (mounted) {
+                AlertService.show(
+                  context: context,
+                  message: '🔍 กำลังค้นหาเครื่องสแกนลายนิ้วมือในวง LAN...',
+                  type: 'info',
+                  duration: const Duration(seconds: 3),
+                );
+              }
+            },
+            onDismiss: _dismissFingerprintDisconnectBanner,
+          ),
+        ),
+      ),
+    );
+
+    // ต้อง defer ไว้ 1 frame เพราะ Overlay อาจยังไม่ mount
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _fingerprintDisconnectOverlay != null) {
+        Overlay.of(context).insert(_fingerprintDisconnectOverlay!);
+      }
+    });
+  }
+
+  void _dismissFingerprintDisconnectBanner() {
+    _fingerprintDisconnectOverlay?.remove();
+    _fingerprintDisconnectOverlay = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -122,6 +188,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
   // ---------------------------------------------------------------------------
 
   /// แสดง floating card ที่มุมล่างขวา โดยไม่ขวางหน้าจอ POS
+
   void _showFingerprintActionOverlay(
     String name,
     String currentStatus,
@@ -459,6 +526,166 @@ class _MainScreenState extends ConsumerState<MainScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// _FingerprintDisconnectBanner
+// Overlay widget แจ้งเตือนเมื่อเครื่องสแกนลายนิ้วมือหลุดการเชื่อมต่อ
+// =============================================================================
+class _FingerprintDisconnectBanner extends StatefulWidget {
+  final VoidCallback onReconnect;
+  final VoidCallback onDismiss;
+
+  const _FingerprintDisconnectBanner({
+    required this.onReconnect,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_FingerprintDisconnectBanner> createState() =>
+      _FingerprintDisconnectBannerState();
+}
+
+class _FingerprintDisconnectBannerState
+    extends State<_FingerprintDisconnectBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim;
+  late final Animation<double> _fadeSlide;
+  bool _isReconnecting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _fadeSlide = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
+    _anim.forward();
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeSlide,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.3, 0),
+          end: Offset.zero,
+        ).animate(_fadeSlide),
+        child: Container(
+          width: 340,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E2E),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.red.shade700, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.red.withValues(alpha: 0.25),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ---- Header ----
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade900.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.fingerprint,
+                          color: Colors.redAccent, size: 22),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'เครื่องสแกนหลุดการเชื่อมต่อ',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            'ลายนิ้วมือไม่ถูกบันทึกในขณะนี้',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // ปุ่มปิด
+                    IconButton(
+                      onPressed: widget.onDismiss,
+                      icon: const Icon(Icons.close,
+                          color: Colors.white38, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // ---- ปุ่มค้นหาใหม่ ----
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isReconnecting
+                        ? null
+                        : () async {
+                            setState(() => _isReconnecting = true);
+                            widget.onReconnect();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.blue.shade900,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: _isReconnecting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white54,
+                            ),
+                          )
+                        : const Icon(Icons.wifi_find_rounded, size: 18),
+                    label: Text(
+                      _isReconnecting ? 'กำลังค้นหา...' : 'ค้นหาและเชื่อมต่อซ้ำ',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
