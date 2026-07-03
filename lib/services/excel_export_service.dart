@@ -20,6 +20,7 @@ class ExcelExportService {
     DateTime startDate,
     DateTime endDate, {
     List<Map<String, dynamic>>? allVehicles,
+    Map<String, double>? initialOdometers,
   }) async {
     try {
       if (records.isEmpty) {
@@ -282,6 +283,10 @@ class ExcelExportService {
         }
       }
 
+      if (initialOdometers != null) {
+        _generateMaintenanceSheets(excel, groupedJobs, initialOdometers);
+      }
+
       // ── Save & Open ────────────────────────────────────
       final dir = await getApplicationDocumentsDirectory();
       final dateFmt = DateFormat('yyyyMMdd_HHmm');
@@ -312,6 +317,142 @@ class ExcelExportService {
     }
   }
 
+  // ✅ Helper method สำหรับสร้างชีทบำรุงรักษารถ
+  void _generateMaintenanceSheets(
+    Excel excel,
+    Map<String, List<Map<String, dynamic>>> groupedJobs,
+    Map<String, double> initialOdometers,
+  ) {
+    for (final entry in groupedJobs.entries) {
+      final baseSheetName = entry.key;
+      if (baseSheetName.contains('โฟล์คลิฟท์')) continue;
+
+      String sheetName = 'บำรุงรักษา_$baseSheetName'.replaceAll(RegExp(r'[\\/:*?"<>|\[\]]'), '_');
+      if (sheetName.length > 31) sheetName = sheetName.substring(0, 31);
+      final logs = List<Map<String, dynamic>>.from(entry.value);
+
+      // Sort by date ascending
+      logs.sort((a, b) {
+        DateTime da = DateTime.tryParse(a['completedAt']?.toString() ?? '') ?? DateTime(2000);
+        DateTime db = DateTime.tryParse(b['completedAt']?.toString() ?? '') ?? DateTime(2000);
+        return da.compareTo(db);
+      });
+
+      final Sheet sheet = excel[sheetName];
+      
+      // Row 1: Title (Merged A1 to F1)
+      sheet.merge(CellIndex.indexByString("A1"), CellIndex.indexByString("F1"));
+      var titleCell = sheet.cell(CellIndex.indexByString("A1"));
+      titleCell.value = TextCellValue("บันทึกการบำรุงรักษารถ");
+      titleCell.cellStyle = CellStyle(
+        bold: true,
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        fontSize: 16,
+      );
+
+      final headerStyle = CellStyle(
+        bold: true,
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        backgroundColorHex: ExcelColor.fromHexString('#E0E0E0'),
+        textWrapping: TextWrapping.WrapText,
+      );
+
+      // Row 2 & 3: Headers
+      // A2:A3 -> ว/ด/ป
+      sheet.merge(CellIndex.indexByString("A2"), CellIndex.indexByString("A3"));
+      sheet.cell(CellIndex.indexByString("A2"))
+        ..value = TextCellValue('ว/ด/ป')
+        ..cellStyle = headerStyle;
+
+      // B2:B3 -> เลขไมล์ออก
+      sheet.merge(CellIndex.indexByString("B2"), CellIndex.indexByString("B3"));
+      sheet.cell(CellIndex.indexByString("B2"))
+        ..value = TextCellValue('เลขไมล์ออก')
+        ..cellStyle = headerStyle;
+
+      // C2:C3 -> เลขไมล์กลับ
+      sheet.merge(CellIndex.indexByString("C2"), CellIndex.indexByString("C3"));
+      sheet.cell(CellIndex.indexByString("C2"))
+        ..value = TextCellValue('เลขไมล์กลับ')
+        ..cellStyle = headerStyle;
+
+      // D2 -> ตรวจเช็คหรือซ่อมบำรุง
+      sheet.cell(CellIndex.indexByString("D2"))
+        ..value = TextCellValue('ตรวจเช็คหรือซ่อมบำรุง')
+        ..cellStyle = headerStyle;
+      // D3 -> 10หัวข้อที่กำหนดให้
+      sheet.cell(CellIndex.indexByString("D3"))
+        ..value = TextCellValue('10หัวข้อที่กำหนดให้')
+        ..cellStyle = headerStyle;
+
+      // E2:E3 -> หมายเหตุ
+      sheet.merge(CellIndex.indexByString("E2"), CellIndex.indexByString("E3"));
+      sheet.cell(CellIndex.indexByString("E2"))
+        ..value = TextCellValue('หมายเหตุ')
+        ..cellStyle = headerStyle;
+
+      // F2:F3 -> ลงชื่อ
+      sheet.merge(CellIndex.indexByString("F2"), CellIndex.indexByString("F3"));
+      sheet.cell(CellIndex.indexByString("F2"))
+        ..value = TextCellValue('ลงชื่อ')
+        ..cellStyle = headerStyle;
+
+      // Adjust Column Widths to fit A4 nicely
+      sheet.setColumnWidth(0, 10); // Date
+      sheet.setColumnWidth(1, 12); // Start Odo
+      sheet.setColumnWidth(2, 12); // End Odo
+      sheet.setColumnWidth(3, 22); // Maintenance
+      sheet.setColumnWidth(4, 10); // Note
+      sheet.setColumnWidth(5, 12); // Sign
+
+      // Generate Rows
+      double currentOdo = initialOdometers[baseSheetName] ?? 0.0;
+      int rowIndex = 3; // Data starts at row index 3 (4th row)
+
+      for (var job in logs) {
+        DateTime date = DateTime.tryParse(job['completedAt']?.toString() ?? '') ?? DateTime.now();
+        final thaiYear = date.year + 543;
+        final dateStr = '${date.day}/${date.month}/${thaiYear.toString().substring(2)}';
+        
+        double distance = double.tryParse(job['distanceKm']?.toString() ?? '0') ?? 0.0;
+        if (distance == 0.0) continue; 
+
+        double startOdo = currentOdo;
+        double endOdo = startOdo + distance;
+        
+        final contentStyle = CellStyle(
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+        );
+
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex))
+          ..value = TextCellValue(dateStr)
+          ..cellStyle = contentStyle;
+        
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex))
+          ..value = DoubleCellValue(double.parse(startOdo.toStringAsFixed(1)))
+          ..cellStyle = contentStyle;
+          
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIndex))
+          ..value = DoubleCellValue(double.parse(endOdo.toStringAsFixed(1)))
+          ..cellStyle = contentStyle;
+          
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex))
+          ..value = TextCellValue('-')
+          ..cellStyle = contentStyle;
+          
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIndex))
+          ..value = TextCellValue('-')
+          ..cellStyle = contentStyle;
+
+        currentOdo = endOdo;
+        rowIndex++;
+      }
+    }
+  }
+
   // ✅ Legacy entry point (ใช้จาก Dashboard เดิม) — ดึงจาก MySQL แล้ว Export
   Future<bool> exportDeliveryHistory(DateTime start, DateTime end) async {
     try {
@@ -331,6 +472,186 @@ class ExcelExportService {
     } catch (e, stack) {
       debugPrint('⚠️ [ExcelExport] exportDeliveryHistory error: $e\n$stack');
       return false;
+    }
+  }
+  // ✅ ระบบออกรายงานบำรุงรักษารถประจำเดือน (Vehicle Maintenance Tax Report)
+  Future<bool> exportVehicleMaintenanceLog({
+    required List<Map<String, dynamic>> records,
+    required Map<String, double> initialOdometers,
+    required DateTime reportMonth,
+  }) async {
+    try {
+      if (records.isEmpty) return false;
+
+      final Map<String, List<Map<String, dynamic>>> groupedJobs = {};
+      for (var record in records) {
+        String vehicle = record['vehiclePlate']?.toString().trim() ?? '';
+        if (vehicle.isEmpty || vehicle == '-') continue;
+        
+        String sheetName = vehicle.replaceAll(RegExp(r'[\\/:*?"<>|\[\]]'), '_');
+        if (sheetName.length > 31) sheetName = sheetName.substring(0, 31);
+        
+        groupedJobs.putIfAbsent(sheetName, () => []).add(record);
+      }
+
+      if (groupedJobs.isEmpty) return false;
+
+      var excel = Excel.createExcel();
+      excel.delete('Sheet1'); 
+
+      for (final entry in groupedJobs.entries) {
+        final sheetName = entry.key;
+        final logs = entry.value;
+
+        // Sort by date ascending
+        logs.sort((a, b) {
+          DateTime da = DateTime.tryParse(a['completedAt']?.toString() ?? '') ?? DateTime(2000);
+          DateTime db = DateTime.tryParse(b['completedAt']?.toString() ?? '') ?? DateTime(2000);
+          return da.compareTo(db);
+        });
+
+        final Sheet sheet = excel[sheetName];
+        
+        // Row 1: Title (Merged A1 to F1)
+        sheet.merge(CellIndex.indexByString("A1"), CellIndex.indexByString("F1"));
+        var titleCell = sheet.cell(CellIndex.indexByString("A1"));
+        titleCell.value = TextCellValue("บันทึกการบำรุงรักษารถ");
+        titleCell.cellStyle = CellStyle(
+          bold: true,
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+          fontSize: 16,
+        );
+
+        final headerStyle = CellStyle(
+          bold: true,
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+          backgroundColorHex: ExcelColor.fromHexString('#E0E0E0'),
+          textWrapping: TextWrapping.WrapText,
+        );
+
+        // Row 2 & 3: Headers
+        // A2:A3 -> ว/ด/ป
+        sheet.merge(CellIndex.indexByString("A2"), CellIndex.indexByString("A3"));
+        sheet.cell(CellIndex.indexByString("A2"))
+          ..value = TextCellValue('ว/ด/ป')
+          ..cellStyle = headerStyle;
+
+        // B2:B3 -> เลขไมล์ออก
+        sheet.merge(CellIndex.indexByString("B2"), CellIndex.indexByString("B3"));
+        sheet.cell(CellIndex.indexByString("B2"))
+          ..value = TextCellValue('เลขไมล์ออก')
+          ..cellStyle = headerStyle;
+
+        // C2:C3 -> เลขไมล์กลับ
+        sheet.merge(CellIndex.indexByString("C2"), CellIndex.indexByString("C3"));
+        sheet.cell(CellIndex.indexByString("C2"))
+          ..value = TextCellValue('เลขไมล์กลับ')
+          ..cellStyle = headerStyle;
+
+        // D2 -> ตรวจเช็คหรือซ่อมบำรุง
+        sheet.cell(CellIndex.indexByString("D2"))
+          ..value = TextCellValue('ตรวจเช็คหรือซ่อมบำรุง')
+          ..cellStyle = headerStyle;
+        // D3 -> 10หัวข้อที่กำหนดให้
+        sheet.cell(CellIndex.indexByString("D3"))
+          ..value = TextCellValue('10หัวข้อที่กำหนดให้')
+          ..cellStyle = headerStyle;
+
+        // E2:E3 -> หมายเหตุ
+        sheet.merge(CellIndex.indexByString("E2"), CellIndex.indexByString("E3"));
+        sheet.cell(CellIndex.indexByString("E2"))
+          ..value = TextCellValue('หมายเหตุ')
+          ..cellStyle = headerStyle;
+
+        // F2:F3 -> ลงชื่อ
+        sheet.merge(CellIndex.indexByString("F2"), CellIndex.indexByString("F3"));
+        sheet.cell(CellIndex.indexByString("F2"))
+          ..value = TextCellValue('ลงชื่อ')
+          ..cellStyle = headerStyle;
+
+        // Adjust Column Widths to fit A4 nicely (Total ~95-100)
+        sheet.setColumnWidth(0, 10); // Date
+        sheet.setColumnWidth(1, 12); // Start Odo
+        sheet.setColumnWidth(2, 12); // End Odo
+        sheet.setColumnWidth(3, 22); // Maintenance
+        sheet.setColumnWidth(4, 10); // Note
+        sheet.setColumnWidth(5, 12); // Sign
+
+        // Generate Rows
+        double currentOdo = initialOdometers[entry.key] ?? 0.0;
+        int rowIndex = 3; // Data starts at row index 3 (4th row)
+
+        for (var job in logs) {
+          DateTime date = DateTime.tryParse(job['completedAt']?.toString() ?? '') ?? DateTime.now();
+          final thaiYear = date.year + 543;
+          final dateStr = '${date.day}/${date.month}/${thaiYear.toString().substring(2)}';
+          
+          double distance = double.tryParse(job['distanceKm']?.toString() ?? '0') ?? 0.0;
+          if (distance == 0.0) continue; 
+
+          double startOdo = currentOdo;
+          double endOdo = startOdo + distance;
+          
+          String destination = job['customerName']?.toString() ?? '';
+          if (destination.isEmpty) {
+             destination = job['customerAddress']?.toString() ?? '';
+          }
+          
+          final contentStyle = CellStyle(
+            horizontalAlign: HorizontalAlign.Center,
+            verticalAlign: VerticalAlign.Center,
+          );
+
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex))
+            ..value = TextCellValue(dateStr)
+            ..cellStyle = contentStyle;
+          
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIndex))
+            ..value = DoubleCellValue(double.parse(startOdo.toStringAsFixed(1)))
+            ..cellStyle = contentStyle;
+            
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIndex))
+            ..value = DoubleCellValue(double.parse(endOdo.toStringAsFixed(1)))
+            ..cellStyle = contentStyle;
+            
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIndex))
+            ..value = TextCellValue('-')
+            ..cellStyle = contentStyle;
+            
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIndex))
+            ..value = TextCellValue('-')
+            ..cellStyle = contentStyle;
+
+          currentOdo = endOdo;
+          rowIndex++;
+        }
+      }
+
+      final fileBytes = excel.encode();
+      if (fileBytes == null) return false;
+
+      final directory = await getApplicationDocumentsDirectory();
+      final targetDir = Directory('${directory.path}\\POS_Reports');
+      if (!await targetDir.exists()) {
+        await targetDir.create(recursive: true);
+      }
+
+      final monthStr = DateFormat('MM_yyyy').format(reportMonth);
+      final filePath = '${targetDir.path}\\Vehicle_Maintenance_Log_$monthStr.xlsx';
+      final file = File(filePath);
+      
+      await file.writeAsBytes(fileBytes);
+      await OpenFile.open(filePath);
+      return true;
+
+    } catch (e) {
+      debugPrint('Export Vehicle Maint Error: $e');
+      if (e.toString().contains('OS Error: The process cannot access the file')) {
+        throw Exception('กรุณาปิดไฟล์ Excel ที่เปิดค้างไว้ก่อนทำการออกรายงานใหม่');
+      }
+      throw Exception('เกิดข้อผิดพลาด: $e');
     }
   }
 }

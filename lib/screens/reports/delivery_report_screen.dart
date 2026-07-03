@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../services/excel_export_service.dart';
+//import '../../services/excel_export_service.dart';
 import '../../services/alert_service.dart';
 import '../../repositories/delivery_history_repository.dart';
 import '../../services/integration/delivery_integration_service.dart';
@@ -13,6 +13,7 @@ import 'widgets/delivery_report/delivery_report_filter_bar.dart';
 import 'widgets/delivery_report/delivery_report_vehicle_chips.dart';
 import 'widgets/delivery_report/delivery_report_data_table.dart';
 import 'widgets/delivery_report/assign_vehicle_dialog.dart';
+import 'dialogs/vehicle_tax_report_dialog.dart';
 
 class DeliveryReportScreen extends StatefulWidget {
   // ✅ Task 4: รับ Service แบบ Optional (Option B) — ไม่ต้องแต่ main.dart
@@ -26,10 +27,8 @@ class DeliveryReportScreen extends StatefulWidget {
 
 class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
   final DeliveryHistoryRepository _repo = DeliveryHistoryRepository();
-  final ExcelExportService _exportService = ExcelExportService();
 
   bool _isLoading = false;
-  bool _isExporting = false;
   bool _isSyncing = false; // ✅ Task 4
   List<Map<String, dynamic>> _records = [];
   List<Map<String, dynamic>> _allVehicles = [];
@@ -238,36 +237,6 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
     }
   }
 
-  Future<void> _exportExcel() async {
-    if (_filteredRecords.isEmpty) {
-      AlertService.show(
-          context: context,
-          message: 'ไม่มีข้อมูลในช่วงที่เลือก หรือตามรถที่กรอง',
-          type: 'warning');
-      return;
-    }
-    setState(() => _isExporting = true);
-    try {
-      final success =
-          await _exportService.exportDeliveryReport(_filteredRecords, _startDate, _endDate, allVehicles: _allVehicles);
-      if (mounted) {
-        AlertService.show(
-          context: context,
-          message: success
-              ? 'สร้างไฟล์ Excel สำเร็จ กำลังเปิดไฟล์...'
-              : 'เกิดข้อผิดพลาดในการสร้างไฟล์ Excel',
-          type: success ? 'success' : 'error',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        AlertService.show(
-            context: context, message: 'Error: $e', type: 'error');
-      }
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
-  }
 
   // ✅ Task 4: Sync จาก Cloud ก่อนแสดง — ใช้ Service ที่ส่งเข้ามา (Option B)
   Future<void> _syncFromCloud() async {
@@ -429,16 +398,17 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilledButton.icon(
-              onPressed: _isExporting ? null : _exportExcel,
-              icon: _isExporting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.download),
-              label: Text(_isExporting ? 'กำลัง Export...' : 'Export Excel'),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => VehicleTaxReportDialog(
+                    startDate: _startDate,
+                    endDate: _endDate,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.download),
+              label: const Text('Export Excel'),
             ),
           ),
         ],
