@@ -18,6 +18,9 @@ import '../../state/hr/advance_provider.dart';
 import '../../state/hr/leave_provider.dart';
 import '../../state/hr/dashboard_attendance_provider.dart';
 
+// Extracted widget
+import 'widgets/attendance/payday_alert_banner.dart';
+
 class HrScreen extends ConsumerStatefulWidget {
   const HrScreen({super.key});
 
@@ -44,12 +47,12 @@ class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderSt
   Future<void> _manualSync() async {
     if (_isSyncing) return;
     setState(() => _isSyncing = true);
-    
+
     try {
       await AttendanceSyncService().syncAttendanceFromCloud();
       await AdvanceSyncService().syncAdvanceRequestsFromCloud();
       await LeaveSyncService().syncLeaveRequestsFromCloud();
-      
+
       if (mounted) {
         ref.read(attendanceProvider.notifier).loadToday();
         ref.read(advanceProvider.notifier).loadPending();
@@ -81,10 +84,7 @@ class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderSt
                     child: SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     ),
                   ),
                 )
@@ -112,42 +112,9 @@ class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderSt
       ),
       body: Column(
         children: [
-          // ✅ Payday Alert Banner
-          if (DateTime.now().weekday == DateTime.saturday)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              color: Colors.orange.shade100,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text(
-                    'แจ้งเตือน: วันนี้ครบกำหนดจ่ายค่าแรง "รายสัปดาห์" กรุณาไปที่แท็บ "เงินเดือน" เพื่อทำรายการ',
-                    style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            )
-          else if (DateTime.now().day == 1)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              color: Colors.blue.shade100,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.info_outline, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text(
-                    'แจ้งเตือน: วันนี้ครบกำหนดจ่ายค่าแรง "รายเดือน" กรุณาไปที่แท็บ "เงินเดือน" เพื่อทำรายการ',
-                    style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-          
+          // ✅ Extracted PaydayAlertBanner widget
+          const PaydayAlertBanner(),
+
           Expanded(
             child: TabBarView(
               controller: _tabController,

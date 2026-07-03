@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../models/hr/attendance_log.dart';
+import '../../../../models/hr/attendance_log.dart';
+
 
 class TempLeaveTimeline extends StatelessWidget {
   final AttendanceLog log;

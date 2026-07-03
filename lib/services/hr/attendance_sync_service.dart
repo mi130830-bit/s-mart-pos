@@ -112,4 +112,45 @@ class AttendanceSyncService {
       _isSyncing = false;
     }
   }
+
+  /// Pushes the current day's attendance log for the specified employee from MySQL to Firestore.
+  /// This ensures that changes made via Fingerprint or PIN on POS Desktop are immediately visible in S-Link.
+  Future<void> syncAttendanceToCloud(int employeeId) async {
+    try {
+      final employee = await _employeeRepo.getById(employeeId);
+      if (employee == null || employee.firebaseUid == null || employee.firebaseUid!.isEmpty) {
+        return; // Employee not found or has no S-Link account linked
+      }
+
+      final todayLog = await _attendanceRepo.getTodayLogByEmployee(employeeId);
+      if (todayLog == null) {
+        return; // No log for today to sync
+      }
+
+      final dateStr = todayLog.date.toIso8601String().split('T')[0];
+      final docId = '${employee.firebaseUid}_$dateStr';
+
+      final Map<String, dynamic> data = {
+        'user_id': employee.firebaseUid,
+        'user_name': employee.displayName ?? '',
+        'date': dateStr,
+        'status': todayLog.status,
+      };
+
+      if (todayLog.clockIn != null) data['check_in_time'] = todayLog.clockIn!.toIso8601String();
+      if (todayLog.latitude != null) data['check_in_lat'] = todayLog.latitude;
+      if (todayLog.longitude != null) data['check_in_lng'] = todayLog.longitude;
+      if (todayLog.clockOut != null) data['check_out_time'] = todayLog.clockOut!.toIso8601String();
+
+      // For S-Link, map the first available temp leave to the single temp_out UI state.
+      if (todayLog.tempOut != null) data['temp_out_time'] = todayLog.tempOut!.toIso8601String();
+      if (todayLog.backToWork != null) data['back_to_work_time'] = todayLog.backToWork!.toIso8601String();
+
+      // Using updateDocument (PATCH), which creates the doc if it doesn't exist
+      await FirestoreRestService.updateDocument('attendance_logs', docId, data);
+      LoggerService.info('AttendanceSync', 'Successfully synced attendance to cloud for ${employee.displayName}');
+    } catch (e) {
+      LoggerService.error('AttendanceSync', 'Error syncing attendance to cloud for employee #$employeeId', e);
+    }
+  }
 }

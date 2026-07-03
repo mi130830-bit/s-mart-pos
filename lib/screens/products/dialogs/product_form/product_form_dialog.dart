@@ -48,13 +48,13 @@ part 'tabs/product_sales_history_tab.dart';
 class ProductFormDialog extends ConsumerStatefulWidget {
   final ProductRepository repo;
   final Product? product;
-  final bool delayedSave; // New parameter
+  final bool disableStockInput;
 
   const ProductFormDialog({
     super.key,
     required this.repo,
     this.product,
-    this.delayedSave = false, // Default to false (normal behavior)
+    this.disableStockInput = false,
   });
 
   @override

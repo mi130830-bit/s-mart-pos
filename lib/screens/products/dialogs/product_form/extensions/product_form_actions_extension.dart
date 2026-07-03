@@ -349,7 +349,7 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
               .padLeft(8, '0');
         }
 
-        final newStock = double.tryParse(_stockCtrl.text) ?? 0.0;
+        final newStock = widget.disableStockInput ? 0.0 : (double.tryParse(_stockCtrl.text) ?? 0.0);
         final oldStock = widget.product?.stockQuantity ?? 0.0;
 
         // ✅ Security Check: If stock changed
@@ -408,26 +408,6 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
           isActive: _isActiveProduct,
           isWarehouseItem: _isWarehouseItem, // ✅ Saved
         );
-
-        // ✅ Delayed Save Mode: Return unsaved product immediately
-        if (widget.delayedSave) {
-          if (!mounted) return;
-          try {
-            Navigator.of(context).pop(); // Pop Loading
-            Navigator.of(context).pop(newProduct); // Return with ID 0
-          } catch (e) {
-            debugPrint('⚠️ Navigator pop failed: $e');
-            // ถ้า pop ไม่ได้ ให้ timeout แล้วลองใหม่
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (mounted) {
-                try {
-                  Navigator.of(context).pop(newProduct);
-                } catch (_) {}
-              }
-            });
-          }
-          return;
-        }
 
         final productId = await widget.repo.saveProduct(newProduct);
 

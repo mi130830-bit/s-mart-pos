@@ -1,11 +1,11 @@
-// ignore_for_file: deprecated_member_use
+﻿// ignore_for_file: deprecated_member_use
 import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../models/hr/employee_profile.dart';
-import '../../../state/hr/employee_provider.dart';
-import '../../../state/hr/advance_provider.dart';
+import '../../../../models/hr/employee_profile.dart';
+import '../../../../state/hr/employee_provider.dart';
+import '../../../../state/hr/advance_provider.dart';
 
 class AdvanceFormDialog extends ConsumerStatefulWidget {
   const AdvanceFormDialog({super.key});
@@ -201,3 +201,4 @@ class _AdvanceFormDialogState extends ConsumerState<AdvanceFormDialog> {
     );
   }
 }
+

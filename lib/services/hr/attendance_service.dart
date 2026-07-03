@@ -3,6 +3,7 @@ import '../../models/hr/employee_profile.dart';
 import '../../repositories/hr/attendance_repository.dart';
 import '../../repositories/hr/employee_repository.dart';
 import 'attendance_calculation_service.dart';
+import 'attendance_sync_service.dart';
 
 class AttendanceService {
   final AttendanceRepository _attendanceRepo = AttendanceRepository();
@@ -40,6 +41,10 @@ class AttendanceService {
 
     // 4. Clock In
     await _attendanceRepo.clockIn(matchedEmployee.id, 'PIN', status: status);
+    
+    // 5. Sync to Cloud
+    await AttendanceSyncService().syncAttendanceToCloud(matchedEmployee.id);
+    
     return matchedEmployee;
   }
 
@@ -67,15 +72,19 @@ class AttendanceService {
       overrideTime: overrideTime,
       status: status,
     );
+    
+    await AttendanceSyncService().syncAttendanceToCloud(employeeId);
   }
 
   Future<void> clockOutWithPin(String pin) async {
     final emp = await _verifyPin(pin);
     await _attendanceRepo.clockOut(emp.id);
+    await AttendanceSyncService().syncAttendanceToCloud(emp.id);
   }
 
   Future<void> clockOut(int employeeId) async {
     await _attendanceRepo.clockOut(employeeId);
+    await AttendanceSyncService().syncAttendanceToCloud(employeeId);
   }
 
   Future<void> clockOutOverride(int employeeId, int overrideByUserId, String reason, DateTime overrideTime) async {
@@ -86,18 +95,21 @@ class AttendanceService {
       overrideBy: overrideByUserId,
       overrideTime: overrideTime,
     );
+    await AttendanceSyncService().syncAttendanceToCloud(employeeId);
   }
 
   // --- Temporary Leave Flow (Migrated to AttendanceLog) ---
   Future<EmployeeProfile> startTempLeaveWithPin(String pin) async {
     final emp = await _verifyPin(pin);
     await _attendanceRepo.startTempLeave(emp.id, method: 'PIN');
+    await AttendanceSyncService().syncAttendanceToCloud(emp.id);
     return emp;
   }
 
   Future<EmployeeProfile> endTempLeaveWithPin(String pin) async {
     final emp = await _verifyPin(pin);
     await _attendanceRepo.endTempLeave(emp.id, method: 'PIN');
+    await AttendanceSyncService().syncAttendanceToCloud(emp.id);
     return emp;
   }
 
@@ -109,6 +121,7 @@ class AttendanceService {
       overrideBy: overrideByUserId,
       overrideTime: overrideTime,
     );
+    await AttendanceSyncService().syncAttendanceToCloud(employeeId);
   }
 
   Future<void> endTempLeaveOverride(int employeeId, int overrideByUserId, String reason, DateTime overrideTime) async {
@@ -119,6 +132,7 @@ class AttendanceService {
       overrideBy: overrideByUserId,
       overrideTime: overrideTime,
     );
+    await AttendanceSyncService().syncAttendanceToCloud(employeeId);
   }
 
   /// ตรวจสอบว่าเข้างานสายตาม role ของพนักงาน

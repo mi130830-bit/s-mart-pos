@@ -1,5 +1,6 @@
 import 'package:shelf_router/shelf_router.dart';
 import 'controllers/auth_controller.dart';
+import 'controllers/config_controller.dart';
 import 'controllers/product_controller.dart';
 import 'controllers/order_controller.dart';
 import 'controllers/line_controller.dart';
@@ -29,6 +30,9 @@ class ApiRouter {
     // Public Routes for Webhooks and Desktop POS (No Firebase JWT)
     router.mount('/line', LineController().router.call);
     router.mount('/payment', PaymentController().router.call);
+
+    // ✅ Public Config Routes (No JWT — S-Link Driver QR ดึง PromptPay ID)
+    router.mount('/config', ConfigController().router.call);
 
     // Secured Routes (Requires Firebase JWT from S-Link)
     router.mount('/products', securedPipeline.addHandler(ProductController().router.call));

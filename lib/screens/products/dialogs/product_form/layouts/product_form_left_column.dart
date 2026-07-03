@@ -293,12 +293,14 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
         // Stock Quantity Field (Restored/Added)
         CustomTextField(
           controller: _stockCtrl,
-          readOnly: _components.isNotEmpty, // Lock if linked to components
+          readOnly: _components.isNotEmpty || widget.disableStockInput, // Lock if linked to components or disabled by PO
           label: _components.isNotEmpty
               ? 'จำนวนสต๊อก (อ้างอิงจากส่วนประกอบ)'
-              : 'จำนวนสต๊อก',
-          filled: _components.isNotEmpty,
-          fillColor: _components.isNotEmpty ? Colors.grey[200] : null,
+              : widget.disableStockInput
+                  ? 'สต๊อก (จัดการผ่าน PO)'
+                  : 'จำนวนสต๊อก',
+          filled: _components.isNotEmpty || widget.disableStockInput,
+          fillColor: (_components.isNotEmpty || widget.disableStockInput) ? Colors.grey[200] : null,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           selectAllOnFocus: true, // ✅ Auto-select
         ),

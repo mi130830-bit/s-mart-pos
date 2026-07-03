@@ -50,7 +50,6 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   final ValueNotifier<StockInTotals> _totalsNotifier = ValueNotifier(
     StockInTotals(subtotal: 0.0, vatAmount: 0.0, grandTotal: 0.0),
   );
-  int _nextTempProductId = -1;
 
   List<Supplier> _suppliers = [];
   List<Unit> _units = [];
@@ -271,21 +270,21 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
       barrierDismissible: false,
       builder: (context) => ProductFormDialog(
         repo: _productRepo,
-        delayedSave: true, // ✅ Don't save to DB yet
+        disableStockInput: true, // ✅ Force stock to 0, save instantly
       ),
     );
 
     if (newProduct != null && mounted) {
-      final assignedProduct = newProduct.copyWith(id: _nextTempProductId--);
+      // ✅ Product is already saved with a real ID > 0
       setState(() {
         final newItem = StockInItem(
-          product: assignedProduct,
+          product: newProduct,
           quantity: 1,
-          costPrice: assignedProduct.costPrice,
-          vatType: assignedProduct.vatType,
+          costPrice: newProduct.costPrice,
+          vatType: newProduct.vatType,
         );
         _stockInItems.add(newItem);
-        _itemControllers[assignedProduct.id] = _createControllersForItem(newItem);
+        _itemControllers[newProduct.id] = _createControllersForItem(newItem);
       });
       _updateTotals();
     }

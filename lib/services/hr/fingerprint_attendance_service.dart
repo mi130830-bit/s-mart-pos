@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../integration/fingerprint_network_service.dart';
 import '../../repositories/hr/employee_repository.dart';
 import '../../repositories/hr/attendance_repository.dart';
+import 'attendance_sync_service.dart';
 
 /// บริการประสานงานระหว่าง FingerprintNetworkService (ฮาร์ดแวร์)
 /// และ AttendanceRepository (ฐานข้อมูล)
@@ -243,6 +244,9 @@ class FingerprintAttendanceService {
               'คุณ $name ออกพักชั่วคราวครบ 3 รอบแล้วครับ หากต้องการเลิกงาน กรุณาสแกนในช่วงเวลาเลิกงาน 🔔');
         }
       }
+      
+      // SYNC TO S-LINK (FIRESTORE)
+      await AttendanceSyncService().syncAttendanceToCloud(employeeId);
     } catch (e) {
       debugPrint('❌ [FingerprintAttendance] DB Error: $e');
     }
@@ -280,6 +284,9 @@ class FingerprintAttendanceService {
       debugPrint(
           '✅ [FingerprintAttendance] Clock Out (Button): Employee #$employeeId');
       onAttendanceRecorded?.call(name, 'เลิกงาน');
+      
+      // SYNC TO S-LINK (FIRESTORE)
+      await AttendanceSyncService().syncAttendanceToCloud(employeeId);
     } catch (e) {
       debugPrint('❌ [FingerprintAttendance] DB Error: $e');
     }

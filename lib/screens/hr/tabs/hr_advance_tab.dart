@@ -5,14 +5,14 @@ import 'package:intl/intl.dart';
 import '../../../models/hr/advance_payment.dart';
 import '../../../state/auth_provider.dart';
 import '../../../state/hr/advance_provider.dart';
-import '../widgets/advance_form_dialog.dart';
-import '../widgets/advance_detail_dialog.dart';
+import '../widgets/advance/advance_form_dialog.dart';
+import '../widgets/advance/advance_detail_dialog.dart';
 import '../../../services/hr/advance_sync_service.dart';
-import '../utils/hr_status_utils.dart';
-import '../widgets/hr_status_badge.dart';
-import '../widgets/hr_approve_reject_dialog.dart';
-import '../widgets/hr_tab_header.dart';
-import '../widgets/hr_view_segmented_button.dart';
+import '../widgets/shared/hr_approve_reject_dialog.dart';
+import '../widgets/shared/hr_tab_header.dart';
+import '../widgets/shared/hr_view_segmented_button.dart';
+import '../widgets/shared/hr_empty_state.dart';
+import '../widgets/advance/advance_request_tile.dart';
 
 class HrAdvanceTab extends ConsumerStatefulWidget {
   const HrAdvanceTab({super.key});
@@ -22,7 +22,7 @@ class HrAdvanceTab extends ConsumerStatefulWidget {
 }
 
 class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
-  String _selectedView = 'PENDING'; // 'PENDING' or 'ALL'
+  String _selectedView = 'PENDING';
 
   @override
   void initState() {
@@ -67,13 +67,7 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(advanceProvider);
-    final dateFormat = DateFormat('dd/MM/yyyy');
-    final currencyFormat = NumberFormat('#,##0.00');
-
-    final title = _selectedView == 'PENDING'
-        ? 'รายการเบิกเงินล่วงหน้าที่รออนุมัติ'
-        : 'ประวัติการเบิกเงินล่วงหน้าทั้งหมด';
-
+    final title = _selectedView == 'PENDING' ? 'รายการเบิกเงินล่วงหน้าที่รออนุมัติ' : 'ประวัติการเบิกเงินล่วงหน้าทั้งหมด';
     final list = _selectedView == 'PENDING' ? state.pending : state.history;
 
     return Padding(
@@ -91,36 +85,23 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
                 ref.read(advanceProvider.notifier).loadAllHistory();
               }
             },
-            onCreate: () {
-              showDialog(
-                context: context,
-                builder: (context) => const AdvanceFormDialog(),
-              );
-            },
+            onCreate: () => showDialog(context: context, builder: (context) => const AdvanceFormDialog()),
             createLabel: 'สร้างคำขอเบิกเงิน',
             createIcon: Icons.money,
           ),
           const SizedBox(height: 16),
           HrViewSegmentedButton(
             selectedView: _selectedView,
-            onSelectionChanged: (value) {
-              setState(() {
-                _selectedView = value;
-              });
-            },
+            onSelectionChanged: (value) => setState(() => _selectedView = value),
           ),
           const SizedBox(height: 16),
           Expanded(
             child: state.isLoading && list.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : list.isEmpty
-                    ? Center(
-                        child: Text(
-                          _selectedView == 'PENDING'
-                              ? 'ไม่มีคำขอที่รอการอนุมัติ'
-                              : 'ไม่มีประวัติการเบิกเงิน',
-                          style: const TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
+                    ? HrEmptyState(
+                        icon: Icons.money_off,
+                        message: _selectedView == 'PENDING' ? 'ไม่มีคำขอที่รอการอนุมัติ' : 'ไม่มีประวัติการเบิกเงิน',
                       )
                     : Card(
                         elevation: 2,
@@ -128,65 +109,16 @@ class _HrAdvanceTabState extends ConsumerState<HrAdvanceTab> {
                         child: ListView.separated(
                           itemCount: list.length,
                           separatorBuilder: (context, index) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final req = list[index];
-                            return ListTile(
-                              onTap: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AdvanceDetailDialog(request: req),
-                                );
-                              },
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              leading: CircleAvatar(
-                                backgroundColor: HrStatusUtils.getStatusColor(req.status).withValues(alpha: 0.1),
-                                child: Icon(
-                                  req.status == 'APPROVED' || req.status == 'DEDUCTED' ? Icons.check_circle : req.status == 'REJECTED' ? Icons.cancel : Icons.money,
-                                  color: HrStatusUtils.getStatusColor(req.status),
-                                ),
-                              ),
-                              title: Row(
-                                children: [
-                                  Text(
-                                    req.employeeName ?? 'พนักงาน (ID: ${req.employeeId})',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  HrStatusBadge(status: req.status, type: HrItemType.advance),
-                                ],
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'ยอดเบิก: ฿${currencyFormat.format(req.amount)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                                  ),
-                                  Text('วันที่ขอเบิก: ${dateFormat.format(req.requestDate)}'),
-                                  if (req.reason != null && req.reason!.isNotEmpty)
-                                    Text('เหตุผล: ${req.reason}', style: const TextStyle(fontStyle: FontStyle.italic)),
-                                ],
-                              ),
-                              trailing: req.status == 'PENDING'
-                                  ? Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.check_circle, color: Colors.green),
-                                          tooltip: 'อนุมัติ',
-                                          onPressed: () => _showApproveDialog(req),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.cancel, color: Colors.red),
-                                          tooltip: 'ปฏิเสธ',
-                                          onPressed: () => _showRejectDialog(req),
-                                        ),
-                                      ],
-                                    )
-                                  : const Icon(Icons.chevron_right, color: Colors.grey),
-                            );
-                          },
+                          // ✅ Using extracted AdvanceRequestTile widget
+                          itemBuilder: (context, index) => AdvanceRequestTile(
+                            req: list[index],
+                            onTap: (req) => showDialog(
+                              context: context,
+                              builder: (context) => AdvanceDetailDialog(request: req),
+                            ),
+                            onApprove: _showApproveDialog,
+                            onReject: _showRejectDialog,
+                          ),
                         ),
                       ),
           ),

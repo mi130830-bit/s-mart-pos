@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../utils/hr_status_utils.dart';
+import '../../utils/hr_status_utils.dart';
+
 
 class HrStatusBadge extends StatelessWidget {
   final String status;

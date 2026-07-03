@@ -2,10 +2,12 @@ import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../models/hr/advance_payment.dart';
-import '../../../state/auth_provider.dart';
-import '../../../state/hr/advance_provider.dart';
-import '../../../repositories/hr/advance_repository.dart';
+import '../../../../models/hr/advance_payment.dart';
+import '../../../../state/auth_provider.dart';
+import '../../../../state/hr/advance_provider.dart';
+import '../../../../repositories/hr/advance_repository.dart';
+import '../shared/hr_confirm_dialog.dart';
+import '../shared/hr_detail_row.dart';
 
 class AdvanceDetailDialog extends ConsumerStatefulWidget {
   final AdvancePayment request;
@@ -56,23 +58,12 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
     final authState = ref.read(authProvider);
     if (authState.currentUser == null) return;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('✅ อนุมัติเบิกล่วงหน้า'),
-        content: Text('ต้องการอนุมัติให้ ${_currentRequest.employeeName ?? 'พนักงาน'} เบิกเงินจำนวน ฿${NumberFormat('#,##0.00').format(_currentRequest.amount)} หรือไม่?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยันอนุมัติ'),
-          ),
-        ],
-      ),
+    final confirm = await HrConfirmDialog.show(
+      context,
+      title: '✅ อนุมัติเบิกล่วงหน้า',
+      content: 'ต้องการอนุมัติให้ ${_currentRequest.employeeName ?? 'พนักงาน'} เบิกเงินจำนวน ฿${NumberFormat('#,##0.00').format(_currentRequest.amount)} หรือไม่?',
+      actionLabel: 'ยืนยันอนุมัติ',
+      actionColor: Colors.green,
     );
 
     if (confirm == true && mounted) {
@@ -108,23 +99,12 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
   }
 
   Future<void> _reject() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('❌ ปฏิเสธเบิกล่วงหน้า'),
-        content: Text('ต้องการปฏิเสธคำขอเบิกเงินของ ${_currentRequest.employeeName ?? 'พนักงาน'} หรือไม่?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('ยืนยันปฏิเสธ'),
-          ),
-        ],
-      ),
+    final confirm = await HrConfirmDialog.show(
+      context,
+      title: '❌ ปฏิเสธเบิกล่วงหน้า',
+      content: 'ต้องการปฏิเสธคำขอเบิกเงินของ ${_currentRequest.employeeName ?? 'พนักงาน'} หรือไม่?',
+      actionLabel: 'ยืนยันปฏิเสธ',
+      actionColor: Colors.red,
     );
 
     if (confirm == true && mounted) {
@@ -156,30 +136,6 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
         }
       }
     }
-  }
-
-  Widget _buildDetailRow(String label, String value, {Color? valueColor, bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 14)),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-                fontSize: 14,
-                color: valueColor ?? Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -231,36 +187,36 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
               ),
               const Divider(height: 24),
 
-              _buildDetailRow('เลขที่รายการเบิก', '#${req.id}', isBold: true),
-              _buildDetailRow(
+              HrDetailRow('เลขที่รายการเบิก', '#${req.id}', isBold: true),
+              HrDetailRow(
                 'ยอดเงินที่ขอเบิก',
                 '฿${currencyFormat.format(req.amount)}',
                 valueColor: Colors.blue,
                 isBold: true,
               ),
-              _buildDetailRow(
+              HrDetailRow(
                 'ยอดคงเหลือต้องหัก',
                 '฿${currencyFormat.format(req.remainingAmount)}',
                 valueColor: req.remainingAmount > 0 ? Colors.orange : Colors.green,
                 isBold: true,
               ),
               if (req.installmentAmount != null)
-                _buildDetailRow(
+                HrDetailRow(
                   'หักชำระต่องวด',
                   '฿${currencyFormat.format(req.installmentAmount)}',
                 ),
-              _buildDetailRow('วันที่ยื่นคำขอ', dateFormat.format(req.requestDate)),
+              HrDetailRow('วันที่ยื่นคำขอ', dateFormat.format(req.requestDate)),
               if (req.reason != null && req.reason!.isNotEmpty)
-                _buildDetailRow('เหตุผลที่ขอเบิก', req.reason!),
+                HrDetailRow('เหตุผลที่ขอเบิก', req.reason!),
               
               const Divider(height: 24),
               
               if (req.status != 'PENDING') ...[
                 const Text('ข้อมูลการอนุมัติ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 4),
-                _buildDetailRow('ผู้อนุมัติ (ID)', req.approvedBy?.toString() ?? '-'),
+                HrDetailRow('ผู้อนุมัติ (ID)', req.approvedBy?.toString() ?? '-'),
                 if (req.approvedAt != null)
-                  _buildDetailRow('อนุมัติเมื่อวันที่', dateTimeFormat.format(req.approvedAt!)),
+                  HrDetailRow('อนุมัติเมื่อวันที่', dateTimeFormat.format(req.approvedAt!)),
                 const Divider(height: 24),
               ],
 
@@ -340,3 +296,4 @@ class _AdvanceDetailDialogState extends ConsumerState<AdvanceDetailDialog> {
     );
   }
 }
+

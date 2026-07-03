@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pos_desktop/utils/snackbar_utils.dart';
 import '../../../state/hr/payroll_provider.dart';
-import '../widgets/payroll_current_view.dart';
-import '../widgets/payroll_history_view.dart';
+import '../widgets/payroll/payroll_current_view.dart';
+import '../widgets/payroll/payroll_history_view.dart';
 import '../../../repositories/expense_repository.dart';
 import '../../../models/expense.dart';
+
 
 class HrPayrollTab extends ConsumerStatefulWidget {
   const HrPayrollTab({super.key});
@@ -391,6 +392,10 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
                               if (v == 'DAILY') {
                                 _startDate = DateTime.now();
                                 _endDate = DateTime.now();
+                              } else if (v == 'MONTHLY') {
+                                final now = DateTime.now();
+                                _startDate = DateTime(now.year, now.month, 1);
+                                _endDate = DateTime(now.year, now.month + 1, 0);
                               } else {
                                 _startDate = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
                                 _endDate = DateTime.now().add(Duration(days: 6 - DateTime.now().weekday));

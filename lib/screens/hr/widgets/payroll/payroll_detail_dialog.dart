@@ -1,10 +1,10 @@
-import 'package:pos_desktop/utils/snackbar_utils.dart';
+﻿import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../models/hr/payroll_record.dart';
-import '../../../state/auth_provider.dart';
-import '../../../state/hr/payroll_provider.dart';
+import '../../../../models/hr/payroll_record.dart';
+import '../../../../state/auth_provider.dart';
+import '../../../../state/hr/payroll_provider.dart';
 
 class PayrollDetailDialog extends ConsumerStatefulWidget {
   final PayrollRecord record;
@@ -164,3 +164,4 @@ class _PayrollDetailDialogState extends ConsumerState<PayrollDetailDialog> {
     );
   }
 }
+

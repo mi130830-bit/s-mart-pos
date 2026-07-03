@@ -1,9 +1,10 @@
 import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../models/hr/employee_profile.dart';
-import '../../../state/auth_provider.dart';
-import '../../../state/hr/attendance_provider.dart';
+import '../../../../models/hr/employee_profile.dart';
+import '../../../../state/auth_provider.dart';
+import '../../../../state/hr/attendance_provider.dart';
+
 
 class OverrideClockinDialog extends ConsumerStatefulWidget {
   final EmployeeProfile employee;
@@ -139,40 +140,7 @@ class _OverrideClockinDialogState extends ConsumerState<OverrideClockinDialog> {
             Text('พนักงาน: ${widget.employee.displayName ?? 'ไม่ระบุชื่อ'}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 16),
             
-            Row(
-              children: [
-                const Icon(Icons.access_time, color: Colors.grey),
-                const SizedBox(width: 16),
-                const Text('เวลา:', style: TextStyle(fontSize: 16)),
-                const SizedBox(width: 16),
-                SizedBox(
-                  width: 60,
-                  child: TextField(
-                    controller: _hourController,
-                    focusNode: _hourFocus,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(vertical: 8)),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Text(':', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                ),
-                SizedBox(
-                  width: 60,
-                  child: TextField(
-                    controller: _minuteController,
-                    focusNode: _minuteFocus,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(vertical: 8)),
-                  ),
-                ),
-              ],
-            ),
+            _buildTimeInput(),
             const SizedBox(height: 16),
             
             // Dropdown เลือกเหตุผล
@@ -239,5 +207,42 @@ class _OverrideClockinDialogState extends ConsumerState<OverrideClockinDialog> {
       case 'TEMP_RETURN': return '📝 ลงเวลากลับเข้างานให้พนักงาน';
       default: return '📝 จัดการลงเวลา';
     }
+  }
+
+  Widget _buildTimeInput() {
+    return Row(
+      children: [
+        const Icon(Icons.access_time, color: Colors.grey),
+        const SizedBox(width: 16),
+        const Text('เวลา:', style: TextStyle(fontSize: 16)),
+        const SizedBox(width: 16),
+        SizedBox(
+          width: 60,
+          child: TextField(
+            controller: _hourController,
+            focusNode: _hourFocus,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(vertical: 8)),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8.0),
+          child: Text(':', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        ),
+        SizedBox(
+          width: 60,
+          child: TextField(
+            controller: _minuteController,
+            focusNode: _minuteFocus,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(vertical: 8)),
+          ),
+        ),
+      ],
+    );
   }
 }

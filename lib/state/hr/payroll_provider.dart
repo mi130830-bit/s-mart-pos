@@ -280,24 +280,8 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
       }
 
       final count = await _repo.markAllPaidForPeriod(start, end);
-      // Update local state
-      final updatedRecords = state.records.map((r) {
-        return PayrollRecord(
-          id: r.id, employeeId: r.employeeId, payCycle: r.payCycle,
-          periodStart: r.periodStart, periodEnd: r.periodEnd,
-          workDays: r.workDays, absentDays: r.absentDays, lateCount: r.lateCount,
-          leaveDays: r.leaveDays, dailyWageTotal: r.dailyWageTotal,
-          baseSalary: r.baseSalary, tripCount: r.tripCount, tripTotalFee: r.tripTotalFee,
-          overtimeHours: r.overtimeHours, overtimePay: r.overtimePay, bonus: r.bonus,
-          grossPay: r.grossPay, advanceDeductions: r.advanceDeductions,
-          socialSecurity: r.socialSecurity, otherDeductions: r.otherDeductions,
-          totalDeductions: r.totalDeductions, netPay: r.netPay,
-          status: 'PAID', confirmedBy: r.confirmedBy,
-          paidAt: DateTime.now(), note: r.note,
-          createdAt: r.createdAt, employeeName: r.employeeName,
-        );
-      }).toList();
-      state = state.copyWith(records: updatedRecords, isLoading: false);
+      // Update local state by reloading unpaid records
+      await loadByPeriod(start, end);
       return count;
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
