@@ -27,6 +27,24 @@ void main(List<String> args) async {
     writableDir,
   );
 
+  Response serveGpsHtml(Request req) {
+    final candidatePaths = [
+      'public/gps.html',
+      '${Directory.current.path}/public/gps.html',
+      '${File(Platform.resolvedExecutable).parent.path}/public/gps.html',
+    ];
+    for (final p in candidatePaths) {
+      final f = File(p);
+      if (f.existsSync()) {
+        return Response.ok(
+          f.readAsStringSync(),
+          headers: {'Content-Type': 'text/html; charset=utf-8'},
+        );
+      }
+    }
+    return Response.notFound('gps.html not found');
+  }
+
   // Main Router
   final router = Router()
     ..mount('/api/v1', ApiRouter().router.call)
@@ -36,6 +54,8 @@ void main(List<String> args) async {
       }
       return staticHandler(req);
     })
+    ..get('/gps.html', serveGpsHtml)
+    ..get('/gps', serveGpsHtml)
     ..get(
       '/health',
       (Request req) => Response.ok(

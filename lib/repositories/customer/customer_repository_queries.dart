@@ -26,14 +26,15 @@ extension CustomerRepositoryQueries on CustomerRepository {
     }
     try {
       final offset = (page - 1) * pageSize;
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        final filtered = await _getFuzzyFilteredCustomers(searchTerm, onlyDebtors, onlyLineConnected);
+        final end = (offset + pageSize > filtered.length) ? filtered.length : offset + pageSize;
+        if (offset >= filtered.length) return [];
+        return filtered.sublist(offset, end);
+      }
+
       List<String> conditions = [];
       Map<String, dynamic> params = {};
-
-      if (searchTerm != null && searchTerm.isNotEmpty) {
-        conditions.add(
-            '(firstName LIKE :term OR lastName LIKE :term OR phone LIKE :term OR memberCode LIKE :term)');
-        params['term'] = '%$searchTerm%';
-      }
 
       if (onlyDebtors) {
         conditions.add('currentDebt > 0.01');
@@ -83,14 +84,13 @@ extension CustomerRepositoryQueries on CustomerRepository {
       }
     }
     try {
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        final filtered = await _getFuzzyFilteredCustomers(searchTerm, onlyDebtors, onlyLineConnected);
+        return filtered.length;
+      }
+
       List<String> conditions = [];
       Map<String, dynamic> params = {};
-
-      if (searchTerm != null && searchTerm.isNotEmpty) {
-        conditions.add(
-            '(firstName LIKE :term OR lastName LIKE :term OR phone LIKE :term OR memberCode LIKE :term)');
-        params['term'] = '%$searchTerm%';
-      }
 
       if (onlyDebtors) {
         conditions.add('currentDebt > 0.01');
@@ -114,6 +114,62 @@ extension CustomerRepositoryQueries on CustomerRepository {
       debugPrint('Error counting customers: $e');
       return 0;
     }
+  }
+
+  Future<List<Customer>> _getAllActiveCustomers() async {
+    if (_allCustomersCache != null && _cacheTime != null) {
+      if (DateTime.now().difference(_cacheTime!).inMinutes < 10) {
+        return _allCustomersCache!;
+      }
+    }
+    
+    final sql = '''
+      SELECT c.*, t.name as tierName 
+      FROM customer c
+      LEFT JOIN member_tier t ON c.tierId = t.id
+      WHERE (c.isDeleted = 0 OR c.isDeleted IS NULL)
+      ORDER BY c.currentDebt DESC, c.id DESC
+    ''';
+    final results = await _dbService.query(sql, {});
+    _allCustomersCache = await compute(_parseCustomerList, results);
+    _cacheTime = DateTime.now();
+    return _allCustomersCache!;
+  }
+
+  Future<List<Customer>> _getFuzzyFilteredCustomers(String searchTerm, bool onlyDebtors, bool onlyLineConnected) async {
+    final all = await _getAllActiveCustomers();
+    final term = searchTerm.toLowerCase();
+    
+    List<Map<String, dynamic>> scored = [];
+    for (var c in all) {
+      if (onlyDebtors && c.currentDebt <= 0.01) continue;
+      if (onlyLineConnected && (c.lineUserId == null || c.lineUserId!.isEmpty)) continue;
+      
+      String phone = c.phone?.toLowerCase() ?? '';
+      String code = c.memberCode.toLowerCase();
+      String first = c.firstName.toLowerCase();
+      String last = c.lastName?.toLowerCase() ?? '';
+      
+      if (phone.contains(term) || code.contains(term) || first.contains(term) || last.contains(term)) {
+        scored.add({'customer': c, 'score': 1.0});
+        continue;
+      }
+      
+      double scorePhone = phone.similarityTo(term);
+      double scoreCode = code.similarityTo(term);
+      double scoreFirst = first.similarityTo(term);
+      double scoreLast = last.isNotEmpty ? last.similarityTo(term) : 0.0;
+      double scoreFullName = '$first $last'.trim().similarityTo(term);
+      
+      double maxScore = [scorePhone, scoreCode, scoreFirst, scoreLast, scoreFullName].reduce((a, b) => a > b ? a : b);
+      
+      if (maxScore > 0.3) {
+        scored.add({'customer': c, 'score': maxScore});
+      }
+    }
+    
+    scored.sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
+    return scored.map((e) => e['customer'] as Customer).toList();
   }
 
   Future<Customer?> getCustomerById(int id) async {

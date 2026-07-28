@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/customer.dart';
@@ -29,6 +30,7 @@ class _CustomerListViewState extends State<CustomerListView> {
   // Search
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounceTimer;
 
   // Filter
   bool _onlyDebtors = false;
@@ -38,6 +40,13 @@ class _CustomerListViewState extends State<CustomerListView> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -69,11 +78,14 @@ class _CustomerListViewState extends State<CustomerListView> {
   }
 
   void _onSearchChanged(String query) {
-    if (_searchQuery != query) {
-      _searchQuery = query;
-      _currentPage = 1; // Reset to page 1
-      _loadData();
-    }
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (_searchQuery != query) {
+        _searchQuery = query;
+        _currentPage = 1; // Reset to page 1
+        _loadData();
+      }
+    });
   }
 
   void _toggleDebtorFilter(bool? val) {

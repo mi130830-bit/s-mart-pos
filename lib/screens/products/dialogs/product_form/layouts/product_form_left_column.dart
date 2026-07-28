@@ -176,7 +176,7 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
 
         // Prices Section
         _buildSectionTitle('ราคาต้นทุน & ขาย'),
-        if (ref.watch(authProvider).canViewCost) ...[
+        if (ref.watch(authProvider).hasPermission('view_cost')) ...[
           Row(
             children: [
               Expanded(

@@ -80,7 +80,8 @@ class _LineSettingsWidgetState extends State<LineSettingsWidget> {
           CustomTextField(
             controller: _tokenCtrl,
             label: 'Channel Access Token',
-            maxLines: 3,
+            maxLines: 1,
+            obscureText: true,
             prefixIcon: Icons.key,
           ),
           const SizedBox(height: 16),

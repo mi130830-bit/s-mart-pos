@@ -23,10 +23,10 @@ import '../../services/integration/delivery_integration_service.dart';
 import '../pos/pos_state_manager.dart';
 import 'package:auto_updater/auto_updater.dart';
 import '../../services/alert_service.dart';
-import '../../services/hr/fingerprint_attendance_service.dart';
 import '../../services/integration/fingerprint_network_service.dart';
 import '../../widgets/fingerprint/fingerprint_action_card.dart';
-import '../../state/hr/attendance_provider.dart';
+import '../../widgets/fingerprint/fingerprint_disconnect_banner.dart';
+import '../../controllers/fingerprint_overlay_controller.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
@@ -36,9 +36,11 @@ class MainScreen extends ConsumerStatefulWidget {
 }
 
 class _MainScreenState extends ConsumerState<MainScreen>
-    with WindowListener, TickerProviderStateMixin {
+    with WindowListener {
   Key _refreshKey = UniqueKey(); // ✅ Key สำหรับบังคับ Rebuild
-  late TabController _tabController;
+
+  // Fingerprint overlay controller (แยก logic ออกจาก UI)
+  final _fingerprintController = FingerprintOverlayController();
 
   // Fingerprint action overlay (non-blocking floating card)
   OverlayEntry? _fingerprintActionOverlay;
@@ -56,79 +58,33 @@ class _MainScreenState extends ConsumerState<MainScreen>
   void initState() {
     super.initState();
     windowManager.addListener(this); // ✅ Add Listener
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(_handleTabSelection);
-
-    // ดักฟังการแสกนลายนิ้วมือเพื่อแสดง Toast แจ้งเตือนบนจอ POS
-    FingerprintAttendanceService().onAttendanceRecorded = (name, type) {
-      if (mounted) {
-        AlertService.show(
-          context: context,
-          message: 'บันทึกสำเร็จ: คุณ $name ได้ทำการ $type แล้วครับ 🟢',
-          type: 'success',
-          duration: const Duration(seconds: 4),
-        );
-        ref.read(attendanceProvider.notifier).loadToday(); // รีเฟรชหน้าประวัติลงเวลาทำงานทันที
-      }
-    };
-    FingerprintAttendanceService().onUnknownFingerprint = (msg) {
-      if (mounted) {
-        AlertService.show(
-          context: context,
-          message: msg,
-          type: 'warning',
-          duration: const Duration(seconds: 5),
-        );
-      }
-    };
-
-    // ดักฟังกรณีสแกนนิ้วในสถานะกึ่งกลาง → แสดง floating card ที่มุมล่างขวา (ไม่ขวาง POS)
-    // ⚠️ card จะขึ้นเฉพาะเครื่องที่ login ด้วย role ADMIN เท่านั้น
-    FingerprintAttendanceService().onActionRequired = (name, currentStatus, onActionSelected) {
-      if (!mounted) return;
-      final authState = ref.read(authProvider);
-      if (!authState.isAdmin) {
-        // ไม่ใช่ Admin → แค่แจ้งเตือน Toast เงียบๆ ไม่ขึ้น card ให้กด
-        final statusText = currentStatus == 'CLOCK_IN' ? 'กำลังทำงานอยู่' : 'ออกชั่วคราวอยู่';
-        AlertService.show(
-          context: context,
-          message: '👆 $name สแกนนิ้วแล้ว ($statusText)',
-          type: 'info',
-          duration: const Duration(seconds: 3),
-        );
-        return;
-      }
-      _showFingerprintActionOverlay(name, currentStatus, onActionSelected);
-    };
-
-    // ดักฟังการเชื่อมต่อ/หลุดของเครื่องแสกนลายนิ้วมือ
-    FingerprintNetworkService().onConnectionChanged = (isConn, address) {
-      if (!mounted) return;
-      if (isConn) {
-        // เชื่อมต่อสำเร็จ → เอา banner แจ้งเตือนออก
-        _dismissFingerprintDisconnectBanner();
-      } else {
-        // หลุด → แสดง banner พร้อมปุ่มค้นหาใหม่
-        _showFingerprintDisconnectedBanner();
-      }
-    };
+    _setupFingerprintListeners();
   }
 
-  void _handleTabSelection() {
-    // This method is a placeholder for now, it will be implemented later
-    // when the TabController is fully integrated.
+  /// ดักฟัง callbacks ทั้งหมดจาก FingerprintAttendanceService และ FingerprintNetworkService
+  /// โดยมอบหมาย Logic ให้ FingerprintOverlayController จัดการ
+  void _setupFingerprintListeners() {
+    _fingerprintController.setup(
+      context,
+      ref,
+      onActionRequired: _showFingerprintActionOverlay,
+      onConnectionChanged: (isConn, address) {
+        if (isConn) {
+          _dismissFingerprintDisconnectBanner();
+        } else {
+          _showFingerprintDisconnectedBanner();
+        }
+      },
+    );
   }
+
+
 
   @override
   void dispose() {
     windowManager.removeListener(this); // ✅ Remove Listener
-    _tabController.removeListener(_handleTabSelection);
-    _tabController.dispose();
     _deliveryService.dispose(); // ✅ Task 5: ยกเลิก Timer
-    FingerprintAttendanceService().onAttendanceRecorded = null;
-    FingerprintAttendanceService().onUnknownFingerprint = null;
-    FingerprintAttendanceService().onActionRequired = null;
-    FingerprintNetworkService().onConnectionChanged = null;
+    _fingerprintController.dispose(); // ✅ ยกเลิก Fingerprint Listeners ผ่าน Controller
     _fingerprintActionOverlay?.remove();
     _fingerprintActionOverlay = null;
     _fingerprintDisconnectOverlay?.remove();
@@ -150,7 +106,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
         right: 16,
         child: Material(
           color: Colors.transparent,
-          child: _FingerprintDisconnectBanner(
+          child: FingerprintDisconnectBanner(
             onReconnect: () async {
               _dismissFingerprintDisconnectBanner();
               // เริ่ม auto-discovery ใหม่ — จะต่อกลับทันทีเมื่อ ESP32 ตอบ
@@ -233,8 +189,6 @@ class _MainScreenState extends ConsumerState<MainScreen>
     Overlay.of(context).insert(entry);
   }
 
-  // ... (rest of initState / _checkAutoOpenDisplay) ...
-
   @override
   void onWindowClose() async {
     // ✅ Close Customer Display when Main Close
@@ -242,20 +196,38 @@ class _MainScreenState extends ConsumerState<MainScreen>
     super.onWindowClose();
   }
 
-  /* 
-  Future<void> _checkAutoOpenDisplay() async {
-    final prefs = await SharedPreferences.getInstance();
-    // Default to TRUE as per user request to auto-open
-    final autoOpen = prefs.getBool('auto_open_customer_display') ?? true;
-    if (autoOpen) {
-      // Small delay to ensure app is ready
-      await Future.delayed(const Duration(seconds: 1));
-      if (mounted) {
-        await CustomerDisplayService().openDisplay();
-      }
-    }
+  /// แสดง Dialog ยืนยันออกจากระบบพร้อมปุ่มยืนยัน Logout
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยันการออก'),
+        content: const Text('ต้องการออกจากระบบใช่หรือไม่?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Future.delayed(
+                const Duration(milliseconds: 10),
+                () {
+                  if (mounted) ref.read(authProvider.notifier).logout();
+                },
+              );
+            },
+            child: const Text('ออก'),
+          ),
+        ],
+      ),
+    );
   }
-  */
 
   Future<void> _checkForUpdates(BuildContext context) async {
     try {
@@ -264,7 +236,33 @@ class _MainScreenState extends ConsumerState<MainScreen>
       String feedUrl =
           'https://raw.githubusercontent.com/mi130830-bit/s-mart-pos/main/appcast.xml';
       await autoUpdater.setFeedURL(feedUrl);
-      await autoUpdater.checkForUpdates();
+
+      if (!context.mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('⚠️ ก่อนอัปเดต'),
+          content: const Text(
+            'หากแอปติดตั้งใน C:\\Program Files\n'
+            'กรุณาปิดแอปแล้วเปิดใหม่โดยคลิกขวา\n'
+            'เลือก "Run as Administrator" ก่อนกดอัปเดต\n\n'
+            'ถ้าเปิดด้วยสิทธิ์ Admin แล้ว กด "ตกลง" ได้เลย',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ยกเลิก'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                autoUpdater.checkForUpdates();
+              },
+              child: const Text('ตกลง, อัปเดตเลย'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       debugPrint('Update Error: $e');
       if (context.mounted) {
@@ -344,19 +342,19 @@ class _MainScreenState extends ConsumerState<MainScreen>
       const CustomerManagementScreen(), // 3. ลูกค้า
       if (showDashboard)
         const DashboardScreen(), // 4. ประวัติการขาย
+      if (isUserAdmin) const SupplierListView(), // 5. จัดการผู้ขาย
       if (canViewDeliveryReport)
-        LogisticsMenuScreen(deliveryService: _deliveryService), // 5. ขนส่ง (Logistics)
-      if (isUserAdmin) const SupplierListView(), // 6. จัดการผู้ขาย
-      if (canAccessHR) const HrScreen(), // 7. บุคคล (HR)
+        LogisticsMenuScreen(deliveryService: _deliveryService), // 6. ขนส่ง (Logistics)
+      if (canAccessHR) const HrScreen(), // 8. บุคคล (HR)
       if (canAccessSettings)
-        const SettingsScreen(), // 7. ตั้งค่า
+        const SettingsScreen(), // 9. ตั้งค่า
     ];
 
     // ✅ 2. เรียงลำดับเมนู (Destinations) ให้ตรงกับ Screens
     final List<NavigationRailDestination> destinations = [
       const NavigationRailDestination(
         icon: Icon(Icons.shopping_cart),
-        label: Text('จุดขาย (POS)'),
+        label: Text('หน้าขาย (POS)'),
       ),
       if (showProductStock)
         const NavigationRailDestination(
@@ -372,15 +370,15 @@ class _MainScreenState extends ConsumerState<MainScreen>
           icon: Icon(Icons.receipt_long),
           label: Text('ประวัติการขาย'),
         ),
-      if (canViewDeliveryReport)
-        const NavigationRailDestination(
-          icon: Icon(Icons.local_shipping_outlined),
-          label: Text('ขนส่ง'),
-        ),
       if (isUserAdmin)
         const NavigationRailDestination(
           icon: Icon(Icons.store),
           label: Text('จัดการผู้ขาย'),
+        ),
+      if (canViewDeliveryReport)
+        const NavigationRailDestination(
+          icon: Icon(Icons.local_shipping_outlined),
+          label: Text('ขนส่ง'),
         ),
       if (canAccessHR)
         NavigationRailDestination(
@@ -410,113 +408,54 @@ class _MainScreenState extends ConsumerState<MainScreen>
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            // ปรับความกว้างเมนูซ้ายให้ไม่อึดอัด (ตามที่เคยคุยกันไว้)
-            minWidth: 110,
-            selectedIndex: selectedIndex < screens.length ? selectedIndex : 0,
-            onDestinationSelected: (index) {
-              if (selectedIndex == index) {
-                // ✅ กดเมนูเดิม -> Force Rebuild หน้าจอ
-                setState(() {
-                  _refreshKey = UniqueKey();
-                });
-              } else {
-                // ✅ กดเปลี่ยนเมนู -> เปลี่ยน Index
-                ref.read(mainNavigationProvider.notifier).state = index;
-              }
-            },
-            labelType: NavigationRailLabelType.all,
-            selectedLabelTextStyle: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-            unselectedLabelTextStyle: const TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
-            ),
-            leading: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 20, bottom: 20),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 90),
-                    child: Text(
-                      posState.shopName,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: NavigationRail(
+                      // ปรับความกว้างเมนูซ้ายให้ไม่อึดอัด (ตามที่เคยคุยกันไว้)
+                      minWidth: 110,
+                      selectedIndex: selectedIndex < screens.length ? selectedIndex : 0,
+                      onDestinationSelected: (index) {
+                        if (selectedIndex == index) {
+                          // ✅ กดเมนูเดิม -> Force Rebuild หน้าจอ
+                          setState(() {
+                            _refreshKey = UniqueKey();
+                          });
+                        } else {
+                          // ✅ กดเปลี่ยนเมนู -> เปลี่ยน Index
+                          ref.read(mainNavigationProvider.notifier).state = index;
+                        }
+                      },
+                      labelType: NavigationRailLabelType.all,
+                      selectedLabelTextStyle: TextStyle(
                         color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      unselectedLabelTextStyle: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                      leading: _buildRailLeading(
+                        shopName: posState.shopName,
+                        displayName: user.displayName,
+                        role: user.role,
+                      ),
+                      destinations: destinations,
+                      trailing: Expanded(
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _buildRailTrailing(),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                Text(
-                  'User: ${user.displayName}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                Text(
-                  'Role: ${user.role}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-            trailing: Column(
-              children: [
-                //const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.system_update, color: Colors.blue),
-                  tooltip: 'ตรวจสอบเวอร์ชัน',
-                  onPressed: () => _checkForUpdates(context),
-                ),
-                const Text('Update',
-                    style: TextStyle(fontSize: 10, color: Colors.blue)),
-                const SizedBox(height: 10),
-                IconButton(
-                  icon: const Icon(Icons.logout, color: Colors.red),
-                  tooltip: 'ออกจากระบบ',
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('ยืนยันการออก'),
-                        content: const Text('ต้องการออกจากระบบใช่หรือไม่?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('ยกเลิก'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              Future.delayed(
-                                const Duration(milliseconds: 10),
-                                () {
-                                  ref.read(authProvider.notifier).logout();
-                                },
-                              );
-                            },
-                            child: const Text('ออก'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-            destinations: destinations,
+              );
+            },
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
@@ -531,161 +470,67 @@ class _MainScreenState extends ConsumerState<MainScreen>
   }
 }
 
-// =============================================================================
-// _FingerprintDisconnectBanner
-// Overlay widget แจ้งเตือนเมื่อเครื่องสแกนลายนิ้วมือหลุดการเชื่อมต่อ
-// =============================================================================
-class _FingerprintDisconnectBanner extends StatefulWidget {
-  final VoidCallback onReconnect;
-  final VoidCallback onDismiss;
-
-  const _FingerprintDisconnectBanner({
-    required this.onReconnect,
-    required this.onDismiss,
-  });
-
-  @override
-  State<_FingerprintDisconnectBanner> createState() =>
-      _FingerprintDisconnectBannerState();
-}
-
-class _FingerprintDisconnectBannerState
-    extends State<_FingerprintDisconnectBanner>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _anim;
-  late final Animation<double> _fadeSlide;
-  bool _isReconnecting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _fadeSlide = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
-    _anim.forward();
-  }
-
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeSlide,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0.3, 0),
-          end: Offset.zero,
-        ).animate(_fadeSlide),
-        child: Container(
-          width: 340,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E2E),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.red.shade700, width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.red.withValues(alpha: 0.25),
-                blurRadius: 20,
-                spreadRadius: 2,
+// ---------------------------------------------------------------------------
+// Helper Widget methods สำหรับ NavigationRail
+// ---------------------------------------------------------------------------
+extension _MainScreenStateHelpers on _MainScreenState {
+  /// สร้าง leading section สำหรับ NavigationRail: ชื่อร้าน, User, Role
+  Widget _buildRailLeading({
+    required String shopName,
+    required String displayName,
+    required String role,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 20, bottom: 20),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 90),
+            child: Text(
+              shopName,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
               ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // ---- Header ----
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade900.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.fingerprint,
-                          color: Colors.redAccent, size: 22),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'เครื่องสแกนหลุดการเชื่อมต่อ',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            'ลายนิ้วมือไม่ถูกบันทึกในขณะนี้',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // ปุ่มปิด
-                    IconButton(
-                      onPressed: widget.onDismiss,
-                      icon: const Icon(Icons.close,
-                          color: Colors.white38, size: 18),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                // ---- ปุ่มค้นหาใหม่ ----
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isReconnecting
-                        ? null
-                        : () async {
-                            setState(() => _isReconnecting = true);
-                            widget.onReconnect();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.blue.shade900,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    icon: _isReconnecting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white54,
-                            ),
-                          )
-                        : const Icon(Icons.wifi_find_rounded, size: 18),
-                    label: Text(
-                      _isReconnecting ? 'กำลังค้นหา...' : 'ค้นหาและเชื่อมต่อซ้ำ',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ),
+        Text(
+          'User: $displayName',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        Text(
+          'Role: $role',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildRailTrailing() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.system_update, color: Colors.blue, size: 20),
+            tooltip: 'ตรวจสอบเวอร์ชัน',
+            onPressed: () => _checkForUpdates(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.red, size: 20),
+            tooltip: 'ออกจากระบบ',
+            onPressed: () => _showLogoutDialog(context),
+          ),
+        ],
       ),
     );
   }

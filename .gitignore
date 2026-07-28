@@ -67,7 +67,8 @@ vc_redist.x64.exe
 Output_Installer/
 windows/flutter/ephemeral/
 
-# Temp/scratch directories
+# Utility scripts / scratch directories
+scripts/
 scratch/
 test.txt
 trigger_dump.txt
@@ -92,3 +93,15 @@ ios/
 linux/
 macos/
 GEMINI.md
+
+# Tests ignored as requested
+/test/
+
+# Hardware & Non-program files
+ESP32_SMART_FARM.md
+taxsmartpro_app/
+test_query.dart
+backend/add_van.dart
+backend/check_*.dart
+backend/reset_*.dart
+backend/test_*.dart

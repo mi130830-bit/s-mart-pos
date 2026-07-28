@@ -62,6 +62,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
           type: 'error',
         );
+      } else {
+        if (!mounted) return;
+        AlertService.show(
+          context: context,
+          message: 'เข้าสู่ระบบสำเร็จ',
+          type: 'success',
+        );
       }
     }
   }

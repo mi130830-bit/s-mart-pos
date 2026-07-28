@@ -13,8 +13,14 @@ class SummarySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      color: Colors.blue.shade900,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0D47A1), Color(0xFF1565C0)], // Modern blue gradient
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
       child: Center(
         child: FittedBox(
           fit: BoxFit.scaleDown,
@@ -23,76 +29,100 @@ class SummarySection extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const _DigitalClock(),
-              const SizedBox(height: 15),
-              const SizedBox(width: 300, child: Divider(color: Colors.white24)),
-              const SizedBox(height: 15),
-              const Text('ยอดชำระ',
-                  style: TextStyle(color: Colors.white70, fontSize: 20)),
+              const SizedBox(height: 25),
+              
+              // Total Amount Label
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('ยอดชำระสุทธิ (บาท)',
+                    style: TextStyle(
+                      color: Colors.white, 
+                      fontSize: 20, 
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.0,
+                    )),
+              ),
+              const SizedBox(height: 5),
+
+              // BIG Total Amount
               Text(
                 NumberFormat('#,##0.00').format(state.total),
                 style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 60,
-                    fontWeight: FontWeight.bold),
+                    fontSize: 90,
+                    fontWeight: FontWeight.w800,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black26,
+                        offset: Offset(0, 4),
+                        blurRadius: 10,
+                      )
+                    ]),
               ),
-              const SizedBox(height: 10),
+              
               if (state.mode == CustomerDisplayMode.success || state.received > 0) ...[
-                const SizedBox(width: 300, child: Divider(color: Colors.white24)),
+                const SizedBox(height: 10),
+                const SizedBox(width: 350, child: Divider(color: Colors.white30, thickness: 1)),
                 const SizedBox(height: 10),
                 SizedBox(
-                  width: 300,
+                  width: 350,
                   child: Column(
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('รับเงิน:',
-                              style: TextStyle(color: Colors.white, fontSize: 18)),
+                              style: TextStyle(color: Colors.white70, fontSize: 18)),
                           Text(
                             NumberFormat('#,##0.00').format(state.received),
                             style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 22,
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('เงินทอน:',
-                              style: TextStyle(color: Colors.white, fontSize: 18)),
+                              style: TextStyle(color: Colors.white70, fontSize: 18)),
                           Text(
                             NumberFormat('#,##0.00').format(state.change),
                             style: const TextStyle(
                                 color: Colors.greenAccent,
-                                fontSize: 22,
+                                fontSize: 28,
                                 fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       if (state.mode == CustomerDisplayMode.success) ...[
-                        const SizedBox(height: 15),
+                        const SizedBox(height: 20),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
+                              horizontal: 20, vertical: 12),
                           decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.greenAccent),
+                            color: Colors.greenAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.greenAccent, width: 1.5),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.check_circle,
-                                  color: Colors.greenAccent, size: 24),
-                              SizedBox(width: 8),
+                                  color: Colors.greenAccent, size: 28),
+                              SizedBox(width: 10),
                               Text('ชำระเงินสำเร็จ',
                                   style: TextStyle(
                                       color: Colors.greenAccent,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold)),
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5)),
                             ],
                           ),
                         ),

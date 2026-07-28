@@ -19,8 +19,7 @@ class CustomerDisplayService {
 
 
 
-  Map<String, dynamic> _lastKnownState = {}; // ✅ Cache last state
-  
+
   /// ✅ ส่งคำสั่งสั่งโหลดการตั้งค่าใหม่ (ใช้เมื่อมีการซิงก์จาก SyncService)
   Future<void> reloadSettings() async {
     if (_windowId == null) return;
@@ -34,9 +33,6 @@ class CustomerDisplayService {
 
   /// เขียนข้อมูลผ่าน IPC (Method Channel)
   Future<void> _sendToWindow(Map<String, dynamic> data) async {
-    // ✅ Cache state
-    _lastKnownState = data;
-    
     if (_windowId == null) {
       // ถ้าหน้าต่างยังไม่เปิด ให้บันทึกไว้รอเปิด
       return;
@@ -52,17 +48,7 @@ class CustomerDisplayService {
 
   /// ✅ Update Font Size in Real-time
   Future<void> updateFontSize(double fontSize) async {
-    final newState = Map<String, dynamic>.from(_lastKnownState);
-
-    // Create or update settings object
-    final settings = Map<String, dynamic>.from(newState['settings'] ?? {});
-    settings['fontSize'] = fontSize;
-    newState['settings'] = settings;
-
-    // Update timestamp to trigger reload
-    newState['timestamp'] = DateTime.now().millisecondsSinceEpoch;
-
-    await _sendToWindow(newState);
+    await reloadSettings();
   }
 
   /// เปิดหน้าต่างลูกค้า

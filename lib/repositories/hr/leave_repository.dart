@@ -84,7 +84,7 @@ class LeaveRepository {
     return results.map((row) => LeaveRequest.fromJson(row)).toList();
   }
 
-  Future<List<LeaveRequest>> getAllHistory() async {
+  Future<List<LeaveRequest>> getAllHistory({int limit = 100, int offset = 0}) async {
     final results = await _db.query('''
       SELECT l.*, COALESCE(e.display_name, u.displayName) as employeeName
       FROM leave_request l
@@ -92,7 +92,8 @@ class LeaveRepository {
       LEFT JOIN user u ON e.user_id = u.id
       WHERE l.status != 'PENDING'
       ORDER BY l.start_date DESC
-    ''');
+      LIMIT :limit OFFSET :offset
+    ''', {'limit': limit, 'offset': offset});
     return results.map((row) => LeaveRequest.fromJson(row)).toList();
   }
 

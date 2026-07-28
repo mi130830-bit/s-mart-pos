@@ -50,6 +50,7 @@ class JobController {
           double.tryParse(payload['totalAmount']?.toString() ?? '0') ?? 0.0;
       final String jobType = payload['jobType']?.toString() ?? 'delivery';
       final String note = payload['note']?.toString() ?? '';
+      final String billImageUrl = payload['billImageUrl']?.toString() ?? '';
 
       // Build GPS URL if coordinates given
       String locationUrl = '';
@@ -88,11 +89,13 @@ class JobController {
           orderId, firebaseJobId, driverName, vehiclePlate,
           customerName, customerPhone, customerAddress,
           totalAmount, status, jobType, note, locationUrl,
+          billImageUrl,
           completedAt
         ) VALUES (
           :oid, :fid, :driver, :vehicle,
           :cname, :cphone, :caddr,
           :total, 'completed', :jtype, :note, :locUrl,
+          :billImg,
           NOW()
         )
       ''', {
@@ -107,6 +110,7 @@ class JobController {
         'jtype': jobType,
         'note': note,
         'locUrl': locationUrl.isEmpty ? null : locationUrl,
+        'billImg': billImageUrl.isEmpty ? null : billImageUrl,
       });
 
       final insertId = result.lastInsertID.toInt();

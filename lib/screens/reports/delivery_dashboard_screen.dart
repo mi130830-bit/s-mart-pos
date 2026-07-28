@@ -7,6 +7,8 @@ import '../../services/alert_service.dart';
 import '../../services/integration/delivery_integration_service.dart';
 import '../../repositories/sales_repository.dart';
 import '../../models/order_item.dart';
+import '../../repositories/expense_repository.dart';
+import '../../models/expense.dart';
 import 'delivery_coordinator.dart';
 
 import 'widgets/delivery_dashboard/delivery_map_marker.dart';
@@ -29,8 +31,6 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
   bool _isLoading = false;
   bool _isSyncing = false;
   List<Map<String, dynamic>> _records = [];
-  Map<String, double> _priceLookup = {};
-  Map<String, double> _efficiencyMap = {};
   List<Map<String, dynamic>> _allVehicles = [];
 
   String? _selectedVehicle;
@@ -51,8 +51,6 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
       if (mounted) {
         setState(() {
           _records = data.records;
-          _priceLookup = data.priceLookup;
-          _efficiencyMap = data.efficiencyMap;
           _allVehicles = data.vehicles;
           _isLoading = false;
         });
@@ -94,8 +92,78 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
       ),
     );
     if (picked != null && mounted) {
-      setState(() { isStart ? _startDate = picked : _endDate = picked; });
+      DateTime newStart = isStart ? picked : _startDate;
+      DateTime newEnd = isStart ? _endDate : picked;
+      if (newEnd.isBefore(newStart)) newEnd = newStart;
+      
+      if (newEnd.difference(newStart).inDays > 90) {
+        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', type: 'warning');
+        return;
+      }
+
+      setState(() { 
+        _startDate = newStart; 
+        _endDate = newEnd; 
+      });
       await _loadData();
+    }
+  }
+
+  Future<void> _saveFuelCostToExpense() async {
+    if (_totalFuelCost <= 0) {
+      AlertService.show(context: context, message: 'ไม่มียอดค่าน้ำมันที่ต้องบันทึก', type: 'warning');
+      return;
+    }
+
+    final moneyFormat = NumberFormat('#,##0.00');
+    final dateFormat = DateFormat('dd/MM/yyyy');
+    final startStr = dateFormat.format(_startDate);
+    final endStr = dateFormat.format(_endDate);
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('บันทึกค่าน้ำมันลงบัญชีรายจ่าย'),
+        content: Text('คุณต้องการบันทึกค่าน้ำมันรวม ฿${moneyFormat.format(_totalFuelCost)} \n(รอบวันที่ $startStr ถึง $endStr)\nลงในบัญชีรายจ่ายการตั้งค่าหรือไม่?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+            child: const Text('บันทึกยอด'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      // Import needed manually if not available, but let's assume it's imported at the top, or I will add it
+      final repo = ExpenseRepository();
+      await repo.initTable(); // Ensure table is initialized
+      
+      final expense = Expense(
+        id: 0,
+        title: 'ค่าน้ำมันในการขนส่ง',
+        amount: _totalFuelCost,
+        category: 'ค่าเดินทาง',
+        date: DateTime.now(), // ใช้วันที่ปัจจุบันเป็นวันที่บันทึกบัญชี
+        note: 'สรุปค่าน้ำมันรอบ $startStr - $endStr',
+        type: 'EXPENSE',
+      );
+      
+      await repo.saveExpense(expense);
+      if (mounted) {
+        AlertService.show(context: context, message: 'บันทึกค่าน้ำมันในการขนส่งลงบัญชีรายจ่ายเรียบร้อย', type: 'success');
+      }
+    } catch (e) {
+      if (mounted) {
+        AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+      }
     }
   }
 
@@ -210,31 +278,9 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
     return map;
   }
 
-  // คำนวณค่าน้ำมันของรอบ 1 รายการ
-  double _calculateJobFuelCost(Map<String, dynamic> r) {
-    final dist = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
-    if (dist <= 0) return 0.0;
-
-    final rawPlate = r['vehiclePlate']?.toString() ?? '';
-    final plate = _normalizePlate(rawPlate);
-
-    double fuelPrice = 0.0;
-    final rawDate = r['completedAt']?.toString() ?? '';
-    if (rawDate.isNotEmpty) {
-      try {
-        final dt = DateTime.parse(rawDate);
-        fuelPrice = DeliveryCoordinator.resolvePriceFromLookup(_priceLookup, dt);
-      } catch (_) {}
-    }
-
-    final eff = _efficiencyMap[plate] ?? DeliveryCoordinator.defaultEfficiency;
-    final liters = dist / eff;
-    return liters * fuelPrice;
-  }
-
   double get _totalDistance => _filteredRecords.fold(0.0, (s, r) => s + (double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0));
   double get _totalAmount => _filteredRecords.fold(0.0, (s, r) => s + (double.tryParse(r['totalAmount']?.toString() ?? '0') ?? 0.0));
-  double get _totalFuelCost => _filteredRecords.fold(0.0, (s, r) => s + _calculateJobFuelCost(r));
+  double get _totalFuelCost => _filteredRecords.fold(0.0, (s, r) => s + (double.tryParse(r['_calculatedFuelCost']?.toString() ?? '0') ?? 0.0));
   int get _missingDistanceCount => _filteredRecords.where((r) => (double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0) == 0.0).length;
 
   Future<void> _showOrderDetail(int orderId) async {
@@ -314,36 +360,13 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
     final List<DeliveryMapMarker> list = [];
     for (int i = 0; i < _filteredRecords.length; i++) {
       final r = _filteredRecords[i];
-      final locationUrl = r['locationUrl']?.toString() ?? '';
-      final customerName = r['customerName']?.toString() ?? 'ลูกค้า';
-      final orderId = r['orderId']?.toString() ?? '';
-      final driverName = r['driverName']?.toString() ?? '';
-
-      // Try to parse coordinates from google maps url (e.g. ?q=lat,lng)
-      double lat = 13.7563;
-      double lng = 100.5018;
-      bool hasCoords = false;
-
-      if (locationUrl.isNotEmpty) {
-        try {
-          final uri = Uri.parse(locationUrl);
-          final q = uri.queryParameters['q'];
-          if (q != null && q.contains(',')) {
-            final parts = q.split(',');
-            lat = double.parse(parts[0].trim());
-            lng = double.parse(parts[1].trim());
-            hasCoords = true;
-          }
-        } catch (_) {}
-      }
-
-      if (hasCoords) {
+      if (r['_hasCoords'] == true) {
         list.add(DeliveryMapMarker(
-          id: 'marker_${r['id'] ?? i}',
-          latitude: lat,
-          longitude: lng,
-          title: customerName,
-          snippet: 'บิล #$orderId | คนขับ: $driverName',
+          id: r['_markerId'] ?? 'marker_$i',
+          latitude: r['_mapLat'] as double,
+          longitude: r['_mapLng'] as double,
+          title: r['customerName']?.toString() ?? 'ลูกค้า',
+          snippet: 'บิล #${r['orderId']?.toString() ?? ''} | คนขับ: ${r['driverName']?.toString() ?? ''}',
         ));
       }
     }
@@ -358,6 +381,18 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
         backgroundColor: Colors.indigo.shade700,
         foregroundColor: Colors.white,
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: OutlinedButton.icon(
+              onPressed: (_isLoading || _totalFuelCost <= 0) ? null : _saveFuelCostToExpense,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white54),
+              ),
+              icon: const Icon(Icons.local_gas_station, size: 18),
+              label: const Text('สรุปค่าน้ำมันลงรายจ่าย'),
+            ),
+          ),
           if (widget.deliveryService != null)
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -438,7 +473,7 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
               onAssignVehicle: (record) =>
                   _showAssignVehicleDialog(context, record),
               onViewOrderDetails: (orderId) => _showOrderDetail(orderId),
-              onCalculateFuelCost: (record) => _calculateJobFuelCost(record),
+              onCalculateFuelCost: (record) => double.tryParse(record['_calculatedFuelCost']?.toString() ?? '0') ?? 0.0,
             ),
           ),
         ],

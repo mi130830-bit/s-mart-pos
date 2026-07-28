@@ -103,10 +103,68 @@ class DeliveryCoordinator {
       _vehicleRepo.getEfficiencyMap(),
     ]);
 
+    final rawRecords = results[0] as List<Map<String, dynamic>>;
+    final priceLookup = results[1] as Map<String, double>;
+    final efficiencyMap = results[2] as Map<String, double>;
+
+    // ── 4. Enrich records with fuelCost and map coords ──
+    for (int i = 0; i < rawRecords.length; i++) {
+      final r = rawRecords[i];
+      // Fuel Cost
+      final dist = double.tryParse(r['distanceKm']?.toString() ?? '0') ?? 0.0;
+      double fuelCost = 0.0;
+      if (dist > 0) {
+        final rawPlate = r['vehiclePlate']?.toString().trim().toUpperCase() ?? '';
+        String plate = rawPlate;
+        for (var v in mergedVehicles) {
+          final p = (v['vehicle_plate']?.toString() ?? '').trim().toUpperCase();
+          final t = (v['vehicle_type']?.toString() ?? '').trim().toUpperCase();
+          if (p.isNotEmpty && (rawPlate == p || (t.isNotEmpty && rawPlate == t))) {
+            plate = p; 
+            break;
+          }
+        }
+        
+        double fuelPrice = 0.0;
+        final rawDate = r['completedAt']?.toString() ?? '';
+        if (rawDate.isNotEmpty) {
+          try {
+            final dt = DateTime.parse(rawDate);
+            fuelPrice = resolvePriceFromLookup(priceLookup, dt);
+          } catch (_) {}
+        }
+        final eff = efficiencyMap[plate] ?? defaultEfficiency;
+        fuelCost = (dist / eff) * fuelPrice;
+      }
+      r['_calculatedFuelCost'] = fuelCost;
+
+      // Map Coords
+      final locationUrl = r['locationUrl']?.toString() ?? '';
+      double lat = 13.7563;
+      double lng = 100.5018;
+      bool hasCoords = false;
+      if (locationUrl.isNotEmpty) {
+        try {
+          final uri = Uri.parse(locationUrl);
+          final q = uri.queryParameters['q'];
+          if (q != null && q.contains(',')) {
+            final parts = q.split(',');
+            lat = double.parse(parts[0].trim());
+            lng = double.parse(parts[1].trim());
+            hasCoords = true;
+          }
+        } catch (_) {}
+      }
+      r['_mapLat'] = lat;
+      r['_mapLng'] = lng;
+      r['_hasCoords'] = hasCoords;
+      r['_markerId'] = 'marker_${r['id'] ?? i}';
+    }
+
     return DeliveryDashboardData(
-      records: results[0] as List<Map<String, dynamic>>,
-      priceLookup: results[1] as Map<String, double>,
-      efficiencyMap: results[2] as Map<String, double>,
+      records: rawRecords,
+      priceLookup: priceLookup,
+      efficiencyMap: efficiencyMap,
       vehicles: mergedVehicles,
     );
   }

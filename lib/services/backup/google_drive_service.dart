@@ -13,7 +13,7 @@ class GoogleDriveService {
   // Google Drive Credentials
   // Actual values are stored in MySQL: system_settings table
   // Keys: 'gdrive_client_id' and 'gdrive_client_secret'
-  // Run: scratch/insert_gdrive_secrets.dart to seed them into your local DB
+  // Run: scripts/insert_gdrive_secrets.dart to seed them into your local DB
   String get _clientId => SettingsService().gdriveClientId;
   String get _clientSecret => SettingsService().gdriveClientSecret;
 

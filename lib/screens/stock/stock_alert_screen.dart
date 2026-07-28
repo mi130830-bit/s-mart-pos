@@ -42,6 +42,15 @@ class _StockAlertScreenState extends ConsumerState<StockAlertScreen>
             title: const Text('แจ้งของหมด / แจ้งซ่อม'),
             backgroundColor: Colors.teal,
             foregroundColor: Colors.white,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'รีเฟรชข้อมูล',
+                onPressed: () {
+                  ref.read(shortageProvider.notifier).loadShortages();
+                },
+              ),
+            ],
             bottom: TabBar(
               controller: _tabController,
               labelColor: Colors.white,

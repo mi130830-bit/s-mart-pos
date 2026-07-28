@@ -63,6 +63,7 @@ extension CustomerRepositoryMutations on CustomerRepository {
         final result = await _dbService.execute(sql, params);
         debugPrint(
             '✅ [CustomerRepo]: INSERT successful, ID: ${result.lastInsertID}');
+        clearCustomerCache();
         return result.lastInsertID.toInt();
       } else {
         // Update
@@ -106,6 +107,7 @@ extension CustomerRepositoryMutations on CustomerRepository {
             '🔍 [CustomerRepo]: Executing UPDATE for ID: ${customer.id}');
         await _dbService.execute(sql, params);
         debugPrint('✅ [CustomerRepo]: UPDATE successful');
+        clearCustomerCache();
         return customer.id;
       }
     } catch (e, stackTrace) {

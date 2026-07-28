@@ -8,21 +8,15 @@ import '../customers/customer_search_dialog.dart';
 import '../customers/customer_form_dialog.dart';
 import '../../models/customer.dart';
 import '../../repositories/customer_repository.dart';
+
 import 'widgets/digital_clock.dart';
 import 'widgets/customer_card.dart';
 import 'widgets/display_box.dart';
 import 'widgets/action_button.dart';
 
-enum PaymentType {
-  cash('เงินสด', Icons.money),
-  qr('QR/โอน', Icons.qr_code),
-  card('บัตรเครดิต', Icons.credit_card),
-  credit('เงินเชื่อ', Icons.credit_score);
-
-  final String label;
-  final IconData icon;
-  const PaymentType(this.label, this.icon);
-}
+// PaymentType enum moved to lib/models/payment/payment_type.dart
+// Re-exported for backward compatibility with existing imports
+export '../../models/payment/payment_type.dart';
 
 class PosPaymentPanel extends ConsumerWidget {
   final VoidCallback onPaymentSuccess;

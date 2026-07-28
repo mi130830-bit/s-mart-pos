@@ -15,6 +15,9 @@ class ProductCollection {
   @Index(type: IndexType.value, caseSensitive: false)
   late String name;
 
+  @Index(type: IndexType.value, caseSensitive: false)
+  String? alias; // Added for alias search offline
+
   late double price;
   double? costPrice;
   late int stock;

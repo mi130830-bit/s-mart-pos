@@ -104,21 +104,7 @@ class _PosCheckoutScreenState extends ConsumerState<PosCheckoutScreen> with PosB
                 ),
               ),
             ),
-            if (isLoading)
-              Container(
-                color: Colors.black54,
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(color: Colors.white),
-                      SizedBox(height: 16),
-                      Text('กำลังบันทึก...',
-                          style: TextStyle(color: Colors.white, fontSize: 18)),
-                    ],
-                  ),
-                ),
-              ),
+
           ],
         ),
       ),

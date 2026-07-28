@@ -61,8 +61,8 @@ class ConfigController {
           'success': true,
           'promptpay_id': promptPayId,
           'qr_mode': qrMode,             // 'dynamic' | 'static'
-          // ส่ง static_qr_base64 เฉพาะเมื่อ mode = static เพื่อลดขนาด response
-          if (qrMode == 'static' && staticQrBase64 != null && staticQrBase64.isNotEmpty)
+          // ส่ง static_qr_base64 เสมอ (ถ้ามี) เพื่อให้ S-Link ใช้เป็น Smart Fallback ได้
+          if (staticQrBase64 != null && staticQrBase64.isNotEmpty)
             'static_qr_base64': staticQrBase64,
         }),
         headers: {'content-type': 'application/json'},

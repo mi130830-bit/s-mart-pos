@@ -5,6 +5,7 @@ import '../../../../models/customer.dart';
 import '../../../../models/debtor_transaction.dart';
 import '../../../../repositories/debtor_repository.dart';
 import '../../../../services/alert_service.dart';
+import '../../../../state/debt_payment_controller.dart';
 
 /// Dialog รับชำระหนี้ พร้อม numpad และ suggestion chips
 Future<void> showDebtPaymentDialog({
@@ -17,16 +18,9 @@ Future<void> showDebtPaymentDialog({
 }) async {
   final TextEditingController amountController = TextEditingController();
 
-  // ยอดเงินเริ่มต้น: เลือกจากยอดรวมที่เลือก หรือ ยอดหนี้ทั้งหมด
-  double selectedTotal = 0.0;
-  for (var item in ledger) {
-    if (item.type == 'CREDIT_SALE' && selectedIds.contains(item.id)) {
-      selectedTotal += item.amount.toDouble();
-    }
-  }
+  final controller = DebtPaymentController(debtRepo: debtRepo);
+  double defaultAmount = controller.calculateDefaultAmount(currentCustomer, ledger, selectedIds);
 
-  double defaultAmount =
-      selectedIds.isNotEmpty ? selectedTotal : currentCustomer.currentDebt;
   amountController.text =
       defaultAmount > 0 ? NumberFormat('#,###.##').format(defaultAmount) : '';
 
@@ -263,35 +257,12 @@ Future<void> showDebtPaymentDialog({
                       final nav = Navigator.of(dialogContext);
 
                       try {
-                        if (selectedIds.isNotEmpty) {
-                          final selectedOrderIds = ledger
-                              .where((item) =>
-                                  selectedIds.contains(item.id) &&
-                                  item.orderId != null)
-                              .map((item) => item.orderId!)
-                              .toList();
-
-                          await debtRepo.processBatchPayment(
-                              customerId: currentCustomer.id,
-                              payAmount: inputAmount - change,
-                              orderIds: selectedOrderIds);
-                        } else {
-                          final pendingBills = await debtRepo
-                              .getPendingBills(currentCustomer.id);
-                          final pendingOrderIds =
-                              pendingBills.map((b) => b.orderId).toList();
-
-                          if (pendingOrderIds.isNotEmpty) {
-                            await debtRepo.processBatchPayment(
-                                customerId: currentCustomer.id,
-                                payAmount: inputAmount - change,
-                                orderIds: pendingOrderIds);
-                          } else {
-                            await debtRepo.payDebt(
-                                customerId: currentCustomer.id,
-                                amount: inputAmount - change);
-                          }
-                        }
+                        await controller.processPayment(
+                          customer: currentCustomer,
+                          payAmount: inputAmount - change,
+                          ledger: ledger,
+                          selectedIds: selectedIds,
+                        );
 
                         if (dialogContext.mounted) {
                           nav.pop();

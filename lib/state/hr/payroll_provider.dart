@@ -5,6 +5,9 @@ import '../../services/hr/payroll_calculation_service.dart';
 import '../../services/hr/advance_service.dart';
 import '../../repositories/activity_repository.dart';
 import '../auth_provider.dart';
+import 'package:intl/intl.dart';
+import '../../repositories/expense_repository.dart';
+import '../../models/expense.dart';
 
 class PayrollState {
   final List<PayrollRecord> records; // Currently loaded records (e.g. for a period)
@@ -283,6 +286,39 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
       // Update local state by reloading unpaid records
       await loadByPeriod(start, end);
       return count;
+    } catch (e) {
+      state = state.copyWith(error: e.toString(), isLoading: false);
+      rethrow;
+    }
+  }
+
+  Future<void> saveTotalToExpense(DateTime start, DateTime end, double totalNetPay, int totalRecords) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final dateFormat = DateFormat('dd/MM/yyyy');
+      final repo = ExpenseRepository();
+      final expense = Expense(
+        id: 0,
+        title: 'จ่ายเงินเดือนรอบ ${dateFormat.format(start)} - ${dateFormat.format(end)}',
+        amount: totalNetPay,
+        category: 'เงินเดือน',
+        date: DateTime.now(),
+        type: 'EXPENSE',
+        note: 'บันทึกอัตโนมัติจากระบบเงินเดือน ($totalRecords คน)',
+      );
+      await repo.saveExpense(expense);
+
+      // Find drafts that will be transitioned directly to PAID
+      final draftsToBePaid = state.records.where((r) => r.status == 'DRAFT' && r.advanceDeductions > 0).toList();
+      if (draftsToBePaid.isNotEmpty) {
+        final advanceService = AdvanceService();
+        for (var draft in draftsToBePaid) {
+          await advanceService.deductFromPayroll(draft.employeeId, draft.id, draft.advanceDeductions);
+        }
+      }
+
+      await _repo.markAllPaidForPeriod(start, end);
+      await loadByPeriod(start, end);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
       rethrow;

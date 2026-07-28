@@ -51,19 +51,37 @@ final customerDisplayProvider = NotifierProvider.family.autoDispose<CustomerDisp
 );
 
 class CustomerDisplayNotifier extends AutoDisposeFamilyNotifier<CustomerDisplayState, String> {
-  late final CustomerDisplayRepository _repository;
+  late CustomerDisplayRepository _repository;
   StreamSubscription? _subscription;
   void Function()? onReloadSettings;
+
+  // ✅ ใช้ repository ที่ถูกสร้างและ init() แล้ว (inject จาก main.dart)
+  CustomerDisplayRepository? _injectedRepository;
+
+  void injectRepository(CustomerDisplayRepository repo) {
+    if (_injectedRepository == repo) return;
+    _injectedRepository = repo;
+
+    // ✅ สลับ subscription ไปฟัง stream ของ repo ที่รับข้อมูลจริงๆ
+    _subscription?.cancel();
+    _repository = repo;
+    _subscription = _repository.updates.listen(_handleUpdate);
+    debugPrint('🔀 [Provider] Switched to injected repository stream');
+  }
 
   @override
   CustomerDisplayState build(String arg) {
     _repository = CustomerDisplayRepository(arg);
     _subscription = _repository.updates.listen(_handleUpdate);
-    
+
+    // init ไว้ก่อน เผื่อ hot reload / ไม่มีการ inject
+    _repository.init();
+
     ref.onDispose(() {
       _subscription?.cancel();
+      _injectedRepository = null;
     });
-    
+
     return const CustomerDisplayState();
   }
 

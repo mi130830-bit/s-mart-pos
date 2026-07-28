@@ -161,6 +161,7 @@ class TelegramSettingsCard extends ConsumerWidget {
                 CustomTextField(
                   controller: controller.telegramTokenCtrl,
                   label: 'Bot Token',
+                  obscureText: true,
                 ),
                 const SizedBox(height: 10),
                 CustomTextField(

@@ -14,22 +14,55 @@ class CustomerHistoryScreen extends StatefulWidget {
 
 class _CustomerHistoryScreenState extends State<CustomerHistoryScreen> {
   final SalesRepository _salesRepo = SalesRepository();
+  final ScrollController _scrollController = ScrollController();
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  final int _limit = 20;
+  int _offset = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    _loadHistory(refresh: true);
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 && !_isLoading && !_isLoadingMore && _hasMore) {
+        _loadHistory();
+      }
+    });
   }
 
-  Future<void> _loadHistory() async {
-    setState(() => _isLoading = true);
-    final data = await _salesRepo.getOrdersByCustomer(widget.customer.id);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadHistory({bool refresh = false}) async {
+    if (refresh) {
+      _offset = 0;
+      _hasMore = true;
+      if (mounted) setState(() => _isLoading = true);
+    } else {
+      if (mounted) setState(() => _isLoadingMore = true);
+    }
+
+    final data = await _salesRepo.getOrdersByCustomer(widget.customer.id, limit: _limit, offset: _offset);
+    
     if (mounted) {
       setState(() {
-        _orders = data;
+        if (refresh) {
+          _orders = data;
+        } else {
+          _orders.addAll(data);
+        }
+        _offset += data.length;
+        if (data.length < _limit) {
+          _hasMore = false;
+        }
         _isLoading = false;
+        _isLoadingMore = false;
       });
     }
   }
@@ -139,9 +172,17 @@ class _CustomerHistoryScreenState extends State<CustomerHistoryScreen> {
                   ),
                 )
               : ListView.separated(
-                  itemCount: _orders.length,
+                  controller: _scrollController,
+                  itemCount: _orders.length + (_hasMore ? 1 : 0),
                   separatorBuilder: (ctx, i) => const Divider(height: 1),
                   itemBuilder: (ctx, i) {
+                    if (i == _orders.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    
                     final order = _orders[i];
                     final dt = DateTime.parse(order['createdAt'].toString());
                     final status = order['status'];

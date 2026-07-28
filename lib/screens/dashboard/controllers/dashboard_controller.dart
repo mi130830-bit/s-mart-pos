@@ -130,7 +130,7 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
   @override
   DashboardState build() {
     Future.microtask(() => loadData());
-    return DashboardState(selectedDate: DateTime.now());
+    return DashboardState(selectedDate: DateTime.now(), isLoading: true);
   }
 
   // ── Data Loading ─────────────────────────────────────────────────────────────
@@ -168,13 +168,13 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
 
       await loadPeriodStats(resetLoading: false);
 
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day, 0, 0, 0);
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
-      final weekStart = now.subtract(Duration(days: now.weekday - 1));
+      final selected = state.selectedDate;
+      final todayStart = DateTime(selected.year, selected.month, selected.day, 0, 0, 0);
+      final todayEnd = DateTime(selected.year, selected.month, selected.day, 23, 59, 59);
+      final weekStart = selected.subtract(Duration(days: selected.weekday - 1));
       final weekStartDay = DateTime(weekStart.year, weekStart.month, weekStart.day, 0, 0, 0);
-      final monthStart = DateTime(now.year, now.month, 1, 0, 0, 0);
-      final yearStart = DateTime(now.year, 1, 1, 0, 0, 0);
+      final monthStart = DateTime(selected.year, selected.month, 1, 0, 0, 0);
+      final yearStart = DateTime(selected.year, 1, 1, 0, 0, 0);
 
       final credits = await Future.wait([
         _salesRepo.getCreditStats(todayStart, todayEnd),
@@ -206,8 +206,19 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
     }
     try {
       final now = DateTime.now();
-      final start = state.selectedPeriod == 'YEAR' ? DateTime(now.year, 1, 1) : DateTime(now.year, now.month, 1);
-      final type = state.selectedPeriod == 'YEAR' ? 'MONTHLY' : 'DAILY';
+      DateTime start;
+      String type;
+      switch (state.selectedPeriod) {
+        case 'YEAR':
+          start = DateTime(now.year, 1, 1);
+          type = 'MONTHLY';
+          break;
+        case 'MONTH':
+        default:
+          start = DateTime(now.year, now.month, 1);
+          type = 'DAILY';
+          break;
+      }
       final stats = await _salesRepo.getSalesStatsByDateRange(
           start, DateTime(now.year, now.month, now.day, 23, 59, 59), type);
 
@@ -410,7 +421,7 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
 
   Future<void> sendToDelivery(BuildContext context, int orderId) async {
     try {
-      await ProviderScope.containerOf(context).read(posProvider.notifier).sendToDeliveryFromHistory(orderId, jobType: 'delivery');
+      await ref.read(posProvider.notifier).sendToDeliveryFromHistory(orderId, jobType: 'delivery');
       if (context.mounted) AlertService.show(context: context, message: 'ส่งข้อมูลไปฝ่ายจัดส่งเรียบร้อย', type: 'success');
     } catch (e) {
       if (context.mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
@@ -419,7 +430,7 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
 
   Future<void> sendToBackShop(BuildContext context, int orderId) async {
     try {
-      await ProviderScope.containerOf(context).read(posProvider.notifier).sendToDeliveryFromHistory(orderId, jobType: 'pickup');
+      await ref.read(posProvider.notifier).sendToDeliveryFromHistory(orderId, jobType: 'pickup');
       if (context.mounted) AlertService.show(context: context, message: 'ส่งงาน "รับของหลังร้าน" เรียบร้อย', type: 'success');
     } catch (e) {
       if (context.mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');

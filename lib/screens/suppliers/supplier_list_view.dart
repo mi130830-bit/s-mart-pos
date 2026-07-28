@@ -1,35 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/supplier.dart';
 import '../../services/alert_service.dart';
-import '../../repositories/supplier_repository.dart';
 import '../../widgets/common/custom_text_field.dart';
-import '../../widgets/common/custom_buttons.dart';
 import '../../widgets/common/confirm_dialog.dart';
+import 'supplier_form_dialog.dart';
+import 'supplier_provider.dart';
 
-class SupplierListView extends StatefulWidget {
+class SupplierListView extends ConsumerStatefulWidget {
   const SupplierListView({super.key});
 
   @override
-  State<SupplierListView> createState() => _SupplierListViewState();
+  ConsumerState<SupplierListView> createState() => _SupplierListViewState();
 }
 
-class _SupplierListViewState extends State<SupplierListView> {
-  final SupplierRepository _repo = SupplierRepository();
-
-  // State
-  List<Supplier> _items = [];
-  bool _isLoading = false;
-  int _currentPage = 1;
-  final int _pageSize = 10;
-  int _totalItems = 0;
-  String _searchTerm = '';
+class _SupplierListViewState extends ConsumerState<SupplierListView> {
   final TextEditingController _searchCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
 
   @override
   void dispose() {
@@ -37,121 +23,15 @@ class _SupplierListViewState extends State<SupplierListView> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      final total = await _repo.getSupplierCount(searchTerm: _searchTerm);
-      final items = await _repo.getSuppliersPaginated(_currentPage, _pageSize,
-          searchTerm: _searchTerm);
-
-      if (mounted) {
-        setState(() {
-          _totalItems = total;
-          _items = items;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _onSearchChanged(String val) {
-    setState(() {
-      _searchTerm = val;
-      _currentPage = 1; // Reset to first page
-    });
-    _loadData();
-  }
-
-  void _changePage(int newPage) {
-    setState(() {
-      _currentPage = newPage;
-    });
-    _loadData();
-  }
-
   Future<void> _showForm([Supplier? s]) async {
-    final nameCtrl = TextEditingController(text: s?.name ?? '');
-    final phoneCtrl = TextEditingController(text: s?.phone ?? '');
-    final addrCtrl = TextEditingController(text: s?.address ?? '');
-    final saleNameCtrl = TextEditingController(text: s?.saleName ?? '');
-    final saleLineIdCtrl = TextEditingController(text: s?.saleLineId ?? '');
-
-    final saved = await showDialog<bool>(
+    final saved = await showDialog<Supplier?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s == null ? 'เพิ่มผู้ขาย' : 'แก้ไขผู้ขาย'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CustomTextField(
-                controller: nameCtrl,
-                label: 'ชื่อ',
-              ),
-              const SizedBox(height: 8),
-              CustomTextField(
-                controller: phoneCtrl,
-                label: 'โทรศัพท์',
-              ),
-              const SizedBox(height: 8),
-              CustomTextField(
-                controller: addrCtrl,
-                label: 'ที่อยู่',
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: CustomTextField(
-                      controller: saleNameCtrl,
-                      label: 'ชื่อเซลล์',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: CustomTextField(
-                      controller: saleLineIdCtrl,
-                      label: 'ไลน์ของเซล',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          CustomButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            label: 'ยกเลิก',
-            type: ButtonType.secondary,
-          ),
-          CustomButton(
-            onPressed: () async {
-              final sup = Supplier(
-                id: s?.id ?? 0,
-                name: nameCtrl.text,
-                phone: phoneCtrl.text,
-                address: addrCtrl.text,
-                saleName: saleNameCtrl.text,
-                saleLineId: saleLineIdCtrl.text,
-              );
-              final navigator = Navigator.of(ctx);
-              final ok = await _repo.saveSupplier(sup);
-              navigator.pop(ok);
-            },
-            label: 'บันทึก',
-            type: ButtonType.primary,
-          ),
-        ],
-      ),
+      builder: (ctx) => SupplierFormDialog(supplier: s),
     );
 
-    if (saved == true) {
+    if (saved != null) {
       if (!mounted) return;
-      _loadData();
+      ref.read(supplierProvider).loadData();
     }
   }
 
@@ -165,22 +45,24 @@ class _SupplierListViewState extends State<SupplierListView> {
     );
 
     if (ok == true) {
-      final res = await _repo.deleteSupplier(s.id);
+      final res = await ref.read(supplierProvider).deleteSupplier(s.id);
       if (!mounted) return;
       AlertService.show(
         context: context,
         message: res ? 'ลบสำเร็จ' : 'ลบไม่สำเร็จ',
         type: res ? 'success' : 'error',
       );
-      _loadData();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final totalPages = (_totalItems / _pageSize).ceil();
-    if (totalPages > 0 && _currentPage > totalPages) _currentPage = totalPages;
-    if (_currentPage < 1) _currentPage = 1;
+    final provider = ref.watch(supplierProvider);
+    final totalPages = (provider.totalItems / provider.pageSize).ceil();
+    int currentPage = provider.currentPage;
+    
+    if (totalPages > 0 && currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
 
     return Scaffold(
       appBar: AppBar(title: const Text('ข้อมูลผู้ขาย')),
@@ -197,21 +79,23 @@ class _SupplierListViewState extends State<SupplierListView> {
               controller: _searchCtrl,
               label: 'ค้นหาผู้ขาย',
               prefixIcon: Icons.search,
-              onChanged: _onSearchChanged,
+              onChanged: (val) {
+                ref.read(supplierProvider).onSearchChanged(val);
+              },
             ),
           ),
 
           Expanded(
-            child: _isLoading
+            child: provider.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
+                : provider.items.isEmpty
                     ? const Center(child: Text('ไม่พบข้อมูล'))
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: _items.length,
+                        itemCount: provider.items.length,
                         separatorBuilder: (ctx, i) => const Divider(),
                         itemBuilder: (ctx, i) {
-                          final s = _items[i];
+                          final s = provider.items[i];
                           return ListTile(
                             title: Text(s.name),
                             subtitle:
@@ -246,20 +130,20 @@ class _SupplierListViewState extends State<SupplierListView> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('รวม $_totalItems รายการ'),
+                Text('รวม ${provider.totalItems} รายการ'),
                 const SizedBox(width: 20),
                 IconButton(
                   icon: const Icon(Icons.chevron_left),
-                  onPressed: _currentPage > 1
-                      ? () => _changePage(_currentPage - 1)
+                  onPressed: currentPage > 1
+                      ? () => ref.read(supplierProvider).changePage(currentPage - 1)
                       : null,
                 ),
                 Text(
-                    'หน้า $_currentPage / ${totalPages == 0 ? 1 : totalPages}'),
+                    'หน้า $currentPage / ${totalPages == 0 ? 1 : totalPages}'),
                 IconButton(
                   icon: const Icon(Icons.chevron_right),
-                  onPressed: _currentPage < totalPages
-                      ? () => _changePage(_currentPage + 1)
+                  onPressed: currentPage < totalPages
+                      ? () => ref.read(supplierProvider).changePage(currentPage + 1)
                       : null,
                 ),
               ],

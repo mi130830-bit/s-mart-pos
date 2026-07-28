@@ -70,8 +70,8 @@ class ShortageNotifier extends AutoDisposeNotifier<ShortageState> {
     stopPolling(); // Logically reset if called multiple times
     // Fetch immediately
     loadShortages(silent: true);
-    // Poll every 30 seconds
-    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Poll every 1 hour instead of 30 seconds
+    _pollingTimer = Timer.periodic(const Duration(hours: 1), (_) {
       loadShortages(silent: true);
     });
     debugPrint('🔄 ShortageProvider: Polling started.');

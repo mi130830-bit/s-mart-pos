@@ -14,26 +14,29 @@ extension ProductRepositoryQueries on ProductRepository {
             await _dbService.query('SELECT * FROM product WHERE isActive = 1');
         final products = rows.map((r) => Product.fromJson(r)).toList();
 
+        final existingDocs = await _isar.productCollections.where().findAll();
+        final existingMap = {for (var doc in existingDocs) doc.remoteId: doc};
+
+        final toPut = <ProductCollection>[];
+        for (var product in products) {
+          final p = existingMap[product.id] ?? ProductCollection();
+
+          p.remoteId = product.id;
+          p.barcode = product.barcode ?? '';
+          p.name = product.name;
+          p.alias = product.alias;
+          p.price = product.retailPrice;
+          p.costPrice = product.costPrice;
+          p.stock = product.stockQuantity.toInt();
+          p.imagePath = product.imageUrl;
+          p.categoryId = product.categoryId?.toString();
+          p.lastUpdated = DateTime.now();
+
+          toPut.add(p);
+        }
+
         await _isar.writeTxn(() async {
-          for (var product in products) {
-            final existing = await _isar.productCollections
-                .filter()
-                .remoteIdEqualTo(product.id)
-                .findFirst();
-            final p = existing ?? ProductCollection();
-
-            p.remoteId = product.id;
-            p.barcode = product.barcode ?? '';
-            p.name = product.name;
-            p.price = product.retailPrice;
-            p.costPrice = product.costPrice;
-            p.stock = product.stockQuantity.toInt();
-            p.imagePath = product.imageUrl;
-            p.categoryId = product.categoryId?.toString();
-            p.lastUpdated = DateTime.now();
-
-            await _isar.productCollections.put(p);
-          }
+          await _isar.productCollections.putAll(toPut);
         });
 
         return products;
@@ -202,12 +205,17 @@ extension ProductRepositoryQueries on ProductRepository {
       String sql = 'SELECT * FROM product WHERE isActive = 1';
       Map<String, dynamic> params = {};
 
+      final offset = (page - 1) * pageSize;
+
       if (searchTerm != null && searchTerm.isNotEmpty) {
-        sql +=
-            ' AND (name LIKE :term OR barcode LIKE :term OR alias LIKE :term)';
-        params['term'] = '%$searchTerm%';
-        params['exactTerm'] = searchTerm;
-        params['startTerm'] = '$searchTerm%';
+        final filtered = await _getFuzzyFilteredProducts(searchTerm, productTypeId);
+        final end = (offset + pageSize > filtered.length) ? filtered.length : offset + pageSize;
+        if (offset >= filtered.length) return [];
+        List<Product> products = filtered.sublist(offset, end);
+        if (products.isNotEmpty) {
+          products = await _applyProductEnhancements(products);
+        }
+        return products;
       }
 
       if (productTypeId != null && productTypeId > 0) {
@@ -215,19 +223,7 @@ extension ProductRepositoryQueries on ProductRepository {
         params['typeId'] = productTypeId;
       }
 
-      if (searchTerm != null && searchTerm.isNotEmpty) {
-        sql += '''
- ORDER BY
-   CASE
-     WHEN barcode = :exactTerm THEN 0
-     WHEN name = :exactTerm    THEN 1
-     WHEN name LIKE :startTerm THEN 2
-     ELSE 3
-   END ASC,
-   LENGTH(name) ASC,
-   name ASC
- LIMIT :limit OFFSET :offset''';
-      } else if (sortOption == ProductSortOption.nameAsc) {
+      if (sortOption == ProductSortOption.nameAsc) {
         sql += ' ORDER BY LENGTH(name) ASC, name ASC LIMIT :limit OFFSET :offset';
       } else if (sortOption == ProductSortOption.stockAsc) {
         sql +=
@@ -271,7 +267,9 @@ extension ProductRepositoryQueries on ProductRepository {
             .filter()
             .nameContains(searchTerm, caseSensitive: false)
             .or()
-            .barcodeContains(searchTerm, caseSensitive: false);
+            .barcodeContains(searchTerm, caseSensitive: false)
+            .or()
+            .aliasContains(searchTerm, caseSensitive: false);
       } else {
         query = _isar.productCollections.filter().idGreaterThan(0);
       }
@@ -317,9 +315,8 @@ extension ProductRepositoryQueries on ProductRepository {
       Map<String, dynamic> params = {};
 
       if (searchTerm != null && searchTerm.isNotEmpty) {
-        sql +=
-            ' AND (name LIKE :term OR barcode LIKE :term OR alias LIKE :term)';
-        params['term'] = '%$searchTerm%';
+        final filtered = await _getFuzzyFilteredProducts(searchTerm, productTypeId);
+        return filtered.length;
       }
 
       if (productTypeId != null && productTypeId > 0) {
@@ -335,15 +332,57 @@ extension ProductRepositoryQueries on ProductRepository {
       debugPrint('⚠️ MySQL Count Failed: $e. Falling back to Isar...');
     }
 
-    if (searchTerm != null && searchTerm.isNotEmpty) {
-      return await _isar.productCollections
-          .filter()
-          .nameContains(searchTerm, caseSensitive: false)
-          .or()
-          .barcodeContains(searchTerm, caseSensitive: false)
-          .count();
-    }
     return await _isar.productCollections.count();
+  }
+
+  Future<List<Product>> _getFuzzyFilteredProducts(String searchTerm, int? productTypeId) async {
+    List<Product> all = [];
+    try {
+      if (!_dbService.isConnected()) await _dbService.connect();
+      String sql = 'SELECT * FROM product WHERE isActive = 1';
+      Map<String, dynamic> params = {};
+      if (productTypeId != null && productTypeId > 0) {
+        sql += ' AND productType = :typeId';
+        params['typeId'] = productTypeId;
+      }
+      final rows = await _dbService.query(sql, params);
+      all = rows.map((row) => Product.fromJson(row)).toList();
+    } catch (e) {
+      final query = _isar.productCollections.filter().idGreaterThan(0);
+      final list = await query.findAll();
+      all = list.map(_mapToProduct).toList();
+      if (productTypeId != null && productTypeId > 0) {
+        all = all.where((p) => p.productType == productTypeId).toList();
+      }
+    }
+
+    final term = searchTerm.toLowerCase();
+    List<Map<String, dynamic>> scored = [];
+    
+    for (var p in all) {
+      String name = p.name.toLowerCase();
+      String barcode = p.barcode?.toLowerCase() ?? '';
+      String alias = p.alias?.toLowerCase() ?? '';
+      
+      if (name.contains(term) || barcode.contains(term) || alias.contains(term)) {
+        scored.add({'product': p, 'score': 1.0});
+        continue;
+      }
+      
+      double scoreName = name.similarityTo(term);
+      double scoreBarcode = barcode.isNotEmpty ? barcode.similarityTo(term) : 0.0;
+      double scoreAlias = alias.isNotEmpty ? alias.similarityTo(term) : 0.0;
+      
+      double maxScore = scoreName > scoreBarcode ? scoreName : scoreBarcode;
+      maxScore = maxScore > scoreAlias ? maxScore : scoreAlias;
+      
+      if (maxScore > 0.3) {
+        scored.add({'product': p, 'score': maxScore});
+      }
+    }
+    
+    scored.sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
+    return scored.map((e) => e['product'] as Product).toList();
   }
 
   Future<List<Product>> getRecentProducts(int limit) async {

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
+import 'package:string_similarity/string_similarity.dart';
 import '../services/local_db_service.dart';
 import '../models/schema/product_collection.dart';
 import '../services/mysql_service.dart';

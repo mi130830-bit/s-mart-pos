@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 class CustomerDisplayRepository {
   final _updateController = StreamController<Map<String, dynamic>>.broadcast();
@@ -12,30 +14,35 @@ class CustomerDisplayRepository {
   CustomerDisplayRepository(this.windowId) {
     debugPrint(
         '📢 CustomerDisplayRepository Initialized for Window: $windowId');
-    _initMethodHandler();
   }
 
-  void _initMethodHandler() {
-    // 1. Listen on Specific Channel (UUID/ID based)
-    final specificChannel = 'mixin.one/window_controller/$windowId';
-    debugPrint('👂 Listening on: $specificChannel');
-    MethodChannel(specificChannel).setMethodCallHandler(_handleCall);
-
-    // 2. Listen on Generic Channel (Fallback)
-    debugPrint('👂 Listening on: desktop_multi_window');
-    const MethodChannel('desktop_multi_window')
-        .setMethodCallHandler(_handleCall);
-    // 3. Listen on Zero ID (Fallback for int parsing failure)
-    debugPrint('👂 Listening on: mixin.one/window_controller/0');
-    const MethodChannel('mixin.one/window_controller/0')
-        .setMethodCallHandler(_handleCall);
+  Future<void> init() async {
+    try {
+      final channelName = 'mixin.one/window_controller/$windowId';
+      final channel = WindowMethodChannel(channelName, mode: ChannelMode.unidirectional);
+      await channel.setMethodCallHandler(_handleCall);
+      debugPrint('👂 Registered WindowMethodChannel: $channelName');
+    } catch (e) {
+      debugPrint('⚠️ Error setting up WindowMethodChannel: $e');
+    }
   }
 
   Future<dynamic> _handleCall(MethodCall call) async {
     debugPrint('📩 Received MethodCall: ${call.method} on window $windowId');
-    if (call.method == 'update') {
+    
+    if (call.method == 'reload_settings') {
+      _updateController.add({'action': 'reloadSettings'});
+      return null;
+    }
+
+    if (call.method == 'update_state' || call.method == 'update') {
       try {
-        final args = Map<String, dynamic>.from(call.arguments);
+        Map<String, dynamic> args;
+        if (call.arguments is String) {
+          args = Map<String, dynamic>.from(jsonDecode(call.arguments));
+        } else {
+          args = Map<String, dynamic>.from(call.arguments);
+        }
         _updateController.add(args);
       } catch (e) {
         debugPrint('Error processing update: $e');

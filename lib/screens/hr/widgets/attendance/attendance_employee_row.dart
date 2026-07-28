@@ -8,6 +8,7 @@ import '../../../../services/alert_service.dart';
 import '../shared/hr_confirm_dialog.dart';
 import 'override_clockin_dialog.dart';
 import 'temp_leave_timeline.dart';
+import 'realtime_duration_text.dart';
 
 /// Employee row widget for the Attendance tab.
 /// Extracted from _HrAttendanceTabState._buildEmployeeRow (124 lines).
@@ -23,13 +24,6 @@ class AttendanceEmployeeRow extends ConsumerWidget {
     required this.isOnTempLeave,
   });
 
-  String _formatDuration(Duration duration) {
-    if (duration.inMinutes < 60) return '${duration.inMinutes} นาที';
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes % 60;
-    return '$hours ชม. $minutes นาที';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     String status = 'ยังไม่เข้างาน';
@@ -41,21 +35,26 @@ class AttendanceEmployeeRow extends ConsumerWidget {
         .where((l) => l.employeeId == emp.id)
         .firstOrNull;
 
+    Widget statusWidget;
+
     if (log != null) {
       if (log!.clockOut != null) {
-        status = 'เลิกงานแล้ว (${DateFormat('HH:mm').format(log!.clockOut!)})';
+        statusWidget = Text('เลิกงานแล้ว (${DateFormat('HH:mm').format(log!.clockOut!)})', style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold));
         icon = Icons.check_circle_outline;
         color = Colors.blueGrey;
       } else if (isOnTempLeave) {
         final activeOut = log!.latestTempOutTime!;
-        final elapsed = DateTime.now().difference(activeOut);
         final roundNum = log!.activeTempLeaveRound!;
         final roundSuffix = roundNum > 1 ? ' (รอบ $roundNum)' : '';
-        status = 'ออกชั่วคราว$roundSuffix • ออกไป ${_formatDuration(elapsed)} แล้ว';
+        statusWidget = RealtimeDurationText(
+          startTime: activeOut,
+          prefix: 'ออกชั่วคราว$roundSuffix • ออกไป',
+          style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+        );
         icon = Icons.pause_circle_filled;
         color = Colors.orange;
       } else {
-        status = 'เข้างาน (${DateFormat('HH:mm').format(log!.clockIn!)})';
+        statusWidget = Text('เข้างาน (${DateFormat('HH:mm').format(log!.clockIn!)})', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold));
         icon = Icons.check_circle;
         color = Colors.green;
       }
@@ -67,9 +66,11 @@ class AttendanceEmployeeRow extends ConsumerWidget {
         'MATERNITY' => 'ลาคลอด',
         _ => 'อื่นๆ',
       };
-      status = 'วันนี้ลา ($leaveLabel)';
+      statusWidget = Text('วันนี้ลา ($leaveLabel)', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold));
       icon = Icons.beach_access;
       color = Colors.teal;
+    } else {
+      statusWidget = Text(status, style: TextStyle(color: color, fontWeight: FontWeight.bold));
     }
 
     final hasTempHistory = log != null && log!.completedTempLeaveRounds > 0;
@@ -86,7 +87,7 @@ class AttendanceEmployeeRow extends ConsumerWidget {
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(status, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+              statusWidget,
               if (todayLeave != null && todayLeave.reason != null && todayLeave.reason!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),

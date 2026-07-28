@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ร้านส.บริการ ท่าข้าม GPS Tracking | ติดตามรถส่งของ Real-time</title>
+    <meta name="description" content="ระบบติดตามรถส่งของ ร้านส.บริการ ท่าข้าม แบบ Real-time">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ─── Base ─── */
+        *, *::before, *::after { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            font-family: 'Kanit', sans-serif;
+            background: #0f172a;
+            overflow: hidden;
+        }
+        #map { width: 100%; height: 100vh; z-index: 1; }
+
+        /* ─── Top Header Bar ─── */
+        #topBar {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 56px;
+            background: linear-gradient(135deg, rgba(15,23,42,0.96) 0%, rgba(30,27,75,0.96) 100%);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(99,102,241,0.3);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 12px;
+        }
+        #topBar .logo {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+        #topBar .logo span { color: #818cf8; }
+        .divider { width: 1px; height: 28px; background: rgba(255,255,255,0.15); }
+
+        /* Connection status dot */
+        #connDot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 8px rgba(239,68,68,0.6);
+            transition: all 0.4s;
+            flex-shrink: 0;
+        }
+        #connDot.online {
+            background: #22c55e;
+            box-shadow: 0 0 8px rgba(34,197,94,0.7);
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 8px rgba(34,197,94,0.7); }
+            50%       { box-shadow: 0 0 16px rgba(34,197,94,1); }
+        }
+        #connLabel {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.6);
+            white-space: nowrap;
+        }
+
+        /* ─── Vehicle Selector Panel (ด้านซ้าย) ─── */
+        #vehiclePanel {
+            position: absolute;
+            top: 68px;
+            left: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: 200px;
+        }
+        .panel-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.4);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding-left: 4px;
+        }
+        .vehicle-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(99,102,241,0.3);
+            background: rgba(15,23,42,0.85);
+            backdrop-filter: blur(12px);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            color: #fff;
+            font-family: 'Kanit', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 500;
+            text-align: left;
+            width: 100%;
+        }
+        .vehicle-btn:hover { 
+            background: rgba(99,102,241,0.25); 
+            border-color: rgba(99,102,241,0.6);
+            transform: translateX(2px);
+        }
+        .vehicle-btn.active {
+            background: rgba(99,102,241,0.35);
+            border-color: #818cf8;
+            box-shadow: 0 0 16px rgba(99,102,241,0.3);
+        }
+        .vehicle-btn .vdot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            background: #ef4444;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .vehicle-btn .vdot.online { background: #22c55e; }
+        .vehicle-btn .vname { flex: 1; }
+        .vehicle-btn .vspeed {
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.45);
+            white-space: nowrap;
+        }
+
+        /* ─── Control Buttons (มุมขวาล่าง, เหนือ zoom) ─── */
+        #controlPanel {
+            position: absolute;
+            bottom: 100px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .ctrl-btn {
+            width: 42px; height: 42px;
+            border-radius: 10px;
+            border: 1px solid rgba(99,102,241,0.4);
+            background: rgba(15,23,42,0.88);
+            backdrop-filter: blur(12px);
+            color: rgba(255,255,255,0.8);
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .ctrl-btn:hover { 
+            background: rgba(99,102,241,0.3);
+            border-color: #818cf8;
+            color: #fff;
+        }
+        .ctrl-btn.active-follow {
+            background: rgba(99,102,241,0.45);
+            border-color: #818cf8;
+            box-shadow: 0 0 12px rgba(99,102,241,0.5);
+            color: #c7d2fe;
+        }
+        .ctrl-btn title { display: none; }
+
+        /* ─── Info Card (ล่างกลาง) ─── */
+        #infoCard {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(15,23,42,0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(99,102,241,0.35);
+            border-radius: 16px;
+            padding: 12px 20px;
+            min-width: 280px;
+            max-width: 90vw;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        #infoCard .ic-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: #ef4444;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        #infoCard .ic-dot.online {
+            background: #22c55e;
+            animation: pulse-green 2s infinite;
+        }
+        #infoCard .ic-body { flex: 1; }
+        #infoCard .ic-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #fff;
+            margin: 0;
+        }
+        #infoCard .ic-status {
+            font-size: 0.78rem;
+            color: rgba(255,255,255,0.5);
+            margin: 2px 0 0;
+        }
+        #infoCard .ic-speed {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #818cf8;
+            white-space: nowrap;
+        }
+        #infoCard .ic-speed span {
+            font-size: 0.7rem;
+            font-weight: 400;
+            color: rgba(255,255,255,0.4);
+        }
+
+        /* ─── No vehicle state ─── */
+        #emptyState {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            text-align: center;
+            color: rgba(255,255,255,0.35);
+            pointer-events: none;
+            display: none;
+        }
+        #emptyState .es-icon { font-size: 3rem; margin-bottom: 12px; }
+        #emptyState .es-text { font-size: 0.95rem; }
+
+        /* ─── Leaflet Popup ─── */
+        .leaflet-popup-content-wrapper {
+            border-radius: 14px;
+            background: rgba(15,23,42,0.97);
+            border: 1px solid rgba(99,102,241,0.4);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            color: #fff;
+        }
+        .leaflet-popup-tip { background: rgba(15,23,42,0.97); }
+        .leaflet-popup-content {
+            font-family: 'Kanit', sans-serif;
+            margin: 14px 16px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.85);
+        }
+        .popup-title {
+            font-size: 15px; font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(99,102,241,0.3);
+        }
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            gap: 16px;
+        }
+        .popup-label { color: rgba(255,255,255,0.45); }
+        .popup-value { font-weight: 500; color: #c7d2fe; }
+        .badge-online  { padding: 1px 8px; border-radius: 10px; background: rgba(34,197,94,0.2); color: #4ade80; font-size: 12px; }
+        .badge-offline { padding: 1px 8px; border-radius: 10px; background: rgba(239,68,68,0.2); color: #f87171; font-size: 12px; }
+
+        /* ─── Store Marker ─── */
+        .store-marker-icon {
+            filter: drop-shadow(0 4px 8px rgba(99,102,241,0.7));
+        }
+
+        /* ─── Car Marker ─── */
+        .car-marker { transition: all 0.5s ease-out; }
+        .car-marker.offline { filter: grayscale(80%) opacity(0.6); }
+    </style>
+</head>
+<body>
+
+    <!-- Top Bar -->
+    <div id="topBar">
+        <div class="logo">🏪 <span>ส.บริการ ท่าข้าม</span> GPS Tracking</div>
+        <div class="divider"></div>
+        <div id="connDot"></div>
+        <div id="connLabel">กำลังเชื่อมต่อ...</div>
+    </div>
+
+    <!-- Vehicle Selector Panel (Left) -->
+    <div id="vehiclePanel">
+        <div class="panel-label">🚚 ยานพาหนะ</div>
+        <!-- ปุ่มโฟกัสร้านค้า -->
+        <button class="vehicle-btn active" id="btn-store" onclick="focusStore()">
+            <span style="font-size:1.1rem">🏪</span>
+            <span class="vname">ร้านค้า (พิกัดต้นทาง)</span>
+        </button>
+        <!-- ปุ่มดูทั้งหมด (Accordion Toggle) -->
+        <button class="vehicle-btn" id="btn-fitall" onclick="toggleVehicleList()">
+            <span style="font-size:1.1rem">🗺️</span>
+            <span class="vname">รถทั้งหมด (คลิกเพื่อเลือก)</span>
+            <span id="accordion-icon" style="margin-left: auto; font-size: 1.1rem; transition: transform 0.3s;">▼</span>
+        </button>
+        <!-- ปุ่มรถ (แสดง 3 คันเสมอ + Dynamic ถ้ารถชื่ออื่น) ซ่อนไว้ตอนแรก -->
+        <div id="vehicleBtnContainer" style="display: none; padding-left: 10px; border-left: 2px solid rgba(99,102,241,0.3); margin-top: 5px;"></div>
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- Control Panel (Bottom Right) -->
+    <div id="controlPanel">
+        <button class="ctrl-btn active-follow" id="btnFollow" onclick="toggleFollow()" title="Auto-Follow">🎯</button>
+    </div>
+
+    <!-- Info Card (Bottom Center) -->
+    <div id="infoCard">
+        <div class="ic-dot" id="icDot"></div>
+        <div class="ic-body">
+            <div class="ic-name" id="icName">รอสัญญาณจากรถ...</div>
+            <div class="ic-status" id="icStatus">ระบบกำลังเชื่อมต่อ</div>
+        </div>
+        <div class="ic-speed" id="icSpeed">– <span>km/h</span></div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState">
+        <div class="es-icon">📡</div>
+        <div class="es-text">ยังไม่มีรถออกปฏิบัติงาน</div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+    // ══════════════════════════════════════════════════════════════
+    //  ⚙️ CONFIG
+    // ══════════════════════════════════════════════════════════════
+    const STORE_LAT  = 16.160136;
+    const STORE_LNG  = 100.802407;
+    const STORE_NAME = 'ร้านส.บริการ ท่าข้าม';
+
+    // ══════════════════════════════════════════════════════════════
+    //  🗺️ INIT MAP (โฟกัสร้านค้าก่อนเสมอ)
+    // ══════════════════════════════════════════════════════════════
+    const map = L.map('map', { zoomControl: false }).setView([STORE_LAT, STORE_LNG], 15);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // ── หมุดร้านค้า (Store Marker) ──
+    const storeIcon = L.divIcon({
+        html: `<div style="
+            background: linear-gradient(135deg,#4f46e5,#7c3aed);
+            border: 3px solid #fff;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            width: 32px; height: 32px;
+            box-shadow: 0 4px 12px rgba(79,70,229,0.6);
+            display:flex; align-items:center; justify-content:center;
+        "><span style="transform:rotate(45deg); font-size:14px;">🏪</span></div>`,
+        iconSize:    [32, 32],
+        iconAnchor:  [16, 32],
+        popupAnchor: [0, -32],
+        className:   'store-marker-icon'
+    });
+
+    const storeMarker = L.marker([STORE_LAT, STORE_LNG], { icon: storeIcon })
+        .addTo(map)
+        .bindPopup(`<div class="popup-title">🏪 ${STORE_NAME}</div>
+                    <div class="popup-row"><span class="popup-label">สถานะ:</span>
+                    <span class="badge-online">เปิดร้าน</span></div>
+                    <a href="https://www.google.com/maps/dir/?api=1&destination=${STORE_LAT},${STORE_LNG}" target="_blank" style="display:block;margin-top:10px;text-align:center;padding:6px;background:rgba(99,102,241,0.2);border-radius:6px;color:#c7d2fe;text-decoration:none;font-weight:600;border:1px solid rgba(99,102,241,0.5);">📍 นำทางมาร้าน</a>`);
+
+    // วงกลมรัศมี 200m รอบร้าน
+    L.circle([STORE_LAT, STORE_LNG], {
+        radius: 200,
+        color: '#6366f1', fillColor: '#6366f1',
+        fillOpacity: 0.07, weight: 1.5, dashArray: '6,4'
+    }).addTo(map);
+
+    // ══════════════════════════════════════════════════════════════
+    //  🚐 VEHICLE STATE (Multi-Vehicle Map)
+    // ══════════════════════════════════════════════════════════════
+    // vehicles[name] = { marker, color, data, buffer, currentLat, currentLng, lastBearing, ... }
+    const vehicles = {};
+    let focusedVehicle  = null;  // ชื่อรถที่กำลังโฟกัส (null = ร้าน หรือ ดูทั้งหมด)
+    let isStoreFocused  = true;  // เริ่มต้นมาโฟกัสที่ร้าน (ซ่อนรถ)
+    let autoFollow      = true;  // ติดตามอัตโนมัติ
+
+    // ระยะเวลาเล่นแต่ละ segment (5 วิ)
+    const PLAYBACK_TIME_MS = 5000;
+    const START_BUFFER_SIZE = 4; // สะสม 4 จุด (ดีเลย์ ~20 วิ) เพื่อให้สมูทสุดๆ
+
+    // ── ไอคอนรถ (สีต่างกันแต่ละคัน) ──
+    const PREDEFINED_VEHICLES = {
+        'ดั้มเล็ก': '#3b82f6',
+        'ดั้มใหญ่': '#f59e0b',
+        'รถเครน': '#10b981'
+    };
+    const VEHICLE_COLORS = ['#ef4444','#8b5cf6','#ec4899','#14b8a6'];
+    let colorIndex = 0;
+    function getNextColor() {
+        const c = VEHICLE_COLORS[colorIndex % VEHICLE_COLORS.length];
+        colorIndex++;
+        return c;
+    }
+
+    function makeCarIcon(color) {
+        return L.divIcon({
+            html: `<svg viewBox="0 0 60 80" width="36" height="48"
+                        style="filter:drop-shadow(0 4px 6px rgba(0,0,0,0.45)); transition: transform 0.5s linear;">
+                     <rect x="10" y="8"  width="40" height="64" rx="10" fill="${color}"/>
+                     <rect x="14" y="18" width="32" height="18" rx="4" fill="rgba(0,0,0,0.35)"/>
+                     <rect x="14" y="48" width="32" height="12" rx="3" fill="rgba(0,0,0,0.25)"/>
+                     <circle cx="16" cy="10" r="4" fill="#fef08a"/>
+                     <circle cx="44" cy="10" r="4" fill="#fef08a"/>
+                     <circle cx="16" cy="70" r="4" fill="#f87171"/>
+                     <circle cx="44" cy="70" r="4" fill="#f87171"/>
+                   </svg>`,
+            iconSize:    [36, 48],
+            iconAnchor:  [18, 48],
+            popupAnchor: [0, -48],
+            className: 'car-marker'
+        });
+    }
+
+    // ── คำนวณทิศหน้ารถ ──
+    function getBearing(lat1, lon1, lat2, lon2) {
+        const toR = d => d * Math.PI / 180;
+        const y = Math.sin(toR(lon2 - lon1)) * Math.cos(toR(lat2));
+        const x = Math.cos(toR(lat1)) * Math.sin(toR(lat2)) -
+                  Math.sin(toR(lat1)) * Math.cos(toR(lat2)) * Math.cos(toR(lon2 - lon1));
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    // ── Popup Content ──
+    function makePopupHtml(data) {
+        const online   = data.status === 'ONLINE';
+        const badge    = online ? 'badge-online' : 'badge-offline';
+        const stText   = online ? '🟢 กำลังวิ่ง' : '🔴 รถดับ';
+        const spText   = online ? `${Number(data.speed).toFixed(1)} km/h` : '0 km/h';
+        const timeText = data.time ? new Date(data.time).toLocaleTimeString('th-TH') : '-';
+        return `
+            <div class="popup-title">🚚 ${data.vehicle || 'รถ'}</div>
+            <div class="popup-row"><span class="popup-label">สถานะ:</span><span class="${badge}">${stText}</span></div>
+            <div class="popup-row"><span class="popup-label">ความเร็ว:</span><span class="popup-value">${spText}</span></div>
+            <div class="popup-row"><span class="popup-label">งาน:</span><span class="popup-value">${data.job || 'ไม่มีงาน'}</span></div>
+            <div class="popup-row"><span class="popup-label">อัปเดต:</span><span class="popup-value">${timeText}</span></div>
+        `;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  🎬 PLAYBACK BUFFER ENGINE (Delay ~20 วิ เพื่อความลื่นไหล)
+    // ══════════════════════════════════════════════════════════════
+    function lerp(a, b, t) { return a + (b - a) * t; }
+
+    function processBuffer(vehicleName) {
+        const v = vehicles[vehicleName];
+        if (!v || v.isAnimating) return;
+
+        // ถ้ายังไม่ได้เริ่มเล่น ต้องรอให้ buffer สะสมครบก่อน (4 จุด = 20 วิ)
+        if (!v.hasStartedBuffering && v.buffer.length < START_BUFFER_SIZE) {
+            return; 
+        }
+
+        if (v.buffer.length === 0) {
+            v.hasStartedBuffering = false;
+            return;
+        }
+
+        v.hasStartedBuffering = true;
+        const nextPoint = v.buffer.shift();
+        
+        // อัปเดตข้อมูลให้ UI ซิงค์กับจุดที่กำลังเล่น
+        v.data = nextPoint.data;
+        v.marker.setPopupContent(makePopupHtml(v.data));
+        const isOnline = v.data.status === 'ONLINE';
+        const icon = v.marker._icon;
+        if (icon) isOnline ? icon.classList.remove('offline') : icon.classList.add('offline');
+        
+        // อัปเดต UI ทันที
+        updateVehicleBtn(vehicleName, v.data);
+        if (focusedVehicle === vehicleName) updateInfoCard(v.data);
+        updateTopBar(v.data);
+
+        const fromLat = v.currentLat;
+        const fromLng = v.currentLng;
+        const toLat   = nextPoint.lat;
+        const toLng   = nextPoint.lng;
+
+        v.isAnimating = true;
+        const startTime = performance.now();
+
+        // คำนวณทิศหน้ารถทันทีที่เริ่ม segment (ถ้าขยับ)
+        if (fromLat !== toLat || fromLng !== toLng) {
+            const bearing = getBearing(fromLat, fromLng, toLat, toLng);
+            v.lastBearing = bearing;
+            const svg = v.marker._icon?.querySelector('svg');
+            if (svg) svg.style.transform = `rotate(${bearing}deg)`;
+        }
+
+        // ปรับเวลาเล่นตามขนาด buffer (ป้องกันรถสะสมเยอะเกินไป)
+        let duration = PLAYBACK_TIME_MS;
+        if (v.buffer.length > 6) {
+            // ค้างเยอะมาก ลัดคิวทิ้งไปบ้าง
+            v.buffer = v.buffer.slice(v.buffer.length - START_BUFFER_SIZE);
+        } else if (v.buffer.length > 4) {
+            // เร่งความเร็ว
+            duration = 4000;
+        }
+
+        function animate(now) {
+            const elapsed = now - startTime;
+            let t = elapsed / duration;
+            if (t > 1.0) t = 1.0;
+
+            // Linear interpolation ให้ความเร็วคงที่ เนียนสุดเวลาต่อ segment
+            const lat = lerp(fromLat, toLat, t);
+            const lng = lerp(fromLng, toLng, t);
+
+            v.marker.setLatLng([lat, lng]);
+
+            if (autoFollow && focusedVehicle === vehicleName && isOnline) {
+                map.setView([lat, lng], map.getZoom(), { animate: false });
+            }
+
+            if (t < 1.0) {
+                v.animFrame = requestAnimationFrame(animate);
+            } else {
+                v.currentLat = toLat;
+                v.currentLng = toLng;
+                v.isAnimating = false;
+                v.animFrame = null;
+                // เล่น segment ถัดไปทันทีแบบไร้รอยต่อ
+                processBuffer(vehicleName);
+            }
+        }
+
+        v.animFrame = requestAnimationFrame(animate);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  📍 UPDATE VEHICLE (เรียกเมื่อได้รับ SSE data)
+    // ══════════════════════════════════════════════════════════════
+    function updateVehicle(data) {
+        // Validate
+        const name = (data.vehicle || '').trim();
+        if (!name || !data.lat || !data.lng) return;
+
+        // ตรวจสอบ Timestamp ก่อนอัปเดต
+        if (vehicles[name] && data.time && vehicles[name].lastReceivedTime) {
+            if (new Date(data.time) <= new Date(vehicles[name].lastReceivedTime)) return;
+        }
+
+        const isOnline = data.status === 'ONLINE';
+        const newLat   = parseFloat(data.lat);
+        const newLng   = parseFloat(data.lng);
+
+        if (!vehicles[name]) {
+            // ── รถใหม่ที่เพิ่งออนไลน์ ──
+            const color = PREDEFINED_VEHICLES[name] || getNextColor();
+            const icon  = makeCarIcon(color);
+            const m     = L.marker([newLat, newLng], { icon })
+                           .bindPopup(makePopupHtml(data));
+                           
+            if (!isStoreFocused) {
+                m.addTo(map);
+            }
+            vehicles[name] = {
+                marker: m, color, data,
+                buffer: [],
+                currentLat: newLat, currentLng: newLng,
+                lastBearing: 0, 
+                isAnimating: false,
+                hasStartedBuffering: false,
+                animFrame: null,
+                lastReceivedTime: data.time || new Date().toISOString()
+            };
+            createVehicleBtn(name, color);
+
+            // อัปเดต UI ครั้งแรก
+            updateVehicleBtn(name, data);
+            if (focusedVehicle === name) updateInfoCard(data);
+            updateTopBar(data);
+
+            // Auto-focus รถใหม่
+            if (autoFollow && isOnline) setFocus(name);
+
+        } else {
+            // ── นำข้อมูลเข้า Buffer ──
+            const v = vehicles[name];
+            v.lastReceivedTime = data.time || new Date().toISOString();
+            
+            // นำพิกัดใหม่เข้าคิว
+            v.buffer.push({ lat: newLat, lng: newLng, data: data });
+            
+            // พยายามเริ่มเล่น (ถ้าถึงเกณฑ์หรือหยุดอยู่)
+            processBuffer(name);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  🔘 VEHICLE BUTTONS (Dynamic)
+    // ══════════════════════════════════════════════════════════════
+    function initPredefinedVehicles() {
+        Object.entries(PREDEFINED_VEHICLES).forEach(([name, color]) => {
+            createVehicleBtn(name, color);
+            const spd = document.getElementById(`vspd-${name}`);
+            if (spd) spd.textContent = 'ตรวจไม่พบ';
+        });
+    }
+
+    function createVehicleBtn(name, color) {
+        if (document.getElementById(`vbtn-${name}`)) return; // ป้องกันการสร้างปุ่มซ้ำ
+        const container = document.getElementById('vehicleBtnContainer');
+        const btn = document.createElement('button');
+        btn.className   = 'vehicle-btn';
+        btn.id          = `vbtn-${name}`;
+        btn.onclick     = () => setFocus(name);
+        btn.innerHTML   = `
+            <span class="vdot" id="vdot-${name}"></span>
+            <span class="vname" style="color:${color}">${name}</span>
+            <span class="vspeed" id="vspd-${name}">–</span>`;
+        container.appendChild(btn);
+    }
+
+    function updateVehicleBtn(name, data) {
+        const dot  = document.getElementById(`vdot-${name}`);
+        const spd  = document.getElementById(`vspd-${name}`);
+        if (dot) dot.classList.toggle('online', data.status === 'ONLINE');
+        if (spd) spd.textContent = data.status === 'ONLINE'
+            ? `${Number(data.speed).toFixed(0)} km/h` : 'จอด';
+    }
+
+    function setActiveBtn(id) {
+        document.querySelectorAll('.vehicle-btn').forEach(b => b.classList.remove('active'));
+        const target = document.getElementById(id);
+        if (target) target.classList.add('active');
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  🎯 FOCUS FUNCTIONS
+    // ══════════════════════════════════════════════════════════════
+    function focusStore() {
+        focusedVehicle = null;
+        isStoreFocused = true;
+        setActiveBtn('btn-store');
+        map.flyTo([STORE_LAT, STORE_LNG], 15, { animate: true, duration: 1.2 });
+        storeMarker.openPopup();
+        resetInfoCard();
+        
+        // ซ่อนรถทุกคันเมื่อเลือกร้าน
+        Object.values(vehicles).forEach(v => {
+            if (map.hasLayer(v.marker)) map.removeLayer(v.marker);
+        });
+        
+        // ซ่อนเมนูรายชื่อรถ (ถ้าเปิดอยู่)
+        const container = document.getElementById('vehicleBtnContainer');
+        const icon = document.getElementById('accordion-icon');
+        if (container.style.display !== 'none') {
+            container.style.display = 'none';
+            icon.style.transform = 'rotate(0deg)';
+        }
+    }
+
+    function setFocus(name) {
+        focusedVehicle = name;
+        isStoreFocused = false;
+        setActiveBtn(`vbtn-${name}`);
+        
+        // แสดงรถทุกคันกลับมาเมื่อเลือกโฟกัสรถ
+        Object.values(vehicles).forEach(veh => {
+            if (!map.hasLayer(veh.marker)) veh.marker.addTo(map);
+        });
+
+        const v = vehicles[name];
+        if (!v) return;
+        map.flyTo([v.data.lat, v.data.lng], 16, { animate: true, duration: 1.0 });
+        v.marker.openPopup();
+        updateInfoCard(v.data);
+    }
+
+    function toggleVehicleList() {
+        const container = document.getElementById('vehicleBtnContainer');
+        const icon = document.getElementById('accordion-icon');
+        
+        if (container.style.display === 'none') {
+            // เปิด Accordion
+            container.style.display = 'block';
+            icon.style.transform = 'rotate(180deg)';
+            fitAll(); // และให้แสดงรถทั้งหมดบนแผนที่ด้วย
+        } else {
+            // ปิด Accordion
+            container.style.display = 'none';
+            icon.style.transform = 'rotate(0deg)';
+            focusStore(); // ถ้าย่อเก็บ ให้กลับไปโหมดร้านค้า
+        }
+    }
+
+    function fitAll() {
+        focusedVehicle = null;
+        isStoreFocused = false;
+        setActiveBtn('btn-fitall');
+
+        // แสดงรถทุกคันกลับมาเมื่อเลือกดูทั้งหมด
+        Object.values(vehicles).forEach(veh => {
+            if (!map.hasLayer(veh.marker)) veh.marker.addTo(map);
+        });
+
+        const points = [[STORE_LAT, STORE_LNG]];
+        Object.values(vehicles).forEach(v => {
+            if (v.data?.lat && v.data?.lng) points.push([v.data.lat, v.data.lng]);
+        });
+
+        if (points.length === 1) {
+            map.flyTo([STORE_LAT, STORE_LNG], 14);
+            return;
+        }
+        const bounds = L.latLngBounds(points);
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15, animate: true });
+        resetInfoCard();
+    }
+
+    function toggleFollow() {
+        autoFollow = !autoFollow;
+        const btn = document.getElementById('btnFollow');
+        btn.classList.toggle('active-follow', autoFollow);
+        btn.title = autoFollow ? 'Auto-Follow เปิดอยู่' : 'Auto-Follow ปิดอยู่';
+        btn.textContent = autoFollow ? '🎯' : '🔓';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  📊 UI UPDATES
+    // ══════════════════════════════════════════════════════════════
+    function updateInfoCard(data) {
+        const online = data.status === 'ONLINE';
+        document.getElementById('icDot').classList.toggle('online', online);
+        document.getElementById('icName').textContent   = data.vehicle || 'รถ';
+        document.getElementById('icStatus').textContent = online
+            ? `กำลังส่งของ — ${data.job || 'ไม่มีงาน'}`
+            : `จอดดับเครื่อง — ${data.job || 'ไม่มีงาน'}`;
+        document.getElementById('icSpeed').innerHTML =
+            `${online ? Number(data.speed).toFixed(0) : 0} <span>km/h</span>`;
+    }
+
+    function resetInfoCard() {
+        document.getElementById('icDot').classList.remove('online');
+        document.getElementById('icName').textContent   = 'เลือกรถที่ต้องการติดตาม';
+        document.getElementById('icStatus').textContent = 'กดที่รายชื่อรถทางซ้าย';
+        document.getElementById('icSpeed').innerHTML    = '– <span>km/h</span>';
+    }
+
+    function updateTopBar(data) {
+        const hasOnline = Object.values(vehicles).some(v => v.data?.status === 'ONLINE');
+        const dot   = document.getElementById('connDot');
+        const label = document.getElementById('connLabel');
+        dot.classList.toggle('online', hasOnline);
+        const count = Object.keys(vehicles).length;
+        label.textContent = hasOnline
+            ? `รถออกปฏิบัติงาน ${count} คัน`
+            : `รถทุกคันจอดอยู่ (${count} คัน)`;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  📡 SSE CONNECTION
+    // ══════════════════════════════════════════════════════════════
+    function connectSSE() {
+        const es = new EventSource('/api/v1/gps/stream');
+
+        es.onmessage = (event) => {
+            if (!event.data || event.data.trim() === '' || event.data.startsWith(':')) return;
+            try {
+                const data = JSON.parse(event.data);
+                // รองรับทั้ง Single Object และ Array (รองรับ Backend เดิมและใหม่)
+                if (Array.isArray(data)) {
+                    data.forEach(d => updateVehicle(d));
+                } else {
+                    updateVehicle(data);
+                }
+            } catch (e) {
+                console.warn('[SSE] Parse error:', e);
+            }
+        };
+
+        es.onerror = () => {
+            document.getElementById('connDot').classList.remove('online');
+            document.getElementById('connLabel').textContent = 'หลุดการเชื่อมต่อ กำลังต่อใหม่...';
+            es.close();
+            setTimeout(connectSSE, 3000);
+        };
+    }
+
+    // ── เริ่มทำงาน ──
+    initPredefinedVehicles();
+    connectSSE();
+    </script>
+</body>
+</html>

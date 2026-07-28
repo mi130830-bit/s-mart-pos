@@ -7,23 +7,31 @@ import '../../repositories/activity_repository.dart';
 import '../auth_provider.dart';
 
 class EmployeeState {
-  final List<EmployeeProfile> employees;
+  final List<EmployeeProfile> allEmployees; // Unfiltered list
+  final List<EmployeeProfile> employees; // Displayed (filtered) list
+  final String searchQuery;
   final bool isLoading;
   final String? error;
 
   EmployeeState({
+    this.allEmployees = const [],
     this.employees = const [],
+    this.searchQuery = '',
     this.isLoading = false,
     this.error,
   });
 
   EmployeeState copyWith({
+    List<EmployeeProfile>? allEmployees,
     List<EmployeeProfile>? employees,
+    String? searchQuery,
     bool? isLoading,
     String? error,
   }) {
     return EmployeeState(
+      allEmployees: allEmployees ?? this.allEmployees,
       employees: employees ?? this.employees,
+      searchQuery: searchQuery ?? this.searchQuery,
       isLoading: isLoading ?? this.isLoading,
       error: error, // Can be null to clear
     );
@@ -48,10 +56,31 @@ class EmployeeNotifier extends AutoDisposeNotifier<EmployeeState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final employees = await _repo.getAll(activeOnly: activeOnly);
-      state = state.copyWith(employees: employees, isLoading: false);
+      state = state.copyWith(allEmployees: employees, isLoading: false);
+      _applySearch();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
+  }
+
+  void search(String query) {
+    state = state.copyWith(searchQuery: query);
+    _applySearch();
+  }
+
+  void _applySearch() {
+    if (state.searchQuery.trim().isEmpty) {
+      state = state.copyWith(employees: state.allEmployees);
+      return;
+    }
+    final q = state.searchQuery.trim().toLowerCase();
+    final filtered = state.allEmployees.where((emp) {
+      return (emp.displayName?.toLowerCase().contains(q) ?? false) ||
+             (emp.employeeCode?.toLowerCase().contains(q) ?? false) ||
+             (emp.phone?.toLowerCase().contains(q) ?? false) ||
+             (emp.roleType.toLowerCase().contains(q));
+    }).toList();
+    state = state.copyWith(employees: filtered);
   }
 
   Future<void> create(EmployeeProfile emp) async {
@@ -134,12 +163,13 @@ class EmployeeNotifier extends AutoDisposeNotifier<EmployeeState> {
       newIndex -= 1;
     }
     
-    final items = List<EmployeeProfile>.from(state.employees);
+    final items = List<EmployeeProfile>.from(state.allEmployees);
     final item = items.removeAt(oldIndex);
     items.insert(newIndex, item);
 
     // Optimistic UI update
-    state = state.copyWith(employees: items);
+    state = state.copyWith(allEmployees: items);
+    _applySearch();
 
     try {
       final orderedIds = items.map((e) => e.id).toList();

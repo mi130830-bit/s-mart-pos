@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
@@ -28,6 +29,13 @@ import '../../products/widgets/quick_menu_dialog.dart';
 import '../../../models/order_item.dart';
 import '../../customers/customer_search_dialog.dart';
 
+class _ScanJob {
+  final String barcode;
+  final PosStateNotifier posState;
+  _ScanJob(this.barcode, this.posState);
+}
+
+
 mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
   final FocusNode barcodeFocusNode = FocusNode();
   final FocusNode keyboardListenerFocus = FocusNode();
@@ -36,8 +44,8 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
   final ProductRepository productRepo = ProductRepository();
 
   Timer? debounceTimer;
-  bool isLoading = false;
-  bool isProcessing = false;
+  final Queue<_ScanJob> _scanQueue = Queue<_ScanJob>();
+  bool _isProcessingQueue = false;
 
   void initBarcodeHandler() {
     barcodeCtrl.addListener(onBarcodeChanged);
@@ -174,7 +182,7 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
       debounceTimer = Timer(const Duration(milliseconds: 300), () {
         if (!mounted) return;
         final current = barcodeCtrl.text;
-        if (current.isNotEmpty && !isProcessing) {
+        if (current.isNotEmpty) {
           final posState =
               ProviderScope.containerOf(context).read(posProvider.notifier);
           handleBarcodeSubmit(current, posState);
@@ -183,16 +191,27 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  void handleBarcodeSubmit(String value, PosStateNotifier posState) async {
+  void handleBarcodeSubmit(String value, PosStateNotifier posState) {
     debounceTimer?.cancel();
     if (value.isEmpty) {
       barcodeFocusNode.requestFocus();
       return;
     }
-    if (isProcessing) return;
-    isProcessing = true;
-    setState(() => isLoading = true);
+    _scanQueue.add(_ScanJob(value, posState));
+    _processScanQueue();
+  }
 
+  Future<void> _processScanQueue() async {
+    if (_isProcessingQueue) return;
+    _isProcessingQueue = true;
+    while (_scanQueue.isNotEmpty) {
+      final job = _scanQueue.removeFirst();
+      await _executeScan(job.barcode, job.posState);
+    }
+    _isProcessingQueue = false;
+  }
+
+  Future<void> _executeScan(String value, PosStateNotifier posState) async {
     try {
       double quantity = double.tryParse(qtyCtrl.text) ?? 1.0;
       if (quantity <= 0) quantity = 1.0;
@@ -275,8 +294,6 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
         }
       }
     } finally {
-      if (mounted) setState(() => isLoading = false);
-      isProcessing = false;
       barcodeFocusNode.requestFocus();
     }
   }

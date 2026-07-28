@@ -17,30 +17,23 @@ import '../../../../models/delivery_type.dart';
 import '../../../../models/order_item.dart';
 import '../../../../models/customer.dart';
 import '../../pos_state_manager.dart';
-import '../../pos_payment_panel.dart';
+import '../../../../models/payment/payment_type.dart';
 import '../../../../widgets/common/confirm_dialog.dart';
 import '../../../../widgets/dialogs/point_redemption_dialog.dart';
 import '../../../../utils/pos_reprint_barcode_router.dart';
+import '../../../../state/payment/payment_session_notifier.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'slip_verification_controller.dart';
 import '../widgets/reprint_dialog.dart';
 
-mixin PaymentModalControllerMixin<T extends StatefulWidget>
-    on State<T>, SlipVerificationControllerMixin<T> {
+mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
+    on ConsumerState<T>, SlipVerificationControllerMixin<T> {
   final ReceiptService receiptService = ReceiptService();
   final TextEditingController amountCtrl = TextEditingController();
   final TextEditingController noteCtrl = TextEditingController();
   final FocusNode amountFocusNode = FocusNode();
 
-  final List<PaymentRecord> payments = [];
 
-  Decimal get totalPaid => payments.fold(
-      Decimal.zero, (sum, p) => sum + Decimal.parse(p.amount.toString()));
-
-  PaymentType selectedPaymentType = PaymentType.cash;
-  Decimal receivedAmount = Decimal.zero;
-  DeliveryType deliveryType = DeliveryType.none;
-  bool isLoading = false;
-  bool shouldPrint = true;
 
   void disposePaymentController() {
     amountCtrl.dispose();
@@ -48,42 +41,13 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     amountFocusNode.dispose();
   }
 
-  void fillRemainingAmount(PosStateNotifier posState) {
-    if (selectedPaymentType == PaymentType.credit) return;
 
-    final Decimal total = Decimal.parse(posState.grandTotal.toString());
-    final Decimal paid = totalPaid;
-    final Decimal remaining = (total - paid)
-        .clamp(Decimal.zero, Decimal.parse('999999999')); // Clamp max safe
-
-    if (remaining > Decimal.zero) {
-      setState(() {
-        receivedAmount = remaining;
-        amountCtrl.text = remaining.toDouble().toStringAsFixed(2);
-        amountCtrl.selection =
-            TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
-      });
-    } else {
-      setState(() {
-        receivedAmount = Decimal.zero;
-        amountCtrl.text = '';
-      });
-    }
-    updateDisplayToCustomer(posState);
-  }
-
-  void removePayment(int index, PosStateNotifier posState) {
-    setState(() {
-      payments.removeAt(index);
-      fillRemainingAmount(posState);
-      updateDisplayToCustomer(posState);
-    });
-  }
 
   Future<void> handlePaste(PosStateNotifier posState) async {
     if (isVerifyingSlip) return;
-    if (selectedPaymentType != PaymentType.qr) {
-      setState(() => selectedPaymentType = PaymentType.qr);
+    final sessionNotifier = ref.read(paymentSessionProvider.notifier);
+    if (ref.read(paymentSessionProvider).selectedPaymentType != PaymentType.qr) {
+      sessionNotifier.setPaymentType(PaymentType.qr);
     }
 
     try {
@@ -92,10 +56,10 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
         verifySlipFromBytes(
           bytes: imageBytes,
           posState: posState,
-          receivedAmount: receivedAmount,
-          totalPaid: totalPaid,
+          receivedAmount: ref.read(paymentSessionProvider).receivedAmount,
+          totalPaid: sessionNotifier.totalPaid,
           onValidAmountApplied: (amount) {
-            receivedAmount = amount;
+            sessionNotifier.setReceivedAmount(amount);
             amountCtrl.text = amount.toDouble().toStringAsFixed(2);
           },
         );
@@ -107,8 +71,11 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
   }
 
   void updateDisplayToCustomer(PosStateNotifier posState) {
-    final Decimal currentInput = receivedAmount;
-    final Decimal totalPaidInList = totalPaid;
+    final session = ref.read(paymentSessionProvider);
+    final sessionNotifier = ref.read(paymentSessionProvider.notifier);
+    
+    final Decimal currentInput = session.receivedAmount;
+    final Decimal totalPaidInList = sessionNotifier.totalPaid;
     final Decimal totalCaptured = totalPaidInList + currentInput;
 
     final Decimal grandTotal = Decimal.parse(posState.grandTotal.toString());
@@ -117,7 +84,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       change = totalCaptured - grandTotal;
     }
 
-    if (selectedPaymentType == PaymentType.qr) {
+    if (session.selectedPaymentType == PaymentType.qr) {
       double qrAmount = currentInput.toDouble();
       if (qrAmount <= 0) {
         if (totalCaptured < grandTotal) {
@@ -131,24 +98,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     }
   }
 
-  void addPayment(PosStateNotifier posState) {
-    if (selectedPaymentType == PaymentType.credit) return;
 
-    final Decimal currentInput = receivedAmount;
-    if (currentInput <= Decimal.zero) return;
-
-    setState(() {
-      payments.add(PaymentRecord(
-        method: selectedPaymentType.name,
-        amount: currentInput.toDouble(),
-      ));
-
-      amountCtrl.clear();
-      receivedAmount = Decimal.zero;
-    });
-
-    fillRemainingAmount(posState);
-  }
 
   void showError(String msg) {
     final activeContext = mounted ? context : AlertService.navigatorKey.currentContext;
@@ -176,7 +126,9 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
 
     if (result != null && mounted) {
       posState.applyPointDiscount(result);
-      fillRemainingAmount(posState);
+      final gt = Decimal.parse(posState.grandTotal.toString());
+      ref.read(paymentSessionProvider.notifier).fillRemainingAmount(gt);
+      updateDisplayToCustomer(posState);
     }
   }
 
@@ -328,7 +280,10 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
   }
 
   Future<void> processFinish(PosStateNotifier posState) async {
-    if (isLoading) return;
+    final session = ref.read(paymentSessionProvider);
+    final sessionNotifier = ref.read(paymentSessionProvider.notifier);
+
+    if (session.isLoading) return;
 
     final double grandTotalDouble = posState.grandTotal;
     final Decimal grandTotal = Decimal.parse(grandTotalDouble.toString());
@@ -338,9 +293,11 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
     final snapshotDiscount = posState.discountAmount;
     final snapshotTotal = posState.grandTotal + snapshotDiscount;
 
-    Decimal currentInput = receivedAmount;
-    Decimal totalPaidSoFar = totalPaid + currentInput;
+    Decimal currentInput = session.receivedAmount;
+    Decimal totalPaidSoFar = sessionNotifier.totalPaid + currentInput;
     Decimal remaining = (grandTotal - totalPaidSoFar);
+
+    List<PaymentRecord> finalPayments = List.from(session.payments);
 
     if (remaining > Decimal.parse('0.01')) {
       if (posState.currentCustomer == null ||
@@ -350,10 +307,10 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       }
     }
 
-    if (deliveryType != DeliveryType.none) {
+    if (session.deliveryType != DeliveryType.none) {
       if (posState.currentCustomer == null ||
           posState.currentCustomer?.id == 0) {
-        if (deliveryType == DeliveryType.delivery) {
+        if (session.deliveryType == DeliveryType.delivery) {
           showError('การจัดส่ง (Delivery) ต้องระบุลูกค้าสมาชิกเท่านั้น');
           return;
         }
@@ -377,34 +334,34 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       if (confirmDebt != true) return;
 
       if (currentInput > Decimal.zero) {
-        payments.add(PaymentRecord(
-            method: selectedPaymentType.name,
+        finalPayments.add(PaymentRecord(
+            method: session.selectedPaymentType.name,
             amount: currentInput.toDouble()));
       }
-      payments.add(PaymentRecord(
+      finalPayments.add(PaymentRecord(
           method: PaymentType.credit.name, amount: remaining.toDouble()));
 
       amountCtrl.clear();
-      receivedAmount = Decimal.zero;
+      sessionNotifier.setReceivedAmount(Decimal.zero);
     } else {
       if (currentInput > Decimal.zero) {
-        payments.add(PaymentRecord(
-          method: selectedPaymentType.name,
+        finalPayments.add(PaymentRecord(
+          method: session.selectedPaymentType.name,
           amount: currentInput.toDouble(),
         ));
         amountCtrl.clear();
-        receivedAmount = Decimal.zero;
+        sessionNotifier.setReceivedAmount(Decimal.zero);
       }
     }
 
-    Decimal totalReceived = payments.fold(
+    Decimal totalReceived = finalPayments.fold(
         Decimal.zero, (sum, p) => sum + Decimal.parse(p.amount.toString()));
     Decimal change = Decimal.zero;
     if (totalReceived > grandTotal) {
       change = totalReceived - grandTotal;
     }
 
-    if (mounted) setState(() => isLoading = true);
+    if (mounted) sessionNotifier.setLoading(true);
 
     try {
       // ✅ [NEW] โหมดแก้ไขบิล UNPAID — Flow แยกต่างหาก ไม่แตะ Flow เดิม
@@ -418,8 +375,8 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       }
 
       final orderId = await posState.saveOrder(
-        payments: payments,
-        deliveryType: deliveryType,
+        payments: finalPayments,
+        deliveryType: session.deliveryType,
         note: noteCtrl.text.trim(),
       );
 
@@ -427,7 +384,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
         Navigator.of(context).pop(true);
       }
 
-      if (shouldPrint) {
+      if (session.shouldPrint) {
         final String cashierName = posState.currentUser?.displayName ?? 'Staff';
 
         printReceipt(
@@ -439,7 +396,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
           grandTotal: grandTotalDouble,
           received: totalReceived.toDouble(),
           change: change.toDouble(),
-          payments: payments,
+          payments: finalPayments,
           cashierName: cashierName,
           remark: noteCtrl.text.trim(),
         );
@@ -478,19 +435,19 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
           grandTotal: grandTotalDouble,
           received: totalReceived.toDouble(),
           change: change.toDouble(),
-          payments: payments,
+          payments: finalPayments,
           cashierName: cashierName,
         );
       }
 
-      final bool hasCashPayment = payments.any((p) =>
+      final bool hasCashPayment = finalPayments.any((p) =>
           p.method.toUpperCase().contains('CASH') ||
           p.method.toUpperCase().contains('TRANSFER') ||
           p.method.toUpperCase().contains('QR') ||
           p.method == 'เงินสด' ||
           p.method.contains('โอน'));
       final bool isCreditOnlyReprint = !hasCashPayment &&
-          payments.any((p) =>
+          finalPayments.any((p) =>
               p.method.toUpperCase().contains('CREDIT') ||
               p.method == 'เงินเชื่อ' ||
               p.method == 'Credit');
@@ -499,7 +456,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
         final rootContext = AlertService.navigatorKey.currentContext;
         if (rootContext != null && rootContext.mounted) {
           final cashierNameStr = posState.currentUser?.displayName ?? 'Staff';
-          final paymentsSnapshot = List<PaymentRecord>.from(payments);
+          final paymentsSnapshot = List<PaymentRecord>.from(finalPayments);
 
           showDialog(
             context: rootContext,
@@ -533,7 +490,7 @@ mixin PaymentModalControllerMixin<T extends StatefulWidget>
       LoggerService.error('PaymentModal', 'เกิดข้อผิดพลาดในการบันทึกบิล: $e', e, stackTrace);
       showError('เกิดข้อผิดพลาด: $e');
       if (mounted) {
-        setState(() => isLoading = false);
+        sessionNotifier.setLoading(false);
       }
     }
   }

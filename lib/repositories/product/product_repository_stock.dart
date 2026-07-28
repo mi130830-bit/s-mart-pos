@@ -15,7 +15,7 @@ extension ProductRepositoryStock on ProductRepository {
     }
   }
 
-  Future<List<Product>> getLowStockProducts({int limit = 5000}) async {
+  Future<List<Product>> getLowStockProducts({int limit = 100}) async {
     if (!_dbService.isConnected()) await _dbService.connect();
     final results = await _dbService.query(
         'SELECT * FROM product WHERE trackStock = 1 AND reorderPoint > 0 AND stockQuantity <= reorderPoint ORDER BY stockQuantity ASC LIMIT :limit',

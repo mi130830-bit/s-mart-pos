@@ -1,4 +1,4 @@
-import 'dart:async';
+// import 'dart:async'; removed
 import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,29 +23,8 @@ class HrAttendanceTab extends ConsumerStatefulWidget {
 }
 
 class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
-  // Timer สำหรับเดิน realtime วัดเวลาออกชั่วคราว
-  Timer? _realtimeTimer;
-  int _tickCount = 0; // ใช้ trigger setState เพื่อ update timer
-
-  @override
-  void initState() {
-    super.initState();
-    // Timer เดินทุก 30 วินาที เพื่อ update นาฬิกาออกชั่วคราว realtime
-    _realtimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() => _tickCount++);
-    });
-  }
-
-  @override
-  void dispose() {
-    _realtimeTimer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Use _tickCount to trigger periodic rebuild for realtime timer display
-    final _ = _tickCount;
     final attendanceState = ref.watch(attendanceProvider);
     final employeeState = ref.watch(employeeProvider);
 

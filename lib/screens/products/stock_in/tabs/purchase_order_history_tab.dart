@@ -31,17 +31,65 @@ class _PurchaseOrderHistoryTabState
     }
   }
 
-  Future<void> _pickDate(
+  Future<void> _pickMonthYear(
       BuildContext context, PurchaseOrderHistoryState state, PurchaseOrderHistoryController controller) async {
-    final DateTime? picked = await showDatePicker(
+    final DateTime initial = state.selectedDate ?? DateTime.now();
+    int selectedMonth = initial.month;
+    int selectedYear = initial.year;
+
+    final result = await showDialog<DateTime>(
       context: context,
-      initialDate: state.selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('th', 'TH'),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('เลือกเดือนและปี'),
+              content: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButton<int>(
+                    value: selectedMonth,
+                    items: List.generate(12, (index) {
+                      return DropdownMenuItem(
+                        value: index + 1,
+                        child: Text(DateFormat('MMMM', 'th').format(DateTime(2020, index + 1))),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedMonth = val);
+                    },
+                  ),
+                  const SizedBox(width: 16),
+                  DropdownButton<int>(
+                    value: selectedYear,
+                    items: List.generate(10, (index) {
+                      final year = DateTime.now().year - index;
+                      return DropdownMenuItem(
+                        value: year,
+                        child: Text('${year + 543}'),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedYear = val);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, DateTime(selectedYear, selectedMonth, 1)),
+                  child: const Text('ตกลง'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
-    if (picked != null && picked != state.selectedDate) {
-      controller.setDate(picked);
+
+    if (result != null && (state.selectedDate == null || result.month != state.selectedDate!.month || result.year != state.selectedDate!.year)) {
+      controller.setDate(result);
     }
   }
 
@@ -185,11 +233,11 @@ class _PurchaseOrderHistoryTabState
           child: Row(
             children: [
               OutlinedButton.icon(
-                onPressed: () => _pickDate(context, state, controller),
-                icon: const Icon(Icons.calendar_today),
+                onPressed: () => _pickMonthYear(context, state, controller),
+                icon: const Icon(Icons.calendar_month),
                 label: Text(state.selectedDate == null
-                    ? 'ทุกวัน (All Time)'
-                    : 'วันที่: ${DateFormat('dd/MM/yyyy').format(state.selectedDate!)}'),
+                    ? 'ทุกเดือน (All Time)'
+                    : 'เดือน: ${DateFormat('MMMM yyyy', 'th').format(state.selectedDate!)}'),
               ),
               if (state.selectedDate != null) ...[
                 const SizedBox(width: 8),

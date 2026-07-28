@@ -190,7 +190,30 @@ class DeliveryHistoryRepository {
         'end': DateFormat('yyyy-MM-dd HH:mm:ss').format(end),
       });
 
-      return res.toList();
+      final records = res.map((r) => Map<String, dynamic>.from(r)).toList();
+
+      for (var record in records) {
+        String vehicle = record['vehiclePlate']?.toString().trim().toUpperCase() ?? '';
+        String driver = record['driverName']?.toString().trim() ?? '';
+        
+        if (vehicle.isEmpty && driver.contains(',')) {
+          final parts = driver.split(',').map((e) => e.trim()).toList();
+          final lastPart = parts.last;
+          if (lastPart.contains('รถ') || 
+              lastPart.contains('ดั้ม') || 
+              lastPart.contains('กระบะ') || 
+              lastPart.contains('กะบะ') || 
+              lastPart.contains('ใหญ่') ||
+              lastPart.contains('เล็ก') ||
+              lastPart.contains('โฟล์ค') ||
+              lastPart.contains('ลิฟท์')) {
+            record['vehiclePlate'] = lastPart.toUpperCase();
+            record['driverName'] = parts.sublist(0, parts.length - 1).join(', ');
+          }
+        }
+      }
+
+      return records;
     } catch (e) {
       debugPrint('⚠️ [DeliveryHistoryRepository] Query error: $e');
       return [];

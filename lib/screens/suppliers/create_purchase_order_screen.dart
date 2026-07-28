@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:decimal/decimal.dart'; // ✅ Import Decimal
 import '../../repositories/purchase_repository.dart';
-import '../../repositories/supplier_repository.dart';
 import '../../repositories/product_repository.dart';
 import '../../models/supplier.dart';
 import '../../models/product.dart';
@@ -10,6 +9,7 @@ import '../products/widgets/product_search_dialog_for_select.dart';
 import '../../services/alert_service.dart';
 import '../../widgets/common/custom_text_field.dart';
 import '../../widgets/common/custom_buttons.dart';
+import 'supplier_search_dialog.dart';
 
 class CreatePurchaseOrderScreen extends StatefulWidget {
   const CreatePurchaseOrderScreen({super.key});
@@ -21,27 +21,16 @@ class CreatePurchaseOrderScreen extends StatefulWidget {
 
 class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   final PurchaseRepository _purchaseRepo = PurchaseRepository();
-  final SupplierRepository _supplierRepo = SupplierRepository();
 
-  int? _selectedSupplierId;
-  List<Supplier> _suppliers = [];
+  Supplier? _selectedSupplier;
   final List<Map<String, dynamic>> _orderItems = [];
 
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _note;
 
   @override
   void initState() {
     super.initState();
-    _loadSuppliers();
-  }
-
-  Future<void> _loadSuppliers() async {
-    final results = await _supplierRepo.getAllSuppliers();
-    setState(() {
-      _suppliers = results;
-      _isLoading = false;
-    });
   }
 
   void _addItem(Product product) {
@@ -78,7 +67,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
       Decimal.zero, (sum, item) => sum + (item['total'] as Decimal));
 
   Future<void> _savePO() async {
-    if (_selectedSupplierId == null) {
+    if (_selectedSupplier == null) {
       AlertService.show(
         context: context,
         message: 'กรุณาเลือกผู้จำหน่าย',
@@ -109,7 +98,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
     }).toList();
 
     final poId = await _purchaseRepo.createPO(
-      supplierId: _selectedSupplierId!,
+      supplierId: _selectedSupplier!.id,
       branchId: 1, // Default. Future: Get from global state
       userId: null, // Future: Pass operator ID
       totalAmount:
@@ -155,19 +144,43 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               child: Column(
                 children: [
                   // 1. Supplier Selection
-                  DropdownButtonFormField<int>(
-                    decoration: const InputDecoration(
-                        labelText: 'เลือกผู้จำหน่าย (Supplier)',
-                        border: OutlineInputBorder()),
-                    initialValue: _selectedSupplierId,
-                    items: _suppliers
-                        .map((s) => DropdownMenuItem<int>(
-                              value: s.id,
-                              child: Text(s.name),
-                            ))
-                        .toList(),
-                    onChanged: (val) =>
-                        setState(() => _selectedSupplierId = val),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final Supplier? s = await showDialog(
+                              context: context,
+                              builder: (ctx) => const SupplierSearchDialog(),
+                            );
+                            if (s != null) {
+                              setState(() {
+                                _selectedSupplier = s;
+                              });
+                            }
+                          },
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'ผู้จำหน่าย (Supplier)',
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _selectedSupplier?.name ?? 'คลิกเพื่อเลือกผู้จำหน่าย',
+                                  style: TextStyle(
+                                    color: _selectedSupplier == null ? Colors.grey : Colors.black,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const Icon(Icons.search),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
 

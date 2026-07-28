@@ -196,6 +196,7 @@ class ExcelExportService {
           
           final double distanceKm = double.tryParse(record['distanceKm']?.toString() ?? '0') ?? 0.0;
           final double fuelCost = double.tryParse(record['fuelCostEstimate']?.toString() ?? '0') ?? 0.0;
+          
           totalDistance += distanceKm;
           totalFuelCost += fuelCost;
 

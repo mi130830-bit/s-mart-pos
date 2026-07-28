@@ -150,10 +150,9 @@ class PurchaseOrderHistoryController extends AutoDisposeNotifier<PurchaseOrderHi
       DateTime? startDate;
       DateTime? endDate;
       if (state.selectedDate != null) {
-        startDate = DateTime(state.selectedDate!.year, state.selectedDate!.month,
-            state.selectedDate!.day, 0, 0, 0);
-        endDate = DateTime(state.selectedDate!.year, state.selectedDate!.month,
-            state.selectedDate!.day, 23, 59, 59);
+        startDate = DateTime(state.selectedDate!.year, state.selectedDate!.month, 1, 0, 0, 0);
+        final nextMonth = DateTime(state.selectedDate!.year, state.selectedDate!.month + 1, 1);
+        endDate = nextMonth.subtract(const Duration(seconds: 1));
       }
       
       bool? isPaidFilter;

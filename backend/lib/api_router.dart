@@ -12,6 +12,7 @@ import 'controllers/health_controller.dart';
 import 'controllers/debt_controller.dart';
 import 'controllers/job_controller.dart';
 import 'controllers/reward_controller.dart';
+import 'controllers/gps_controller.dart';
 import 'package:shelf/shelf.dart';
 import 'middlewares/jwt_middleware.dart';
 
@@ -33,6 +34,9 @@ class ApiRouter {
 
     // ✅ Public Config Routes (No JWT — S-Link Driver QR ดึง PromptPay ID)
     router.mount('/config', ConfigController().router.call);
+
+    // Public GPS Route
+    router.mount('/gps', GpsController().router.call);
 
     // Secured Routes (Requires Firebase JWT from S-Link)
     router.mount('/products', securedPipeline.addHandler(ProductController().router.call));

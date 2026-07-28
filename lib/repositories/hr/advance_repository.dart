@@ -172,14 +172,15 @@ class AdvanceRepository {
     ''', {'pay_id': payrollId});
   }
 
-  Future<List<AdvancePayment>> getAllHistory() async {
+  Future<List<AdvancePayment>> getAllHistory({int limit = 100, int offset = 0}) async {
     final results = await _db.query('''
       SELECT a.*, COALESCE(e.display_name, u.displayName) as employeeName
       FROM advance_payment a
       JOIN employee_profile e ON a.employee_id = e.id
       LEFT JOIN user u ON e.user_id = u.id
       ORDER BY a.request_date DESC, a.created_at DESC
-    ''');
+      LIMIT :limit OFFSET :offset
+    ''', {'limit': limit, 'offset': offset});
     return results.map((row) => AdvancePayment.fromJson(row)).toList();
   }
 

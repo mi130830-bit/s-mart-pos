@@ -114,62 +114,6 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
 
       final records = await _repo.getHistoryByDateRange(start, end);
 
-      // 🛠️ Fallback cleanup for old records to ensure UI displays them correctly
-      for (var record in records) {
-        String vehicle = record['vehiclePlate']?.toString().trim().toUpperCase() ?? '';
-        String driver = record['driverName']?.toString().trim() ?? '';
-        
-        if (vehicle.isEmpty && driver.contains(',')) {
-          final parts = driver.split(',').map((e) => e.trim()).toList();
-          final lastPart = parts.last;
-          if (lastPart.contains('รถ') || 
-              lastPart.contains('ดั้ม') || 
-              lastPart.contains('กระบะ') || 
-              lastPart.contains('กะบะ') || 
-              lastPart.contains('ใหญ่') ||
-              lastPart.contains('เล็ก') ||
-              lastPart.contains('โฟล์ค') ||
-              lastPart.contains('ลิฟท์')) {
-            record['vehiclePlate'] = lastPart.toUpperCase();
-            record['driverName'] = parts.sublist(0, parts.length - 1).join(', ');
-          }
-        }
-      }
-
-      // 🌟 ดึง distanceKm จากตาราง customer มาเสริม record ที่ยังไม่มีระยะทาง
-      final Map<String, double> customerDistanceCache = {};
-      for (var record in records) {
-        final dist = double.tryParse(record['distanceKm']?.toString() ?? '0') ?? 0.0;
-        if (dist == 0.0) {
-          final cname = record['customerName']?.toString().trim() ?? '';
-          if (cname.isNotEmpty && cname != 'ลูกค้าทั่วไป') {
-            if (!customerDistanceCache.containsKey(cname)) {
-              try {
-                final res = await db.query(
-                  'SELECT distanceKm FROM customer WHERE CONCAT(firstName, " ", IFNULL(lastName, "")) LIKE :n OR firstName LIKE :n LIMIT 1',
-                  {'n': '%$cname%'},
-                );
-                if (res.isNotEmpty) {
-                  final d = double.tryParse(res.first['distanceKm']?.toString() ?? '0') ?? 0.0;
-                  customerDistanceCache[cname] = d;
-                } else {
-                  customerDistanceCache[cname] = 0.0;
-                }
-              } catch (_) {
-                customerDistanceCache[cname] = 0.0;
-              }
-            }
-            final customerDist = customerDistanceCache[cname] ?? 0.0;
-            if (customerDist > 0.0) {
-              record['distanceKm'] = customerDist;
-              record['_distanceSource'] = 'customer';
-            }
-          }
-        } else {
-          record['_distanceSource'] = 'history';
-        }
-      }
-
       if (mounted) {
         setState(() {
           _records = records;
@@ -204,11 +148,14 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       },
     );
     if (picked != null && mounted) {
+      DateTime newEndDate = _endDate.isBefore(picked) ? picked : _endDate;
+      if (newEndDate.difference(picked).inDays > 90) {
+        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', type: 'warning');
+        return;
+      }
       setState(() {
         _startDate = picked;
-        if (_endDate.isBefore(_startDate)) {
-          _endDate = _startDate; // auto adjust end date if needed
-        }
+        _endDate = newEndDate;
       });
       await _loadData();
     }
@@ -230,6 +177,10 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       },
     );
     if (picked != null && mounted) {
+      if (picked.difference(_startDate).inDays > 90) {
+        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', type: 'warning');
+        return;
+      }
       setState(() {
         _endDate = picked;
       });

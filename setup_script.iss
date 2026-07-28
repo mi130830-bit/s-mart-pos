@@ -47,6 +47,7 @@ Source: "{#ProjectPath}\ngrok.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; 5. ✅ เพิ่มโฟลเดอร์ Backend (Server.exe)
 Source: "{#ProjectPath}\backend\server.exe"; DestDir: "{app}\backend"; Flags: ignoreversion
 Source: "{#ProjectPath}\backend\.env"; DestDir: "{app}\backend"; Flags: ignoreversion
+Source: "{#ProjectPath}\backend\public\*"; DestDir: "{app}\backend\public"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Optional: Include other backend assets if needed, but avoid full source code if possible
 ; Source: "{#ProjectPath}\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs
 

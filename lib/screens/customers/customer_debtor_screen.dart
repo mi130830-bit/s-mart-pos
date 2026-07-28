@@ -167,7 +167,7 @@ class _CustomerDebtorScreenState extends State<CustomerDebtorScreen> {
           if (mounted) {
             AlertService.show(
               context: context,
-              message: 'เพิ่มหนี้ยกมาสำเร็จ',
+              message: 'ลบรายการชำระเงินสำเร็จ',
               type: 'success',
             );
             _refreshCustomer();

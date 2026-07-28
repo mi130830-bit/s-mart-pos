@@ -17,6 +17,7 @@ import 'payment_modal/controllers/slip_verification_controller.dart';
 import 'payment_modal/controllers/payment_modal_controller.dart';
 
 import '../../services/settings_service.dart';
+import '../../state/payment/payment_session_notifier.dart';
 
 class PaymentModal extends ConsumerStatefulWidget {
   final VoidCallback onPaymentSuccess;
@@ -39,7 +40,14 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
       if (event is KeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.space) {
           final posState = ref.read(posProvider.notifier);
-          fillRemainingAmount(posState);
+          final grandTotal = Decimal.parse(posState.grandTotal.toString());
+          ref.read(paymentSessionProvider.notifier).fillRemainingAmount(grandTotal);
+          final session = ref.read(paymentSessionProvider);
+          if (session.receivedAmount > Decimal.zero) {
+            amountCtrl.text = session.receivedAmount.toDouble().toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+            amountCtrl.selection = TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
+          }
+          updateDisplayToCustomer(posState);
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.keyV &&
@@ -54,7 +62,14 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       amountFocusNode.requestFocus();
       final posState = ref.read(posProvider.notifier);
-      fillRemainingAmount(posState);
+      final grandTotal = Decimal.parse(posState.grandTotal.toString());
+      ref.read(paymentSessionProvider.notifier).fillRemainingAmount(grandTotal);
+      final session = ref.read(paymentSessionProvider);
+      if (session.receivedAmount > Decimal.zero) {
+        amountCtrl.text = session.receivedAmount.toDouble().toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
+        amountCtrl.selection = TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
+      }
+      updateDisplayToCustomer(posState);
     });
   }
 
@@ -69,10 +84,12 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
   Widget build(BuildContext context) {
     ref.watch(posProvider);
     final posState = ref.read(posProvider.notifier);
+    final session = ref.watch(paymentSessionProvider);
+    final sessionNotifier = ref.read(paymentSessionProvider.notifier);
     final Decimal grandTotal = Decimal.parse(posState.grandTotal.toString());
 
-    final Decimal totalPaidInList = totalPaid;
-    final Decimal currentlyTyping = receivedAmount;
+    final Decimal totalPaidInList = sessionNotifier.totalPaid;
+    final Decimal currentlyTyping = session.receivedAmount;
     final Decimal totalCaptured = totalPaidInList + currentlyTyping;
 
     Decimal remaining = Decimal.zero;
@@ -95,8 +112,8 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
             Navigator.pop(context);
           },
           const SingleActivator(LogicalKeyboardKey.f12): () {
-            if (!isLoading) {
-              setState(() => shouldPrint = false);
+            if (!session.isLoading) {
+              sessionNotifier.setShouldPrint(false);
               processFinish(posState);
             }
           },
@@ -150,49 +167,49 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                           couponResult: couponResult,
                           onClearCoupon: () => clearCoupon(posState),
                           onValidateCoupon: () => validateAndApplyCoupon(
-                              posState, () => fillRemainingAmount(posState)),
+                              posState, () {
+                                final gt = Decimal.parse(posState.grandTotal.toString());
+                                sessionNotifier.fillRemainingAmount(gt);
+                                updateDisplayToCustomer(posState);
+                              }),
                           onChanged: (v) =>
                               setState(() => couponResult = null),
                         ),
                         PaymentMethodInputSection(
                           amountCtrl: amountCtrl,
                           amountFocusNode: amountFocusNode,
-                          selectedPaymentType: selectedPaymentType,
+                          selectedPaymentType: session.selectedPaymentType,
                           isVerifyingSlip: isVerifyingSlip,
                           slipVerificationMsg: slipVerificationMsg,
                           slipVerificationSuccess: slipVerificationSuccess,
                           noteCtrl: noteCtrl,
                           onAmountChanged: (val) {
-                            setState(() {
-                              if (val.isEmpty) {
-                                receivedAmount = Decimal.zero;
-                              } else {
-                                receivedAmount =
-                                    Decimal.tryParse(val) ?? Decimal.zero;
-                              }
-                              updateDisplayToCustomer(posState);
-                            });
+                            if (val.isEmpty) {
+                              sessionNotifier.setReceivedAmount(Decimal.zero);
+                            } else {
+                              sessionNotifier.setReceivedAmount(
+                                  Decimal.tryParse(val) ?? Decimal.zero);
+                            }
+                            updateDisplayToCustomer(posState);
                           },
                           onAmountSubmitted: (_) => processFinish(posState),
                           onPaymentTypeChanged: (type) {
-                            setState(() {
-                              selectedPaymentType = type;
-                              if (selectedPaymentType == PaymentType.credit) {
-                                receivedAmount = Decimal.zero;
-                                amountCtrl.clear();
-                                FocusScope.of(context).unfocus();
-                              } else {
-                                amountFocusNode.requestFocus();
-                              }
-                              updateDisplayToCustomer(posState);
-                            });
+                            sessionNotifier.setPaymentType(type);
+                            if (type == PaymentType.credit) {
+                              sessionNotifier.setReceivedAmount(Decimal.zero);
+                              amountCtrl.clear();
+                              FocusScope.of(context).unfocus();
+                            } else {
+                              amountFocusNode.requestFocus();
+                            }
+                            updateDisplayToCustomer(posState);
                           },
                           onVerifySlip: () => pickAndVerifySlip(
                             posState: posState,
-                            receivedAmount: receivedAmount,
-                            totalPaid: totalPaid,
+                            receivedAmount: session.receivedAmount,
+                            totalPaid: sessionNotifier.totalPaid,
                             onValidAmountApplied: (amount) {
-                              receivedAmount = amount;
+                              sessionNotifier.setReceivedAmount(amount);
                               amountCtrl.text =
                                   amount.toDouble().toStringAsFixed(2);
                             },
@@ -204,20 +221,30 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                   ),
                 ),
                 PaymentsListFooter(
-                  payments: payments,
-                  deliveryType: deliveryType,
-                  shouldPrint: shouldPrint,
-                  isLoading: isLoading,
+                  payments: session.payments,
+                  deliveryType: session.deliveryType,
+                  shouldPrint: session.shouldPrint,
+                  isLoading: session.isLoading,
                   isFullyPaid: isFullyPaid,
-                  selectedPaymentType: selectedPaymentType,
-                  receivedAmount: receivedAmount,
-                  onRemovePayment: (i) => removePayment(i, posState),
+                  selectedPaymentType: session.selectedPaymentType,
+                  receivedAmount: session.receivedAmount,
+                  onRemovePayment: (i) {
+                    sessionNotifier.removePayment(i);
+                    final gt = Decimal.parse(posState.grandTotal.toString());
+                    sessionNotifier.fillRemainingAmount(gt);
+                    updateDisplayToCustomer(posState);
+                  },
                   onDeliveryTypeChanged: (val) =>
-                      setState(() => deliveryType = val),
+                      sessionNotifier.setDeliveryType(val),
                   onShouldPrintChanged: (val) =>
-                      setState(() => shouldPrint = val ?? true),
+                      sessionNotifier.setShouldPrint(val ?? true),
                   onProcessFinish: () => processFinish(posState),
-                  onAddPayment: () => addPayment(posState),
+                  onAddPayment: () {
+                    sessionNotifier.addPayment();
+                    final gt = Decimal.parse(posState.grandTotal.toString());
+                    sessionNotifier.fillRemainingAmount(gt);
+                    updateDisplayToCustomer(posState);
+                  },
                 ),
               ],
             ),

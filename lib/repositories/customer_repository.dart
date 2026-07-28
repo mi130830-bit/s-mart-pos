@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../services/mysql_service.dart';
-
+import 'package:string_similarity/string_similarity.dart';
 import '../models/customer.dart';
 import '../models/member_tier.dart';
 import './activity_repository.dart';
@@ -18,6 +18,14 @@ class CustomerRepository {
       {MySQLService? dbService, ActivityRepository? activityRepo})
       : _dbService = dbService ?? MySQLService(),
         _activityRepo = activityRepo ?? ActivityRepository();
+
+  List<Customer>? _allCustomersCache;
+  DateTime? _cacheTime;
+
+  void clearCustomerCache() {
+    _allCustomersCache = null;
+    _cacheTime = null;
+  }
 
   // ✅ Initialize Ledger Table
   Future<void> initTable() async {

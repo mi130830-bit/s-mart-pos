@@ -37,6 +37,7 @@ class AiSettingsCard extends ConsumerWidget {
                 CustomTextField(
                   controller: controller.geminiApiKeyCtrl,
                   label: 'Gemini API Key',
+                  obscureText: true,
                 ),
               ],
             ),

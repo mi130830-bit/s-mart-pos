@@ -36,7 +36,7 @@ class PaymentMethodInputSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("ใสจำนวนเงนทรบมา",
+        const Text("ใส่จำนวนเงินที่รับมา",
             style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,

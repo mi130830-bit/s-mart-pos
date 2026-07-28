@@ -35,9 +35,23 @@ class QrSection extends StatelessWidget {
               style: TextStyle(fontSize: 16, color: Colors.grey)),
           const SizedBox(height: 10),
           Flexible(
-            child: Image.memory(
-              base64Decode(staticQrBase64!),
-              fit: BoxFit.contain,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  )
+                ],
+              ),
+              child: Image.memory(
+                base64Decode(staticQrBase64!),
+                fit: BoxFit.contain,
+              ),
             ),
           ),
         ],
@@ -48,18 +62,46 @@ class QrSection extends StatelessWidget {
       qrWidget = Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('สแกนจ่าย PromptPay',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black54)),
-          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE3F2FD),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.qr_code_scanner, color: Color(0xFF1565C0), size: 20),
+                SizedBox(width: 8),
+                Text('สแกนจ่าย PromptPay',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1565C0))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 15),
           Flexible(
             child: AspectRatio(
               aspectRatio: 1,
-              child: QrImageView(
-                data: state.qrData!,
-                backgroundColor: Colors.white,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 15,
+                      offset: const Offset(0, 5),
+                    )
+                  ],
+                ),
+                child: QrImageView(
+                  data: state.qrData!,
+                  backgroundColor: Colors.white,
+                ),
               ),
             ),
           ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import '../../models/product.dart';
@@ -58,6 +59,13 @@ class _ProductListSectionState extends ConsumerState<ProductListSection> {
   final int _pageSize = 8;
   int _totalItems = 0;
   ProductSortOption _currentSort = ProductSortOption.recent;
+  Timer? _debounceTimer;
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -140,10 +148,13 @@ class _ProductListSectionState extends ConsumerState<ProductListSection> {
   }
 
   void _onSearchChanged(String query) {
-    if (_currentPage != 1) {
-      _currentPage = 1;
-    }
-    _loadData();
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (_currentPage != 1) {
+        _currentPage = 1;
+      }
+      _loadData();
+    });
   }
 
   void _goToPage(int page) {

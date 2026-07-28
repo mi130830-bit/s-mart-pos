@@ -24,6 +24,7 @@ extension CustomerRepositoryTrash on CustomerRepository {
       await _activityRepo.log(
           action: 'DELETE_CUSTOMER',
           details: 'ลบลูกค้า ID: $id (Soft Delete) สาเหตุ: $reason');
+      clearCustomerCache();
       return true;
     } catch (e) {
       debugPrint('Error deleting customer: $e');
@@ -41,6 +42,7 @@ extension CustomerRepositoryTrash on CustomerRepository {
 
       await _activityRepo.log(
           action: 'RESTORE_CUSTOMER', details: 'กู้คืนลูกค้า ID: $id');
+      clearCustomerCache();
       return true;
     } catch (e) {
       debugPrint('Error restoring customer: $e');
@@ -81,6 +83,7 @@ extension CustomerRepositoryTrash on CustomerRepository {
             action: 'AUTO_CLEAN',
             details:
                 'ลบลูกค้าถาวร ${res.affectedRows} รายการ (เฉพาะที่ไม่ถูกใช้งาน)');
+        clearCustomerCache();
       }
     } catch (e) {
       debugPrint('Error cleaning customers: $e');

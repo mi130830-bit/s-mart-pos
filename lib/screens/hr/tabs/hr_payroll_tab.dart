@@ -5,8 +5,7 @@ import 'package:pos_desktop/utils/snackbar_utils.dart';
 import '../../../state/hr/payroll_provider.dart';
 import '../widgets/payroll/payroll_current_view.dart';
 import '../widgets/payroll/payroll_history_view.dart';
-import '../../../repositories/expense_repository.dart';
-import '../../../models/expense.dart';
+// (removed tight coupling imports)
 
 
 class HrPayrollTab extends ConsumerStatefulWidget {
@@ -269,20 +268,12 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
 
     if (confirm == true) {
       try {
-        final repo = ExpenseRepository();
-        final expense = Expense(
-          id: 0,
-          title: 'จ่ายเงินเดือนรอบ ${dateFormat.format(_startDate)} - ${dateFormat.format(_endDate)}',
-          amount: totalNetPay,
-          category: 'เงินเดือน',
-          date: DateTime.now(),
-          type: 'EXPENSE',
-          note: 'บันทึกอัตโนมัติจากระบบเงินเดือน (${state.records.length} คน)',
+        await ref.read(payrollProvider.notifier).saveTotalToExpense(
+          _startDate, 
+          _endDate, 
+          totalNetPay, 
+          state.records.length,
         );
-        await repo.saveExpense(expense);
-
-        // ✅ อัพเดทสถานะเป็น PAID แทนการลบ — เก็บไว้ดูประวัติภายหลัง
-        await ref.read(payrollProvider.notifier).markAllPaidForPeriod(_startDate, _endDate);
 
         // รีโหลดประวัติ
         _loadHistory();

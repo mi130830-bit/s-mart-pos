@@ -3,10 +3,14 @@ part of '../sales_repository.dart';
 extension SalesQueryExtension on SalesRepository {
   // --- 2. ดึงข้อมูลการขาย (สำหรับ Dashboard) ---
   Future<List<Map<String, dynamic>>> getOrdersByDateRange(
-      DateTime start, DateTime end) async {
+    DateTime start,
+    DateTime end, {
+    int limit = 500,
+    int offset = 0,
+  }) async {
     if (!_dbService.isConnected()) await _dbService.connect();
     try {
-      const sql = '''
+      final sql = '''
         (SELECT 
           o.id, 
           o.grandTotal as amount, 
@@ -46,7 +50,8 @@ extension SalesQueryExtension on SalesRepository {
           AND dt.transactionType = 'DEBT_PAYMENT'
           AND (dt.isDeleted = 0 OR dt.isDeleted IS NULL))
 
-        ORDER BY createdAt DESC;
+        ORDER BY createdAt DESC
+        LIMIT $limit OFFSET $offset;
       ''';
       return await _dbService.query(sql, {
         'start': start.toIso8601String(),
@@ -139,15 +144,24 @@ extension SalesQueryExtension on SalesRepository {
   }
 
   // --- 6. ประวัติการซื้อลูกค้า ---
-  Future<List<Map<String, dynamic>>> getOrdersByCustomer(int customerId) async {
+  Future<List<Map<String, dynamic>>> getOrdersByCustomer(int customerId, {int? limit, int? offset}) async {
     if (!_dbService.isConnected()) await _dbService.connect();
     try {
-      const sql = '''
+      String limitClause = '';
+      if (limit != null) {
+        limitClause = 'LIMIT $limit';
+        if (offset != null) {
+          limitClause += ' OFFSET $offset';
+        }
+      }
+
+      final sql = '''
         SELECT o.id, o.grandTotal, o.paymentMethod, o.createdAt, o.status,
                (SELECT COUNT(*) FROM orderitem WHERE orderId = o.id) as itemCount
         FROM `order` o
         WHERE o.customerId = :cid
-        ORDER BY o.createdAt DESC;
+        ORDER BY o.createdAt DESC
+        $limitClause;
       ''';
       return await _dbService.query(sql, {'cid': customerId});
     } catch (e) {

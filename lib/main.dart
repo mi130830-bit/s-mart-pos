@@ -81,7 +81,7 @@ void main(List<String> args) {
             windowId = args[idx + 1];
           }
 
-          debugPrint('🖥️ Secondary Window Starting... ID: $windowId');
+          debugPrint('🔥️ Secondary Window Starting... ID: $windowId');
 
           Map<String, dynamic> argument = {};
           if (idx + 2 < args.length && args[idx + 2].isNotEmpty) {
@@ -93,6 +93,7 @@ void main(List<String> args) {
           }
 
           await windowManager.ensureInitialized();
+          // ✅ สร้าง repository ไว้ก่อน runApp แต่ init() จะถูกเรียกหลัง runApp เลย
           final repository = CustomerDisplayRepository(windowId);
 
           if (argument['args1'] == 'customer_display') {
@@ -336,7 +337,7 @@ class _PosAppState extends ConsumerState<PosApp> {
 // ---------------------------------------------------------
 // ✅ CustomerDisplayApp (ส่วนของ UI จอฝั่งลูกค้า)
 // ---------------------------------------------------------
-class CustomerDisplayApp extends StatelessWidget {
+class CustomerDisplayApp extends StatefulWidget {
   final String windowId;
   final Map<String, dynamic>? arguments;
   final CustomerDisplayRepository repository;
@@ -349,16 +350,30 @@ class CustomerDisplayApp extends StatelessWidget {
   });
 
   @override
+  State<CustomerDisplayApp> createState() => _CustomerDisplayAppState();
+}
+
+class _CustomerDisplayAppState extends State<CustomerDisplayApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // ✅ init() หลัง runApp — ให้ Flutter Engine พร้อมก่อนลงทะเบียน channel
+      await widget.repository.init();
+      debugPrint('✅ [CustomerDisplay] Repository initialized, channel registered.');
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ProviderScope(
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Customer Display',
-        theme: AppTheme.lightTheme,
-        home: CustomerDisplayScreen(
-          windowId: windowId,
-          arguments: arguments,
-        ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Customer Display',
+      theme: AppTheme.lightTheme,
+      home: CustomerDisplayScreen(
+        windowId: widget.windowId,
+        arguments: widget.arguments,
+        repository: widget.repository, // ✅ ส่ง repository ตรงๆ ไม่ผ่าน Provider
       ),
     );
   }

@@ -63,6 +63,7 @@ class DeliveryReportDataTable extends StatelessWidget {
             DataColumn(label: Text('ยอดเงิน')),
             DataColumn(label: Text('ระยะทาง')),
             DataColumn(label: Text('ค่าน้ำมัน')),
+            DataColumn(label: Text('รูปส่งงาน')),
             DataColumn(label: Text('พิกัด GPS')),
           ],
           rows: filteredRecords.map((r) {
@@ -159,6 +160,34 @@ class DeliveryReportDataTable extends StatelessWidget {
                     })(),
                     fontWeight: FontWeight.bold),
               )),
+              DataCell(
+                r['billImageUrl'] != null &&
+                        r['billImageUrl'].toString().isNotEmpty
+                    ? InkWell(
+                        onTap: () async {
+                          final url = Uri.parse(r['billImageUrl'].toString());
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          } else {
+                            if (context.mounted) {
+                              AlertService.show(
+                                  context: context,
+                                  message: 'ไม่สามารถเปิดรูปภาพได้',
+                                  type: 'error');
+                            }
+                          }
+                        },
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.image, color: Colors.blue, size: 20),
+                            SizedBox(width: 4),
+                            Text('ดูรูป', style: TextStyle(color: Colors.blue)),
+                          ],
+                        ),
+                      )
+                    : const Text('-'),
+              ),
               DataCell(
                 r['locationUrl'] != null &&
                         r['locationUrl'].toString().isNotEmpty
