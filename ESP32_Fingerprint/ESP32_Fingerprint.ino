@@ -13,12 +13,18 @@
 #include <ESPmDNS.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <time.h>
 
 // ---------------------------------------------------------------------------
 // Network Config
 // ---------------------------------------------------------------------------
 const char* ssid     = "Kankanda_2.4G";
 const char* password = "0318066064";
+
+// NTP Config
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 7 * 3600; // GMT+7
+const int   daylightOffset_sec = 0;
 
 WiFiServer server(8080);
 WiFiClient client;
@@ -203,6 +209,10 @@ void setup() {
   // WiFi
   connectWiFi();
 
+  // NTP Setup (Requires WiFi to be connected)
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println("-> NTP Time requested.");
+
   // mDNS
   if (MDNS.begin("fingerprint")) {
     MDNS.addService("fingerprint", "tcp", 8080);
@@ -329,6 +339,25 @@ void loop() {
       if (currentMode == MODE_SCAN) {
         lcdStatus("S.Mart POS Ready", "Place your finger",
                   "POS: Connected");
+      }
+
+      // Auto-Sync Offline Logs
+      int qSize = prefs.getInt("q_size", 0);
+      if (qSize > 0) {
+        Serial.println("-> [Offline] Syncing " + String(qSize) + " records...");
+        for (int i = 0; i < qSize; i++) {
+          String entry = prefs.getString(("q" + String(i)).c_str(), "");
+          if (entry.length() > 0) {
+            // entry is like "5|2026-08-01T08:00:00"
+            int sepIndex = entry.indexOf('|');
+            if (sepIndex > 0) {
+              String id = entry.substring(0, sepIndex);
+              String timeStr = entry.substring(sepIndex + 1);
+              sendToPOS("OFFLINE_LOG:" + id + ":" + timeStr);
+              delay(50); // delay for tcp flush
+            }
+          }
+        }
       }
     }
   }
@@ -476,6 +505,17 @@ void checkNetworkCommand() {
     return;
   }
 
+  if (cmd.startsWith("OFFLINE_ACK:")) {
+    // POS ยืนยันการรับข้อมูล offline สำเร็จ
+    int qSize = prefs.getInt("q_size", 0);
+    for (int i = 0; i < qSize; i++) {
+      prefs.remove(("q" + String(i)).c_str());
+    }
+    prefs.putInt("q_size", 0);
+    Serial.println("-> [Offline] Queue cleared. Synced successfully.");
+    return;
+  }
+
   if (cmd.startsWith("ENROLL:")) {
     String payload = cmd.substring(7);
     int colon = payload.indexOf(':');
@@ -507,6 +547,41 @@ void checkNetworkCommand() {
 }
 
 // ---------------------------------------------------------------------------
+// Offline Logging Helper
+// ---------------------------------------------------------------------------
+void saveOfflineLog(int matchedId, bool isBreak) {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo, 2000)) { // รอเวลาสูงสุด 2 วิ
+    Serial.println("-> [ERROR] Failed to obtain NTP time");
+    lcdStatus("!! NO POS !!", "No Internet Time");
+    triggerBeep(2);
+    return;
+  }
+  
+  char timeStr[25];
+  strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+  
+  int qSize = prefs.getInt("q_size", 0);
+  String key = "q" + String(qSize);
+  
+  // Format: ID|2026-08-01T08:00:00 (ถ้าเป็น Break ให้ส่ง ID ติดลบ หรือใช้วิธีอื่น แต่ POS รองรับแค่ log แล้ว toggle, เราใช้บวกปกติไปก่อน)
+  String entry = String(matchedId) + "|" + String(timeStr);
+  if (isBreak) {
+     entry = String(matchedId) + "|BREAK|" + String(timeStr);
+  }
+  
+  prefs.putString(key.c_str(), entry);
+  prefs.putInt("q_size", qSize + 1);
+  
+  Serial.println("-> [Offline] Saved: " + entry);
+  
+  String name = prefs.getString(("s" + String(matchedId)).c_str(), "");
+  String displayName = name.isEmpty() ? "ID:" + String(matchedId) : name;
+  lcdStatus("Saved Offline!", displayName, "Will sync later");
+  triggerBeep(1);
+}
+
+// ---------------------------------------------------------------------------
 // โหมดสแกนปกติ
 // ---------------------------------------------------------------------------
 void doScanMode() {
@@ -529,20 +604,6 @@ void doScanMode() {
     Serial.println(p);
     triggerBeep(2);
     lcdStatus("Image Unclear", "Try Again");
-    liftFinger();
-    lcdStatus("S.Mart POS Ready", "Place your finger");
-    return;
-  }
-
-  // POS ไม่ได้ต่ออยู่
-  if (!client.connected()) {
-    unsigned long now = millis();
-    if (now - lastNoPosBeepTime > 10000) {
-      lastNoPosBeepTime = now;
-      triggerBeep(2);
-      lcdStatus("!! NO POS !!", "Check System");
-    }
-    Serial.println("[Scan] Image captured but POS not connected.");
     liftFinger();
     lcdStatus("S.Mart POS Ready", "Place your finger");
     return;
@@ -572,20 +633,26 @@ void doScanMode() {
     Serial.print(" Name: ");
     Serial.println(name);
 
-    sendToPOS("MATCH_ID:" + String(matchedId));
-    triggerBeep(1);
+    if (client.connected()) {
+      sendToPOS("MATCH_ID:" + String(matchedId));
+      triggerBeep(1);
 
-    // แสดงชื่อและสุ่มข้อความบน LCD (ภาษาอังกฤษล้วน)
-    const char* inMsgs[] = {
-      "Good morning!",
-      "Let's work hard!",
-      "Don't sleep! o_o",
-      "Have a nice day!",
-      "Keep fighting! ^_^"
-    };
-    int rIndex = random(5);
-    String displayName = name.isEmpty() ? "ID:" + String(matchedId) : name;
-    lcdStatus("Scan Success!", displayName, inMsgs[rIndex]);
+      // แสดงชื่อและสุ่มข้อความบน LCD (ภาษาอังกฤษล้วน)
+      const char* inMsgs[] = {
+        "Good morning!",
+        "Let's work hard!",
+        "Don't sleep! o_o",
+        "Have a nice day!",
+        "Keep fighting! ^_^"
+      };
+      int rIndex = random(5);
+      String displayName = name.isEmpty() ? "ID:" + String(matchedId) : name;
+      lcdStatus("Scan Success!", displayName, inMsgs[rIndex]);
+    } else {
+      // บันทึกแบบออฟไลน์
+      saveOfflineLog(matchedId, false);
+    }
+    
     liftFinger();
     delay(500); // ลด delay จาก 1500 ให้เร็วขึ้น
     lcdStatus("S.Mart POS Ready", "Place your finger",
@@ -644,12 +711,16 @@ void doBreakScanMode() {
     };
     int rIndex = random(5);
     String displayName = name.isEmpty() ? "ID:" + String(matchedId) : name;
-    lcdStatus("Clock Out OK!", displayName, outMsgs[rIndex]);
-    triggerBeep(1);
-
-    sendToPOS("BREAK_START:" + String(matchedId));
-    Serial.print("[ClockOut] BREAK_START (ClockOut) sent for ID: ");
-    Serial.println(matchedId);
+    
+    if (client.connected()) {
+      lcdStatus("Clock Out OK!", displayName, outMsgs[rIndex]);
+      triggerBeep(1);
+      sendToPOS("BREAK_START:" + String(matchedId));
+      Serial.print("[ClockOut] BREAK_START (ClockOut) sent for ID: ");
+      Serial.println(matchedId);
+    } else {
+      saveOfflineLog(matchedId, true);
+    }
 
     liftFinger();
     delay(500);

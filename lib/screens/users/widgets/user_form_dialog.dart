@@ -243,15 +243,23 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog> {
                       items: const [
                         DropdownMenuItem(
                           value: 'ADMIN',
-                          child: Text('Admin (ผู้ดูแล)'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'HR',
-                          child: Text('HR (บุคคล)'),
+                          child: Text('ผู้ดูแลร้าน'),
                         ),
                         DropdownMenuItem(
                           value: 'CASHIER',
-                          child: Text('Cashier (พนักงาน)'),
+                          child: Text('พนักงานหน้าร้านและแม่บ้าน'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'DRIVER',
+                          child: Text('พนักงานหลังร้าน / คนขับรถ'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'GAS_STATION',
+                          child: Text('พนักงานปั้ม'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'HR',
+                          child: Text('ฝ่ายบุคคล'),
                         ),
                       ],
                       onChanged: (val) {

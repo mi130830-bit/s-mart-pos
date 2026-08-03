@@ -71,7 +71,11 @@ class AuthController {
       bool isLegacy = false; // Flag to trigger update
 
       try {
-        isMatch = DBCrypt().checkpw(password, dbHash ?? '');
+        final rawHash = dbHash ?? '';
+        final normalizedHash = (rawHash.startsWith(r'$2b$') || rawHash.startsWith(r'$2y$'))
+            ? r'$2a$' + rawHash.substring(4)
+            : rawHash;
+        isMatch = DBCrypt().checkpw(password, normalizedHash);
         stdout.writeln('🔐 Auth: BCrypt Check Result: $isMatch');
       } catch (e) {
         stderr.writeln(
@@ -112,11 +116,26 @@ class AuthController {
         return Response.forbidden(jsonEncode({'error': 'Invalid credentials'}));
       }
 
+      // Fetch Employee Profile
+      final empResult = await conn.execute(
+        'SELECT id, display_name FROM employee_profile WHERE user_id = :uid LIMIT 1',
+        {'uid': row['id']},
+      );
+
+      int? employeeId;
+      String? employeeName;
+      if (empResult.rows.isNotEmpty) {
+        employeeId = int.tryParse(empResult.rows.first.colAt(0)?.toString() ?? '');
+        employeeName = empResult.rows.first.colAt(1)?.toString();
+      }
+
       // Generate JWT
       final jwt = JWT({
         'id': row['id'],
         'username': row['username'],
         'role': row['role'],
+        'employee_id': employeeId,
+        'employee_name': employeeName,
       }, issuer: 'https://s-link-pos.com');
 
       final token = jwt.sign(
@@ -144,6 +163,8 @@ class AuthController {
             'id': row['id'],
             'username': row['username'],
             'role': row['role'],
+            'employee_id': employeeId,
+            'employee_name': employeeName,
             'permissions': permissions,
           },
         }),

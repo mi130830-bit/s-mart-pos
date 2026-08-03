@@ -96,8 +96,8 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
       DateTime newEnd = isStart ? _endDate : picked;
       if (newEnd.isBefore(newStart)) newEnd = newStart;
       
-      if (newEnd.difference(newStart).inDays > 90) {
-        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', type: 'warning');
+      if (newEnd.difference(newStart).inDays > 366) {
+        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', type: 'warning');
         return;
       }
 

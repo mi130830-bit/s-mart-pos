@@ -62,8 +62,8 @@ class LeaveSyncService {
         final userName = reqData['user_name']?.toString() ?? '';
         LoggerService.debug('LeaveSync', '>>> Looking for employee: firebaseUid/id="$firebaseUidOrId", user_name="$userName"');
 
-        var emp = await _employeeRepo.getByFirebaseUid(firebaseUidOrId);
-        LoggerService.debug('LeaveSync', '>>> getByFirebaseUid("$firebaseUidOrId") => ${emp != null ? "FOUND id=${emp.id}" : "NOT FOUND"}');
+        var emp = await _employeeRepo.getByUserId(int.tryParse(firebaseUidOrId) ?? 0);
+        LoggerService.debug('LeaveSync', '>>> getByUserId("$firebaseUidOrId") => ${emp != null ? "FOUND id=${emp.id}" : "NOT FOUND"}');
         
         // Fallback 1: Integer ID
         if (emp == null) {
@@ -83,7 +83,7 @@ class LeaveSyncService {
         final employeeId = emp?.id ?? 0;
 
         if (employeeId == 0) {
-          LoggerService.warning('LeaveSync', '>>> SKIP: Employee not found for "$firebaseUidOrId" / "$userName"');
+          LoggerService.warning('LeaveSync', 'Employee not found for userId: $firebaseUidOrId / "$userName"');
           continue; // Skip this record, DO NOT mark as synced_to_sql
         }
 

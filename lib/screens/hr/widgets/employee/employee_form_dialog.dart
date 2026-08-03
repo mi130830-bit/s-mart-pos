@@ -5,7 +5,6 @@ import '../../../../models/hr/employee_profile.dart';
 import '../../../../state/hr/employee_provider.dart';
 import '../../../../models/user.dart';
 import '../../../../repositories/user_repository.dart';
-import '../../../../services/firestore_rest_service.dart';
 
 class EmployeeFormDialog extends ConsumerStatefulWidget {
   final EmployeeProfile? employee;
@@ -50,7 +49,7 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
   bool _isActive = true;
 
   List<User> _systemUsers = [];
-  List<Map<String, dynamic>> _slinkUsers = [];
+
   bool _isLoadingUsers = true;
 
   bool _isSaving = false;
@@ -90,18 +89,9 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
     try {
       final repo = UserRepository();
       final users = await repo.getAllUsers();
-      
-      List<Map<String, dynamic>> slinkUsers = [];
-      try {
-        slinkUsers = await FirestoreRestService.fetchSLinkUsers();
-      } catch (e) {
-        debugPrint('Error fetching S-Link users: $e');
-      }
-
       if (mounted) {
         setState(() {
           _systemUsers = users;
-          _slinkUsers = slinkUsers;
           _isLoadingUsers = false;
         });
       }
@@ -245,70 +235,82 @@ class _EmployeeFormDialogState extends ConsumerState<EmployeeFormDialog> {
     }
     return Builder(
       builder: (context) {
-        String? validVal = _firebaseUid ?? _userId?.toString();
-        bool exists = _slinkUsers.any((u) => u['id'].toString() == validVal) ||
-            _systemUsers.any((u) => u.id.toString() == validVal);
+        String? validVal = _userId?.toString();
+        bool exists = _systemUsers.any((u) => u.id.toString() == validVal);
         if (!exists) validVal = null;
 
-        return DropdownButtonFormField<String>(
-          initialValue: validVal,
-          decoration: const InputDecoration(labelText: 'เชื่อมโยงบัญชีผู้ใช้ในระบบ', border: OutlineInputBorder()),
-          items: [
-            const DropdownMenuItem<String>(
-              value: null,
-              child: Text('-- ไม่เชื่อมโยงบัญชี --'),
-            ),
-            ..._slinkUsers.map((u) {
-              final name = u['name'] ?? 'ไม่มีชื่อ';
-              final role = u['role'] ?? 'ไม่ระบุตำแหน่ง';
-              final uid = u['id'].toString();
-              final shortUid = uid.length > 8 ? '${uid.substring(0, 4)}...${uid.substring(uid.length - 4)}' : uid;
-              return DropdownMenuItem<String>(
-                value: uid,
-                child: Text('📱 $name ($role) [UID: $shortUid]'),
-              );
-            }),
-            ..._systemUsers.map((u) {
-              return DropdownMenuItem<String>(
-                value: u.id.toString(),
-                child: Text('💻 ${u.displayName} (${u.role})'),
-              );
-            }),
-          ],
-          onChanged: (v) {
-            setState(() {
-              if (v == null) {
-                _firebaseUid = null;
-                _userId = null;
-              } else {
-                final isNumeric = int.tryParse(v) != null;
-                if (!isNumeric || v.length > 10) {
-                  _firebaseUid = v;
-                  _userId = null;
-                  final slinkUser = _slinkUsers.firstWhere((u) => u['id'] == v, orElse: () => {});
-                  if (slinkUser.isNotEmpty && _displayNameCtrl.text.isEmpty) {
-                    _displayNameCtrl.text = slinkUser['name']?.toString() ?? '';
-                  }
-                  final slinkRole = (slinkUser['role']?.toString() ?? '').toUpperCase();
-                  if (['ADMIN', 'REQUESTER', 'DRIVER', 'GAS_STATION'].contains(slinkRole)) {
-                    _empType = slinkRole;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: validVal,
+              decoration: const InputDecoration(labelText: 'เชื่อมโยงบัญชีผู้ใช้ในระบบ', border: OutlineInputBorder()),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('-- ไม่เชื่อมโยงบัญชี --'),
+                ),
+                ..._systemUsers.map((u) {
+                  return DropdownMenuItem<String>(
+                    value: u.id.toString(),
+                    child: Text('💻 ${u.displayName} (${u.role})'),
+                  );
+                }),
+              ],
+              onChanged: (v) {
+                setState(() {
+                  if (v == null) {
+                    _userId = null;
+                    _firebaseUid = null;
                   } else {
-                    _empType = 'REQUESTER';
+                    _userId = int.tryParse(v);
+                    _firebaseUid = null;
+                    
+                    final localUser = _systemUsers.firstWhere(
+                      (u) => u.id == _userId, 
+                      orElse: () => User(id: 0, username: '', displayName: '', passwordHash: '', role: '', isActive: true, canViewCostPrice: false, canViewProfit: false)
+                    );
+                    
+                    if (localUser.id != 0 && _displayNameCtrl.text.isEmpty) {
+                      _displayNameCtrl.text = localUser.displayName.isNotEmpty ? localUser.displayName : localUser.username;
+                    }
+                    if (localUser.role == 'DRIVER') {
+                      _empType = 'DRIVER';
+                    } else if (['ADMIN', 'GAS_STATION', 'HR'].contains(localUser.role)) {
+                      _empType = localUser.role;
+                    } else {
+                      _empType = 'REQUESTER';
+                    }
                   }
-                } else {
-                  _userId = int.tryParse(v);
-                  _firebaseUid = null;
-                  final localUser = _systemUsers.firstWhere((u) => u.id == _userId, orElse: () => User(id: 0, username: '', displayName: '', passwordHash: '', role: '', isActive: true, canViewCostPrice: false, canViewProfit: false));
-                  if (localUser.id != 0 && _displayNameCtrl.text.isEmpty) {
-                    _displayNameCtrl.text = localUser.displayName.isNotEmpty ? localUser.displayName : localUser.username;
-                  }
-                  if (localUser.role == 'DRIVER') _empType = 'DRIVER';
-                }
-              }
-            });
-          },
+                });
+              },
+            ),
+            if (_userId != null && exists) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('📱 ข้อมูลสำหรับเข้าแอป S-Link:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                    const SizedBox(height: 5),
+                    Text('ชื่อผู้ใช้ (Username): ${_systemUsers.firstWhere((u) => u.id == _userId).username}'),
+                    const Text('รหัสผ่าน (Password): (รหัสผ่านชุดเดียวกับในระบบ)'),
+                    const SizedBox(height: 5),
+                    const Text('หากลืมรหัสผ่าน ให้ไปตั้งค่าใหม่ที่เมนู "ตั้งค่า -> บัญชีผู้ใช้ในระบบ"', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  ],
+                ),
+              ),
+            ]
+          ],
         );
       },
+
     );
   }
 

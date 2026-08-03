@@ -42,6 +42,7 @@ class DashboardState {
   final int rangeOrders;
   final String aiAnalysis;
   final bool isAnalyzing;
+  final List<Map<String, String>> chatHistory;
 
   const DashboardState({
     this.isLoading = true,
@@ -59,13 +60,14 @@ class DashboardState {
     this.creditStatsWeek = const {'amount': 0.0, 'count': 0},
     this.creditStatsMonth = const {'amount': 0.0, 'count': 0},
     this.creditStatsYear = const {'amount': 0.0, 'count': 0},
-    this.selectedPeriod = 'MONTH',
+    this.selectedPeriod = 'TODAY',
     this.filteredStats = const [],
     this.rangeSales = 0.0,
     this.rangeProfit = 0.0,
     this.rangeOrders = 0,
     this.aiAnalysis = '',
     this.isAnalyzing = false,
+    this.chatHistory = const [],
   });
 
   DashboardState copyWith({
@@ -91,6 +93,7 @@ class DashboardState {
     int? rangeOrders,
     String? aiAnalysis,
     bool? isAnalyzing,
+    List<Map<String, String>>? chatHistory,
   }) {
     return DashboardState(
       isLoading: isLoading ?? this.isLoading,
@@ -115,6 +118,7 @@ class DashboardState {
       rangeOrders: rangeOrders ?? this.rangeOrders,
       aiAnalysis: aiAnalysis ?? this.aiAnalysis,
       isAnalyzing: isAnalyzing ?? this.isAnalyzing,
+      chatHistory: chatHistory ?? this.chatHistory,
     );
   }
 }
@@ -214,8 +218,17 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
           type = 'MONTHLY';
           break;
         case 'MONTH':
-        default:
           start = DateTime(now.year, now.month, 1);
+          type = 'DAILY';
+          break;
+        case 'WEEK':
+          final wStart = now.subtract(Duration(days: now.weekday - 1));
+          start = DateTime(wStart.year, wStart.month, wStart.day);
+          type = 'DAILY';
+          break;
+        case 'TODAY':
+        default:
+          start = DateTime(now.year, now.month, now.day);
           type = 'DAILY';
           break;
       }
@@ -269,6 +282,54 @@ class DashboardNotifier extends AutoDisposeNotifier<DashboardState> {
   }
 
   // ── AI ───────────────────────────────────────────────────────────────────────
+
+  Future<void> startAiChat(String persona) async {
+    try {
+      await _aiService.startChat(persona: persona);
+      state = state.copyWith(chatHistory: [
+        {'role': 'ai', 'text': 'สวัสดีค่ะ! พร้อมให้คำปรึกษาและข้อมูลเกี่ยวกับร้านแล้วค่ะ ต้องการให้ช่วยเรื่องอะไรคะ?'}
+      ]);
+    } catch (e) {
+      state = state.copyWith(chatHistory: [
+        {'role': 'ai', 'text': 'ไม่สามารถเริ่มการสนทนาได้: \$e'}
+      ]);
+    }
+  }
+
+  void clearAiChat() {
+    state = state.copyWith(chatHistory: []);
+  }
+
+  Future<void> sendChatMessage(String text, String persona) async {
+    if (text.trim().isEmpty) return;
+
+    final newHistory = List<Map<String, String>>.from(state.chatHistory);
+    newHistory.add({'role': 'user', 'text': text});
+    
+    state = state.copyWith(
+      chatHistory: newHistory,
+      isAnalyzing: true,
+    );
+
+    try {
+      final now = DateTime.now();
+      final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      final contextPrompt = "$text\n\n(System Note: วันนี้คือวันที่ $todayStr ปี ค.ศ. ${now.year})";
+
+      final response = await _aiService.sendMessage(contextPrompt);
+      newHistory.add({'role': 'ai', 'text': response});
+      state = state.copyWith(
+        chatHistory: newHistory,
+        isAnalyzing: false,
+      );
+    } catch (e) {
+      newHistory.add({'role': 'ai', 'text': 'เกิดข้อผิดพลาด: \$e'});
+      state = state.copyWith(
+        chatHistory: newHistory,
+        isAnalyzing: false,
+      );
+    }
+  }
 
   Future<void> fetchAiAnalysis() async {
     if (state.isAnalyzing) return;

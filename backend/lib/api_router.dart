@@ -13,6 +13,8 @@ import 'controllers/debt_controller.dart';
 import 'controllers/job_controller.dart';
 import 'controllers/reward_controller.dart';
 import 'controllers/gps_controller.dart';
+import 'controllers/employee_controller.dart';
+import 'controllers/work_log_controller.dart';
 import 'package:shelf/shelf.dart';
 import 'middlewares/jwt_middleware.dart';
 
@@ -32,13 +34,7 @@ class ApiRouter {
     router.mount('/line', LineController().router.call);
     router.mount('/payment', PaymentController().router.call);
 
-    // ✅ Public Config Routes (No JWT — S-Link Driver QR ดึง PromptPay ID)
-    router.mount('/config', ConfigController().router.call);
-
-    // Public GPS Route
-    router.mount('/gps', GpsController().router.call);
-
-    // Secured Routes (Requires Firebase JWT from S-Link)
+    // Secured Routes (Requires Custom JWT from S-Link)
     router.mount('/products', securedPipeline.addHandler(ProductController().router.call));
     router.mount('/customers', securedPipeline.addHandler(CustomerController().router.call));
     router.mount('/orders', securedPipeline.addHandler(OrderController().router.call));
@@ -47,6 +43,10 @@ class ApiRouter {
     router.mount('/debt', securedPipeline.addHandler(DebtController().router.call));
     router.mount('/jobs', securedPipeline.addHandler(JobController().router.call));
     router.mount('/rewards', securedPipeline.addHandler(RewardController().router.call));
+    router.mount('/employees', securedPipeline.addHandler(EmployeeController().router.call));
+    router.mount('/hr/worklogs', securedPipeline.addHandler(WorkLogController().router.call));
+    router.mount('/config', securedPipeline.addHandler(ConfigController().router.call));
+    router.mount('/gps', securedPipeline.addHandler(GpsController().router.call));
 
     return router;
   }

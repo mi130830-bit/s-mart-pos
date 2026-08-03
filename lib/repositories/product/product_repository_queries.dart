@@ -387,6 +387,22 @@ extension ProductRepositoryQueries on ProductRepository {
 
   Future<List<Product>> getRecentProducts(int limit) async {
     try {
+      if (!_dbService.isConnected()) await _dbService.connect();
+      if (_dbService.isConnected()) {
+        final rows = await _dbService.query(
+          'SELECT * FROM product WHERE isActive = 1 ORDER BY id DESC LIMIT :limit',
+          {'limit': limit},
+        );
+        if (rows.isNotEmpty) {
+          List<Product> products = rows.map((row) => Product.fromJson(row)).toList();
+          return await _applyProductEnhancements(products);
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Online getRecentProducts failed: $e. Falling back to Isar...');
+    }
+
+    try {
       final sorted = await _isar.productCollections
           .where()
           .sortByRemoteIdDesc()

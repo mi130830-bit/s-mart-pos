@@ -138,6 +138,34 @@ class MySQLService {
     await execute(sql);
   }
 
+  Future<void> initShopWorkLogTables() async {
+    const sqlLogs = '''
+      CREATE TABLE IF NOT EXISTS shop_work_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sync_id VARCHAR(100) NOT NULL UNIQUE,
+        deliverer_id VARCHAR(100) NOT NULL,
+        logged_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX(deliverer_id),
+        INDEX(logged_at)
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ''';
+    await execute(sqlLogs);
+
+    const sqlItems = '''
+      CREATE TABLE IF NOT EXISTS shop_work_log_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        log_sync_id VARCHAR(100) NOT NULL,
+        description VARCHAR(255) NOT NULL,
+        quantity DECIMAL(10,2) NOT NULL DEFAULT 1.0,
+        unit VARCHAR(50) NOT NULL DEFAULT 'ครั้ง',
+        INDEX(log_sync_id),
+        FOREIGN KEY (log_sync_id) REFERENCES shop_work_logs(sync_id) ON DELETE CASCADE
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ''';
+    await execute(sqlItems);
+  }
+
   Future<void> initPosCommandsTable() async {
     const sql = '''
       CREATE TABLE IF NOT EXISTS pos_commands (

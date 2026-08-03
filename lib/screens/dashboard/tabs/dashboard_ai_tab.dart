@@ -18,16 +18,11 @@ class DashboardAiTab extends ConsumerWidget {
       child: Column(
         children: [
           DashboardAiSection(
-            aiAnalysis: state.aiAnalysis,
+            chatHistory: state.chatHistory,
             isAnalyzing: state.isAnalyzing,
-            onStart: () => notifier.fetchAiAnalysis(),
-            onRefresh: () => notifier.fetchAiAnalysis(),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'AI จะวิเคราะห์จากข้อมูลเมื่อกราฟแสดงผล (เดือนนี้ หรือ ปีนี้)',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-            textAlign: TextAlign.center,
+            onStartChat: (persona) => notifier.startAiChat(persona),
+            onSendMessage: (text) => notifier.sendChatMessage(text, 'user'),
+            onClearChat: () => notifier.clearAiChat(),
           ),
         ],
       ),

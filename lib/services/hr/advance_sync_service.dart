@@ -5,7 +5,7 @@ import '../../models/hr/advance_payment.dart';
 import '../logger_service.dart';
 
 import '../../repositories/hr/employee_repository.dart';
-
+import '../../models/hr/employee_profile.dart';
 class AdvanceSyncService {
   final AdvanceRepository _advanceRepo = AdvanceRepository();
   final EmployeeRepository _employeeRepo = EmployeeRepository();
@@ -52,7 +52,11 @@ class AdvanceSyncService {
         // แต่เพื่อความง่าย เราจะ sync ลง SQL เป็นประวัติเลยไม่ว่าจะ pending/approved/rejected
         
         final firebaseUid = reqData['employee_id']?.toString() ?? '';
-        final emp = await _employeeRepo.getByFirebaseUid(firebaseUid);
+        final empId = int.tryParse(firebaseUid);
+        EmployeeProfile? emp;
+        if (empId != null) {
+          emp = await _employeeRepo.getByUserId(empId);
+        }
         final employeeId = emp?.id ?? 0;
         
         final amountStr = reqData['amount']?.toString() ?? '0';

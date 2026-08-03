@@ -315,6 +315,10 @@ class _QuickMenuDialogState extends ConsumerState<QuickMenuDialog> {
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): () =>
               Navigator.of(context).pop(),
+          // ✅ ดัก F4 ใน Dialog ไว้เลย ป้องกัน event bubble ขึ้นไป parent
+          // ที่จะทำให้ showQuickMenuDialog ถูกเรียกซ้ำหรือโปรแกรมเด้งออก
+          const SingleActivator(LogicalKeyboardKey.f4): () =>
+              Navigator.of(context).pop(),
         },
         child: KeyboardListener(
           // Handle keyboard shortcuts

@@ -8,7 +8,9 @@ import '../../repositories/hr/attendance_repository.dart';
 import '../../repositories/hr/leave_repository.dart';
 import '../../repositories/hr/special_holiday_repository.dart';
 import '../../services/hr/attendance_service.dart';
-
+import '../../services/firestore_rest_service.dart';
+import '../../services/logger_service.dart';
+import 'package:intl/intl.dart';
 class AttendanceState {
   final List<AttendanceLog> todayAttendance;
   final List<LeaveRequest> openTempLeaves;
@@ -208,10 +210,23 @@ class AttendanceNotifier extends AutoDisposeNotifier<AttendanceState> {
     }
   }
 
-  Future<void> deleteTodayLog(int employeeId) async {
+  Future<void> deleteTodayLog(EmployeeProfile emp) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _repo.deleteTodayLog(employeeId);
+      await _repo.deleteTodayLog(emp.id);
+
+      // ลบออกจาก Firestore ด้วย เพื่อไม่ให้ Sync Service ดึงข้อมูลกลับมาอีก
+      if (emp.firebaseUid != null && emp.firebaseUid!.isNotEmpty) {
+        final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final docId = '${emp.firebaseUid}_$dateStr';
+        try {
+          await FirestoreRestService.deleteDocument('attendance_logs', docId);
+          LoggerService.info('AttendanceNotifier', 'Deleted attendance log from Firestore: $docId');
+        } catch (e) {
+          LoggerService.error('AttendanceNotifier', 'Failed to delete attendance log from Firestore: $e');
+        }
+      }
+
       await loadToday();
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);

@@ -56,6 +56,7 @@ class DatabaseInitializer {
           .initActivityLogTable(); // ✅ Added: Fixes the crash when logging activity
       await _db.initSystemSettingsTable(); // ✅ Global Settings Sync
       await _db.initPosCommandsTable(); // ✅ POS Commands (Local Polling)
+      await _db.initShopWorkLogTables(); // ✅ Shop Work Logs (Offline-First Migration)
 
       // ------------------------------------------------------------------
       // ✅ [AUTO-FIX] ตรวจสอบและเพิ่มคอลัมน์ที่ขาดในตาราง Order

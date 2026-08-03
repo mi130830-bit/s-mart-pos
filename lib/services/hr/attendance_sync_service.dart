@@ -5,6 +5,7 @@ import '../../repositories/hr/employee_repository.dart';
 import '../../models/hr/attendance_log.dart';
 import '../logger_service.dart';
 import 'package:intl/intl.dart';
+import '../../models/hr/employee_profile.dart';
 
 class AttendanceSyncService {
   final AttendanceRepository _attendanceRepo = AttendanceRepository();
@@ -75,8 +76,12 @@ class AttendanceSyncService {
           return null;
         }
 
-        // Find employee by firebase_uid
-        final emp = await _employeeRepo.getByFirebaseUid(userId);
+        // Find employee by user_id
+        final empId = int.tryParse(userId);
+        EmployeeProfile? emp;
+        if (empId != null) {
+            emp = await _employeeRepo.getByUserId(empId);
+        }
         if (emp != null) {
           final attendanceLog = AttendanceLog(
             id: 0,
@@ -118,8 +123,9 @@ class AttendanceSyncService {
   Future<void> syncAttendanceToCloud(int employeeId) async {
     try {
       final employee = await _employeeRepo.getById(employeeId);
-      if (employee == null || employee.firebaseUid == null || employee.firebaseUid!.isEmpty) {
-        return; // Employee not found or has no S-Link account linked
+      if (employee == null || employee.userId == null || employee.userId! <= 0) {
+        LoggerService.warning('AttendanceSync', 'Skipping syncToCloud: Employee missing user_id');
+        return;
       }
 
       final todayLog = await _attendanceRepo.getTodayLogByEmployee(employeeId);
@@ -127,11 +133,12 @@ class AttendanceSyncService {
         return; // No log for today to sync
       }
 
-      final dateStr = todayLog.date.toIso8601String().split('T')[0];
-      final docId = '${employee.firebaseUid}_$dateStr';
+      final dateStr = DateFormat('yyyy-MM-dd').format(todayLog.date);
+      // 🔥 Document ID matches S-Link format: userId_date
+      final docId = '${employee.userId}_$dateStr';
 
       final Map<String, dynamic> data = {
-        'user_id': employee.firebaseUid,
+        'user_id': employee.userId.toString(),
         'user_name': employee.displayName ?? '',
         'date': dateStr,
         'status': todayLog.status,
@@ -146,8 +153,8 @@ class AttendanceSyncService {
       if (todayLog.tempOut != null) data['temp_out_time'] = todayLog.tempOut!.toIso8601String();
       if (todayLog.backToWork != null) data['back_to_work_time'] = todayLog.backToWork!.toIso8601String();
 
-      // Using updateDocument (PATCH), which creates the doc if it doesn't exist
-      await FirestoreRestService.updateDocument('attendance_logs', docId, data);
+      // Using setDocumentFull (PATCH without updateMask), which creates or overwrites the doc completely
+      await FirestoreRestService.setDocumentFull('attendance_logs', docId, data);
       LoggerService.info('AttendanceSync', 'Successfully synced attendance to cloud for ${employee.displayName}');
     } catch (e) {
       LoggerService.error('AttendanceSync', 'Error syncing attendance to cloud for employee #$employeeId', e);

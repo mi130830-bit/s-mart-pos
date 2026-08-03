@@ -356,7 +356,6 @@ class ExcelExportService {
         bold: true,
         horizontalAlign: HorizontalAlign.Center,
         verticalAlign: VerticalAlign.Center,
-        backgroundColorHex: ExcelColor.fromHexString('#E0E0E0'),
         textWrapping: TextWrapping.WrapText,
       );
 
@@ -410,6 +409,14 @@ class ExcelExportService {
 
       // Generate Rows
       double currentOdo = initialOdometers[baseSheetName] ?? 0.0;
+      if (currentOdo == 0.0) {
+        for (final k in initialOdometers.keys) {
+          if (baseSheetName.contains(k) || k.contains(baseSheetName)) {
+            currentOdo = initialOdometers[k]!;
+            break;
+          }
+        }
+      }
       int rowIndex = 3; // Data starts at row index 3 (4th row)
 
       for (var job in logs) {
@@ -528,7 +535,6 @@ class ExcelExportService {
           bold: true,
           horizontalAlign: HorizontalAlign.Center,
           verticalAlign: VerticalAlign.Center,
-          backgroundColorHex: ExcelColor.fromHexString('#E0E0E0'),
           textWrapping: TextWrapping.WrapText,
         );
 
@@ -582,6 +588,14 @@ class ExcelExportService {
 
         // Generate Rows
         double currentOdo = initialOdometers[entry.key] ?? 0.0;
+        if (currentOdo == 0.0) {
+          for (final k in initialOdometers.keys) {
+            if (entry.key.contains(k) || k.contains(entry.key)) {
+              currentOdo = initialOdometers[k]!;
+              break;
+            }
+          }
+        }
         int rowIndex = 3; // Data starts at row index 3 (4th row)
 
         for (var job in logs) {

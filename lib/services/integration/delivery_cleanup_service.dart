@@ -81,8 +81,8 @@ class DeliveryCleanupService {
         return;
       }
 
-      // 1. Fetch jobs older than 60 minutes
-      final expiredJobIds = await _firebaseService.fetchExpiredPickupJobs(60);
+      // 1. Fetch jobs older than 15 minutes
+      final expiredJobIds = await _firebaseService.fetchExpiredPickupJobs(15);
 
       if (expiredJobIds.isNotEmpty) {
         LoggerService.info('DeliveryCleanup', 'Found ${expiredJobIds.length} expired pickup jobs. Deleting...');
@@ -262,7 +262,8 @@ class DeliveryCleanupService {
           }
 
           // ✅ Bill image URL from S-Link (proof photo taken after delivery)
-          String? billImageUrl = job['proof_image_url']
+          String? billImageUrl = job['proof_image']
+              ?? job['proof_image_url']
               ?? job['receipt_image_url']
               ?? job['billImageUrl'];
           // If null, look in completed_items or delivery_proof sub-object

@@ -149,8 +149,8 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
     );
     if (picked != null && mounted) {
       DateTime newEndDate = _endDate.isBefore(picked) ? picked : _endDate;
-      if (newEndDate.difference(picked).inDays > 90) {
-        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', type: 'warning');
+      if (newEndDate.difference(picked).inDays > 366) {
+        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', type: 'warning');
         return;
       }
       setState(() {
@@ -177,8 +177,8 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       },
     );
     if (picked != null && mounted) {
-      if (picked.difference(_startDate).inDays > 90) {
-        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', type: 'warning');
+      if (picked.difference(_startDate).inDays > 366) {
+        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', type: 'warning');
         return;
       }
       setState(() {

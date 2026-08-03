@@ -67,6 +67,19 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
                       },
                     ),
                     IconButton(
+                      icon: const Icon(Icons.cloud_upload, color: Colors.blue),
+                      tooltip: 'บังคับส่งข้อมูลทั้งหมดขึ้นคลาวด์ (S-Link)',
+                      onPressed: () async {
+                        SnackbarUtils.showLeft(context, 'กำลังส่งข้อมูลขึ้น S-Link...');
+                        for (var emp in employeeState.employees) {
+                           await AttendanceSyncService().syncAttendanceToCloud(emp.id);
+                        }
+                        if (context.mounted) {
+                          SnackbarUtils.showLeft(context, 'ส่งข้อมูลลงเวลาทั้งหมดขึ้นคลาวด์เรียบร้อยแล้ว');
+                        }
+                      },
+                    ),
+                    IconButton(
                       icon: const Icon(Icons.delete_forever, color: Colors.red),
                       tooltip: 'ล้างรายการเข้าออกงานทั้งหมด',
                       onPressed: _clearAllAttendance,

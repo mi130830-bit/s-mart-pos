@@ -32,6 +32,8 @@ class FingerprintNetworkService {
   Function(int fingerprintSlotId)? onMatchDetected;
   Function(int fingerprintSlotId)? onClockOutDetected;
   Function(int fingerprintSlotId)? onBreakStartDetected; // สำหรับปุ่มกดออกพัก
+  Function(int fingerprintSlotId, DateTime timestamp)? onOfflineLogDetected; // ประวัติออฟไลน์
+  Function(int fingerprintSlotId, DateTime timestamp)? onOfflineBreakDetected; // ประวัติออฟไลน์ (ออกพัก)
   Function(String message)? onAlertReceived;
   Function(bool success, int slotId)? onEnrollResult;
   Function(int step, String message)? onEnrollStep;
@@ -130,14 +132,30 @@ class FingerprintNetworkService {
       _connectedAddress = address; // เก็บตัวดั้งเดิมไว้ (เช่น fingerprint.local)
       _shouldReconnect = true;
 
+      final StringBuffer buffer = StringBuffer();
+      
       _socketSubscription = _socket!.listen(
         (Uint8List data) {
-          final String lines = utf8.decode(data);
-          for (final line in lines.split('\n')) {
-            final trimmed = line.trim();
-            if (trimmed.isNotEmpty) {
-              _parseSerialLine(trimmed);
+          try {
+            final String chunk = utf8.decode(data, allowMalformed: true);
+            buffer.write(chunk);
+            
+            String content = buffer.toString();
+            while (content.contains('\n')) {
+              final int nextLineIdx = content.indexOf('\n');
+              final String line = content.substring(0, nextLineIdx).trim();
+              
+              if (line.isNotEmpty) {
+                _parseSerialLine(line);
+              }
+              
+              content = content.substring(nextLineIdx + 1);
             }
+            
+            buffer.clear();
+            buffer.write(content);
+          } catch (e) {
+            debugPrint('❌ [Fingerprint] Decode Error: $e');
           }
         },
         onError: (err) {
@@ -273,6 +291,39 @@ class FingerprintNetworkService {
       if (matchedId != null) {
         debugPrint('👆 [Fingerprint] ตรวจพบลายนิ้วมือ (ออกพัก) ID: $matchedId');
         onBreakStartDetected?.call(matchedId);
+      }
+    } else if (line.startsWith('OFFLINE_LOG:')) {
+      // Format: OFFLINE_LOG:5:2026-08-01T08:00:00  หรือ OFFLINE_LOG:5:BREAK|2026-08-01T08:00:00
+      final rest = line.substring('OFFLINE_LOG:'.length).trim();
+      final parts = rest.split(':');
+      if (parts.length >= 2) {
+        final idStr = parts[0];
+        final timePart = parts.sublist(1).join(':'); // reconnect
+        
+        final slotId = int.tryParse(idStr);
+        if (slotId != null) {
+          bool isBreak = false;
+          String timeStr = timePart;
+          if (timePart.startsWith('BREAK|')) {
+            isBreak = true;
+            timeStr = timePart.substring('BREAK|'.length);
+          }
+          
+          try {
+            final timestamp = DateTime.parse(timeStr);
+            if (isBreak) {
+              debugPrint('👆 [Fingerprint] รับข้อมูลออฟไลน์ (ออกพัก) ID: $slotId เวลา: $timestamp');
+              onOfflineBreakDetected?.call(slotId, timestamp);
+            } else {
+              debugPrint('👆 [Fingerprint] รับข้อมูลออฟไลน์ ID: $slotId เวลา: $timestamp');
+              onOfflineLogDetected?.call(slotId, timestamp);
+            }
+            // ส่ง ACK กลับไปให้ ESP32 เคลียร์คิว
+            sendCommand('OFFLINE_ACK:1');
+          } catch (e) {
+            debugPrint('❌ [Fingerprint] แปลงเวลาออฟไลน์ไม่สำเร็จ: $timeStr');
+          }
+        }
       }
     } else if (line.startsWith('ENROLL_OK:')) {
       final idStr = line.substring('ENROLL_OK:'.length).trim();

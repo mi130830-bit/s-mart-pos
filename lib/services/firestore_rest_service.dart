@@ -188,6 +188,13 @@ class FirestoreRestService {
     }
   }
 
+  static Future<void> setDocumentFull(String collection, String docId, Map<String, dynamic> data) async {
+    final result = await _instance.setDocumentFull(collection, docId, data);
+    if (!result.isSuccess) {
+      throw Exception(result.errorMessage);
+    }
+  }
+
   static Future<void> deleteDocument(String collection, String docId) async {
     final result = await _instance.removeDocument(collection, docId);
     if (!result.isSuccess) {

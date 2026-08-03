@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:developer' as developer;
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:http/http.dart' as http;
@@ -49,7 +50,7 @@ class GpsController {
           loc['status'] = 'OFFLINE';
           _sendTelegramAlert('🛑 $vehicleName ดับเครื่อง! สัญญาณ GPS ขาดหาย');
           _sseController.add(jsonEncode(loc));
-          print('[GPS] $vehicleName → OFFLINE (no ping for ${secondsAgo.toStringAsFixed(0)}s)');
+          developer.log('[GPS] $vehicleName → OFFLINE (no ping for ${secondsAgo.toStringAsFixed(0)}s)');
         }
 
         // เกิน 5 นาที → Purge ออกจาก Memory
@@ -62,7 +63,7 @@ class GpsController {
         _vehicles.remove(name);
         _lastPingTimes.remove(name);
         _vehicleJobs.remove(name);
-        print('[GPS] Purged offline vehicle: $name');
+        developer.log('[GPS] Purged offline vehicle: $name');
       }
     });
   }
@@ -74,9 +75,9 @@ class GpsController {
         'chat_id': telegramChatId,
         'text': message,
       });
-      print('[Telegram] Sent: $message');
+      developer.log('[Telegram] Sent: $message');
     } catch (e) {
-      print('[Telegram] Error: $e');
+      developer.log('[Telegram] Error: $e');
     }
   }
 
@@ -143,7 +144,7 @@ class GpsController {
         };
 
         _vehicles[vehicleName] = locationData;
-        print('[GPS] $vehicleName → lat:$lat lng:$lng speed:${locationData['speed']}');
+        developer.log('[GPS] $vehicleName → lat:$lat lng:$lng speed:${locationData['speed']}');
 
         // ส่ง delta event เฉพาะรถคันที่อัปเดต (ไม่ส่ง array ทั้งหมด)
         _sseController.add(jsonEncode(locationData));
@@ -151,7 +152,7 @@ class GpsController {
         return Response.ok('{"status":"success"}',
             headers: {'Content-Type': 'application/json'});
       } catch (e) {
-        print('[GPS] POST error: $e');
+        developer.log('[GPS] POST error: $e');
         return Response.badRequest(body: 'Invalid JSON');
       }
     });
@@ -219,7 +220,9 @@ class GpsController {
         ));
         void sendEvent(String data) => sink.add(utf8.encode('data: $data\n\n'));
         if (_vehicles.isNotEmpty) {
-          for (final loc in _vehicles.values) sendEvent(jsonEncode(loc));
+          for (final loc in _vehicles.values) {
+            sendEvent(jsonEncode(loc));
+          }
         } else {
           sendEvent(jsonEncode({'status': 'OFFLINE'}));
         }

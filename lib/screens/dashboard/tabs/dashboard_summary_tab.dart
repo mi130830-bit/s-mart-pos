@@ -184,6 +184,8 @@ class _PeriodSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return SegmentedButton<String>(
       segments: const [
+        ButtonSegment(value: 'TODAY', label: Text('วันนี้')),
+        ButtonSegment(value: 'WEEK', label: Text('อาทิตย์นี้')),
         ButtonSegment(value: 'MONTH', label: Text('เดือนนี้')),
         ButtonSegment(value: 'YEAR', label: Text('ปีนี้')),
       ],

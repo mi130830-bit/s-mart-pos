@@ -4,7 +4,7 @@ description: "Hybrid POS (S_MartPOS) for Desktop/Windows."
 
 publish_to: 'none'
 
-version: 1.7.4
+version: 1.7.11
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
@@ -56,6 +56,7 @@ dependencies:
   flutter_riverpod: ^2.6.1
   package_info_plus: ^9.0.1
   flutter_libserialport: ^0.4.0
+  google_generative_ai: ^0.4.7
 
 
 dev_dependencies:

@@ -184,6 +184,7 @@ class EmployeeRepository {
   Future<void> update(EmployeeProfile emp) async {
     await _db.execute('''
       UPDATE employee_profile SET
+        user_id = :user_id,
         firebase_uid = :firebase_uid,
         employee_code = :code,
         display_name = :display_name,
@@ -205,6 +206,7 @@ class EmployeeRepository {
       WHERE id = :id
     ''', {
       'id': emp.id,
+      'user_id': emp.userId,
       'firebase_uid': emp.firebaseUid,
       'code': emp.employeeCode,
       'display_name': emp.displayName,

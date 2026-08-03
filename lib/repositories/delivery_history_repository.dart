@@ -97,14 +97,14 @@ class DeliveryHistoryRepository {
           debugPrint('🔄 [DeliveryHistoryRepository] Updating existing job: $firebaseJobId');
           final sqlUpdate = '''
             UPDATE delivery_history SET 
-              driverName = :driver,
-              vehiclePlate = :vehicle,
-              locationUrl = :locUrl,
-              billImageUrl = :billUrl,
-              destinationLat = :destLat,
-              destinationLng = :destLng,
-              distanceKm = :dist,
-              fuelCostEstimate = :fuel
+              driverName = COALESCE(:driver, driverName),
+              vehiclePlate = COALESCE(:vehicle, vehiclePlate),
+              locationUrl = COALESCE(:locUrl, locationUrl),
+              billImageUrl = COALESCE(:billUrl, billImageUrl),
+              destinationLat = COALESCE(:destLat, destinationLat),
+              destinationLng = COALESCE(:destLng, destinationLng),
+              distanceKm = CASE WHEN :dist > 0 THEN :dist ELSE distanceKm END,
+              fuelCostEstimate = CASE WHEN :fuel > 0 THEN :fuel ELSE fuelCostEstimate END
             WHERE firebaseJobId = :fid
           ''';
           await _db.execute(sqlUpdate, {

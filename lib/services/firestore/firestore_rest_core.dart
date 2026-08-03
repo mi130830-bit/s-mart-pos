@@ -21,6 +21,25 @@ extension FirestoreRestCore on FirestoreRestService {
     return FirestoreResult.success(docId);
   }
 
+  Future<FirestoreResult<void>> setDocumentFull(String collection, String docId, Map<String, dynamic> data) async {
+    final fields = <String, dynamic>{};
+    data.forEach((key, value) {
+      fields[key] = _encodeValue(value);
+    });
+
+    final payload = {"fields": fields};
+
+    final response = await _sendRequest(
+      method: 'PATCH',
+      uri: Uri.parse('${FirestoreRestService.baseUrl}/$collection/$docId'),
+      payload: payload,
+      logPrefix: 'setDocumentFull',
+    );
+
+    if (!response.isSuccess) return FirestoreResult.failure(response.errorMessage);
+    return FirestoreResult.success(null);
+  }
+
   Future<FirestoreResult<void>> setDocument(String collection, String docId, Map<String, dynamic> updates) async {
     final fields = <String, dynamic>{};
     updates.forEach((key, value) {

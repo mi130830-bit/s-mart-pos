@@ -4,6 +4,94 @@
 
 ---
 
+## [2026-08-03] UI & Sorting Enhancement: Product Search Dialog (POS v1.7.10) & S-Link Attendance Fix
+
+### 📱 S-Link → v3.4.13+96
+
+**1. [Bug Fix] แก้ไขหน้าลงเวลาเข้างาน (AttendanceScreen) หมุนค้างบางเครื่อง**
+- **ไฟล์:** `lib/features/hr/screens/attendance_screen.dart`
+- **สาเหตุ:** `initState()` เช็คเงื่อนไข `authProvider.isLoading || authProvider.currentUser == null` ทำให้กรณีที่ Auth โหลดเสร็จแล้ว แต่ `currentUser` เป็น null หรือโหลดช้า ตัวหน้าจอจะไปแอด listener รอ แต่ listener จะไม่มีวันถูกเรียกอีกเพราะ `isLoading` เป็น false ไปแล้ว ทำให้ `_isLoading` ค้างเป็น `true` (หมุนโลดดิ้งค้างตลอดไป)
+- **การแก้ไข:** 
+  - ปรับเงื่อนไขใน `initState()` ให้เช็คเฉพาะ `authProvider.isLoading` เมื่อโหลดเสร็จแล้วให้เรียก `_loadTodayLog()` ทันที หาก `currentUser == null` ระบบจะแจ้งเตือนว่าไม่พบผู้ใช้และหยุดหมุนทันที
+  - เพิ่ม Safety Fallback Timer 10 วินาที เพื่อการันตีว่าหน้าจอจะไม่มีทางหมุนค้างตลอดไปแน่นอน
+
+---
+
+### 🖥️ POS Desktop → v1.7.10 (`S_MartPOS_Setup_v1.7.10.exe`)
+
+**1. [Enhancement] ปรับการเรียงลำดับและความจุสินค้าหน้าค้นหา (ProductSearchDialogForSelect)**
+- **ไฟล์:** `lib/repositories/product/product_repository_queries.dart`, `lib/screens/products/widgets/product_search_dialog_for_select.dart`
+- **สาเหตุเดิม:** ในหน้าต่างค้นหาสินค้า โค้ดเดิมดึงสินค้าล่าสุดมาแสดงเพียง 5 รายการ (`getRecentProducts(5)`) ทำให้เหลือพื้นที่ว่างล่างหน้าต่างเยอะ และแสดงไม่เต็ม 7 รายการตามสัดส่วนหน้า
+- **การแก้ไข:** 
+  - ปรับปรุง `getRecentProducts(limit)` ให้เรียงลำดับจาก **สินค้าลงใหม่ล่าสุดขึ้นก่อนเสมอ** (`ORDER BY id DESC` จาก MySQL หรือ `sortByRemoteIdDesc()` จาก Isar)
+  - เพิ่มจำนวนสินค้าเริ่มต้นและผลลัพธ์การค้นหาว่างเปล่าจาก 5 รายการ เป็น 50 รายการ
+  - เพิ่ม `dense: true` ใน `ListTile` ให้แสดงรายการสินค้าได้ 7 รายการเต็มหน้าต่างโดยไม่ล้นและไม่เหลือช่องว่างเกินจำเป็น
+
+## [2026-08-03] Bug Fixes: F4 Crash (POS), Driver List & Job History (S-Link)
+
+### 🖥️ POS Desktop → v1.7.9 (`S_MartPOS_Setup_v1.7.9.exe`)
+
+**1. [Bug Fix] กด F4 แล้วโปรแกรมเด้งออก / F4 key causes app to close**
+- **ไฟล์:** `lib/screens/products/widgets/quick_menu_dialog.dart`
+- **สาเหตุ:** F4 event bubble จาก `QuickMenuDialog` ขึ้นไป parent screen ทำให้ `showQuickMenuDialog()` ถูกเรียกซ้ำหรือเกิด conflict จนโปรแกรมเด้ง
+- **การแก้ไข:** เพิ่ม `F4 → Navigator.pop()` ใน `CallbackShortcuts` ของ Dialog เพื่อดัก event ไม่ให้ bubble ขึ้นไป parent
+
+---
+
+### 📱 S-Link → v3.4.12+95 (`app-release.aab`)
+
+**2. [Bug Fix] เลือกคนขับ/พนักงานปล่อยรถไม่ได้ → รายชื่อว่างเปล่า**
+- **ไฟล์:** `lib/features/pos/services/pos_api_service.dart`
+- **สาเหตุ:** `getRaw()` / `postRaw()` ไม่ต่อ `/api/v1` นำหน้า path → Backend ตอบ 404
+- **การแก้ไข:** เพิ่ม auto-prefix `/api/v1` ใน `getRaw()` / `postRaw()` ถ้า path ยังไม่มี prefix นี้
+
+**3. [Bug Fix] งานที่สำเร็จแล้วไม่ขึ้นในรายการ**
+- **สาเหตุ:** AAB เก่า `_notifyPosBackend()` ยิง `POST /jobs/complete` ไม่ถึง Backend → ไม่ archive ลง `delivery_history` MySQL แต่ Firestore update ปกติ → LINE notification ออกไปแต่ไม่ขึ้นรายการ
+- **การแก้ไข:** Build AAB ใหม่ v3.4.12+95 ที่มี path fix ครบแล้ว
+
+**4. [Firebase Rules] ผ่อนคลาย Security Rules**
+- **ไฟล์:** `firestore.rules`
+- **การแก้ไข:** ปรับ `isAdmin()` / `isApproved()` ให้ตรวจสอบแค่ `isSignedIn()` เพื่อลด Permission denied
+
+---
+
+## [2026-08-01] Milestone 2: Offline Fingerprint Sync & NTP Time (IoT Smart Sensor)
+**สิ่งที่ดำเนินการ (ESP32 & POS Desktop):**
+1. **[ESP32] อัปเกรดเป็น Standalone & Auto-Sync:**
+   - เพิ่ม `time.h` และเชื่อมต่อ NTP Server เพื่อดึงเวลาโลก (GMT+7) ทันทีที่ต่อ WiFi
+   - สร้างฟังก์ชัน `saveOfflineLog()` สำหรับดักจับการสแกนนิ้วขณะที่ POS Desktop ปิดอยู่ โดยบันทึก **ID + เวลาที่สแกนจริง** ลงใน Flash Memory (Preferences)
+   - ปรับ TCP Connection Loop ให้ตรวจสอบคิวที่ค้างในหน่วยความจำ และยิงคำสั่ง `OFFLINE_LOG:id:time` เข้า POS อัตโนมัติทันทีที่เชื่อมต่อติด
+2. **[POS Desktop] พัฒนาระบบรับข้อมูล Offline Sync:**
+   - อัปเดต `fingerprint_network_service.dart` ให้สามารถแยกแยะและ parse คำสั่ง `OFFLINE_LOG` และ `BREAK` จาก ESP32 ได้
+   - สร้าง `_handleOfflineLog` และ `_handleOfflineBreak` ใน `fingerprint_attendance_service.dart` เพื่อนำเวลาที่สแกนจริง (Override Time) ไปบันทึกย้อนหลังลง MySQL และ Firestore ทันที
+   - ส่งคำสั่ง `OFFLINE_ACK:1` กลับไปยัง ESP32 เพื่อยืนยันและเคลียร์คิวในหน่วยความจำ
+3. **[Setup] อัปเดต Inno Setup เป็น 1.7.7:**
+   - รัน Flutter Build และแพ็กเกจ Installer ใหม่ล่าสุด (`S_MartPOS_Setup_v1.7.7.exe`) พร้อมนำไฟล์ `ngrok.exe` ที่ไม่ได้ใช้งานออกเพื่อความสะอาด
+
+
+## [2026-08-01] Milestone 1: Direct Database Job Completion & Bug Fixes
+**สิ่งที่ดำเนินการ (POS Desktop & S-Link):**
+1. **[S-Link] รื้อโครงสร้างปิดงาน (Direct API First):**
+   - แก้ไข `job_provider.dart` สลับให้ยิง API `/jobs/complete` เข้าสู่ POS Backend ทันทีเป็นลำดับแรก 
+   - ยกเลิกการอัปโหลดข้อมูลหนักๆ อย่าง `proof_image`, `delivery_team`, `proof_location` ลงใน Firebase (ที่ `job_service.dart`) เพื่อลดขนาดข้อมูลบน Cloud 
+   - แก้ไข `sync_service.dart` ให้ส่ง `downloadUrl` ตรงเข้า API และอัปเดตสถานะใน Firebase เพียงแค่เป็น Signal (`status: completed`)
+2. **[S-Link] แก้บั๊กรูปหลักฐานไม่ขึ้น:**
+   - แก้ไข `Job.fromHistory` ใน `job.dart` ให้รองรับกรณี `billImageUrl` เป็น empty string (`""`) ให้แปลงเป็น `null` ป้องกันการแครช
+   - เพิ่มการอ่านค่า `destinationLat` / `destinationLng` ให้แสดงพิกัดนำทางได้ในประวัติ
+   - แก้ไข `job_detail_screen.dart` ให้ตัวแปร `isHistory` รองรับ prefix `history_` เพื่อให้ UI แสดงผลเป็นโหมดรายงานย้อนหลังได้ถูกต้อง
+   - ใส่ `errorBuilder` ดักรูปเสียใน `_buildProofSection` เพื่อให้แอปไม่เด้งหลุด
+3. **[POS Desktop] ป้องกันข้อมูลโดนลบทับ (Safe Overwrite):**
+   - แก้คำสั่ง SQL ใน `delivery_history_repository.dart` (`saveArchivedJob`) ให้ใช้ `COALESCE` ป้องกันการดึงค่าจาก Firebase อันเก่า (ที่ไม่มีข้อมูลรูปถ่ายแล้ว) มาเขียนทับรูปถ่ายและพิกัดจริงที่ S-Link เพิ่งยิงผ่าน API มาเมื่อสักครู่
+   - ปรับให้ `delivery_cleanup_service.dart` หาฟิลด์ `proof_image` เผื่อแอปเวอร์ชั่นเก่า และทำหน้าที่หลักในการ "ลบ" ตั๋วออกจาก Firebase เมื่อเห็นสัญญาณว่า completed แล้วเท่านั้น
+
+## [2026-07-29] ขยายขอบเขตเวลา Export Excel หน้ารายงานการจัดส่ง
+**สิ่งที่ดำเนินการ:**
+- **ปรับเพิ่มลิมิตเวลาหน้าต่าง Export:** ขยายระยะเวลาในการดึงข้อมูลเพื่อ Export รายงานการจัดส่งและบำรุงรักษารถในไฟล์ `vehicle_tax_report_dialog.dart` จากเดิม 90 วัน เป็น 366 วัน (1 ปี)
+- **ปรับเพิ่มลิมิตเวลาหน้าจอหลัก (Date Pickers):** แก้ไขระบบเลือกวันที่ในปฏิทินของหน้าจอหลักทั้งใน `delivery_report_screen.dart` และ `delivery_dashboard_screen.dart` ให้ผู้ใช้สามารถเลือกช่วงเวลาดึงข้อมูลในตารางได้สูงสุด 1 ปี (จากเดิมที่ถูกบล็อกไว้แค่ 3 เดือนตั้งแต่ด่านแรก)
+- **อัปเดตข้อความแจ้งเตือน:** ปรับข้อความแจ้งเตือน Error Message กรณีที่เลือกช่วงเวลาเกินกำหนดจาก "ไม่เกิน 3 เดือน" เป็น "ไม่เกิน 1 ปี" ทั้งหมด
+- **ลบสีพื้นหลังหัวตาราง Excel:** ใน `excel_export_service.dart` ได้ถอดค่าสีพื้นหลังสีเทาออก (`#E0E0E0`) จากแถวหัวตาราง เพื่อให้พื้นหลังโปร่งใส/สีขาวปกติ ตามที่ผู้ใช้ต้องการ
+- **แก้ไขปัญหาเลขไมล์เริ่มต้น (Odometer) ในรายงาน Excel เป็น 0:** ปรับแก้ใน `excel_export_service.dart` ให้ค้นหาชื่อทะเบียนรถแบบ contains แทน exact match เพื่อรองรับกรณีชื่อชีทถูกเติมประเภทรถนำหน้า ส่งผลให้ตัวแปร initialOdometers ทำงานได้ถูกต้อง
+
 ## [2026-07-24] GPS Real-time Status Sync & Job Tracking
 **สิ่งที่ดำเนินการ (POS Desktop & S-Link):**
 1. **เพิ่ม API `/api/v1/gps/update_job` ใน `GpsController`:**
@@ -298,3 +386,19 @@
 - **ไฟล์ที่แก้ไข:** `backend/lib/controllers/config_controller.dart`
 - **รายละเอียด:** ปรับปรุง API `/api/v1/config/promptpay` ให้ส่ง `static_qr_base64` เสมอ (ถ้ามีรูปภาพ) แม้ว่า `qr_mode` จะเป็น `dynamic` ก็ตาม เพื่อให้ฝั่ง S-Link สามารถนำรูปภาพไปใช้เป็น Smart Fallback ได้ในกรณีที่เชื่อมต่อ API ได้แต่ไม่มี PromptPay ID
 
+
+## [2026-08-01] Milestone 3 Phase 1: POS Desktop Backend JWT & SSOT
+**สิ่งที่ดำเนินการ (POS Desktop):**
+1. **เพิ่ม API Endpoint POST /api/v1/auth/login:** ใน uth_controller.dart สำหรับรับ Username+Password และออก Custom JWT โดยใช้ user table (BCrypt password).
+2. **ผสานข้อมูลพนักงานใน JWT:** ปรับให้ดึง id และ display_name จากตาราง employee_profile มาแนบใน payload เพื่อให้ S-Link ทราบตัวตนพนักงานที่แท้จริง
+3. **เพิ่ม API Endpoint GET /api/v1/employees/drivers:** ใน employee_controller.dart ทำหน้าที่ดึงรายชื่อพนักงานที่มีตำแหน่งขับรถ (Driver) จากฐานข้อมูล MySQL โดยตรง เพื่อให้เป็น Single Source of Truth
+4. **ปรับปรุงระบบรักษาความปลอดภัย:** แก้ไข jwt_middleware.dart ให้ตรวจเช็ค Custom JWT แทน Firebase Auth และปรับ pi_router.dart ให้ปกป้อง routes ทั้งหมด (ยกเว้น login)
+**ผลลัพธ์:** POS Desktop กลายเป็นศูนย์กลาง (SSOT) สำหรับการ Authentication และรายชื่อพนักงาน 100% เลิกพึ่งพา Firebase Auth แล้ว
+
+## [2026-08-03] Fix Fingerprint Attendance Sync
+**ปัญหา:** สแกนลายนิ้วมือที่ POS Desktop แล้วเวลาไม่ไปขึ้นที่แอป S-Link (Mobile)
+**สาเหตุ:** FirestoreRestService เรียกใช้ PATCH พร้อมระบุ updateMask เมื่อพยายามสร้างเอกสารที่ยังไม่มีอยู่ ทำให้ Firebase API แจ้งกลับมาเป็น 404 Not Found (พนักงานยังไม่เคยเช็คอินในวันนั้น)
+**วิธีแก้:**
+1. สร้าง setDocumentFull ใน irestore_rest_core.dart และ irestore_rest_service.dart ซึ่งจะทำงานเป็น PATCH แบบไม่ระบุ updateMask (Full Upsert)
+2. เปลี่ยน AttendanceSyncService ให้เรียกใช้ setDocumentFull แทน updateDocument เพื่อสร้าง/เขียนทับ log ได้สมบูรณ์โดยไม่เกิด Error 404
+3. Build S_MartPOS_Setup_v1.7.10.exe และ S-Link version 3.4.15+98 เรียบร้อยแล้ว

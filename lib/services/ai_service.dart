@@ -1,7 +1,7 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
+import 'ai/ai_tools_service.dart';
+import 'logger_service.dart';
 
 class AiService {
   static final AiService _instance = AiService._internal();
@@ -9,84 +9,98 @@ class AiService {
   AiService._internal();
 
   static const String keyApiKey = 'gemini_api_key';
+  
+  final AiToolsService _toolsService = AiToolsService();
+  
+  ChatSession? _currentChat;
 
-  Future<String> getResponse(String prompt) async {
+  // --- Persona Definitions ---
+  final String _analystSystemInstruction = '''
+คุณคือ 'สมปอง' นักวิเคราะห์ข้อมูลประจำร้าน S_MartPOS (Data Analyst)
+เป้าหมาย: วิเคราะห์ยอดขาย แนะนำเทรนด์สินค้า และช่วยผู้ประกอบการตัดสินใจเรื่องสต็อก
+ลักษณะนิสัย: สุภาพ เป็นกันเอง ใช้คำศัพท์เข้าใจง่าย มี emoji ประกอบ
+หน้าที่: 
+- วิเคราะห์ข้อมูลยอดขายจากระบบ
+- ให้คำแนะนำเรื่องสินค้าที่ควรสต็อกเพิ่มหรือระบายออก
+- ค้นหาบิลหรือยอดขายเมื่อผู้ใช้ต้องการ
+คุณสามารถใช้เครื่องมือ (Tools) ในการค้นหาข้อมูลจากฐานข้อมูลของโปรแกรมได้ (อ่านได้อย่างเดียว ห้ามแก้ไข)
+**กฏสำคัญ:** หากผู้ใช้สั่งให้ "วิเคราะห์ร้านค้า" หรือ "สรุปข้อมูล" แบบกว้างๆ ห้ามตอบกลับด้วยคำถามว่าอยากให้ช่วยอะไร แต่ให้คุณเรียกใช้เครื่องมือ `get_sales_summary` และ `get_top_selling_products` ทันที เพื่อดึงข้อมูลภาพรวมมาสรุปและวิเคราะห์ให้ผู้ใช้ฟังเลย
+''';
+
+  final String _accountantSystemInstruction = '''
+คุณคือ 'สมศรี' นักบัญชีสุดเป๊ะประจำร้าน S_MartPOS (Chief Accountant)
+เป้าหมาย: ตรวจสอบความถูกต้องของตัวเลข ดูแลรายรับ-รายจ่าย และติดตามลูกหนี้
+ลักษณะนิสัย: จริงจัง รอบคอบ ตรงไปตรงมา รักความถูกต้องของตัวเลข
+หน้าที่:
+- ตรวจสอบรายจ่ายเปรียบเทียบกับรายรับ
+- สรุปยอดลูกหนี้ที่ต้องติดตามทวงถาม
+- แจกแจงรายจ่ายแยกตามหมวดหมู่เพื่อดูว่าส่วนไหนใช้เงินเยอะสุด
+คุณสามารถใช้เครื่องมือ (Tools) ในการค้นหาข้อมูลจากฐานข้อมูลของโปรแกรมได้ (อ่านได้อย่างเดียว ห้ามแก้ไข)
+**กฏสำคัญ:** หากผู้ใช้สั่งให้ "วิเคราะห์ร้านค้า" หรือ "สรุปข้อมูล" แบบกว้างๆ ห้ามตอบกลับด้วยคำถามว่าอยากให้ช่วยอะไร แต่ให้คุณเรียกใช้เครื่องมือ `get_sales_summary`, `get_expenses` และ `get_debtors` ทันที เพื่อดึงข้อมูลภาพรวมการเงินมาสรุปให้ผู้ใช้ฟังเลย
+''';
+
+  Future<String> _getApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    final apiKey = prefs.getString(keyApiKey) ?? '';
+    return prefs.getString(keyApiKey) ?? '';
+  }
 
-    if (apiKey.isEmpty) {
-      return 'กรุณาตั้งค่า API Key สำหรับ Gemini ในหน้าตั้งค่าก่อน';
+  Future<void> startChat({required String persona}) async {
+    final apiKey = await _getApiKey();
+    if (apiKey.isEmpty) throw Exception('กรุณาตั้งค่า API Key สำหรับ Gemini ในหน้าตั้งค่าก่อน');
+
+    final systemInstruction = persona == 'accountant' 
+        ? _accountantSystemInstruction 
+        : _analystSystemInstruction;
+
+    final model = GenerativeModel(
+      model: 'gemini-3.0-pro',
+      apiKey: apiKey,
+      systemInstruction: Content.system(systemInstruction),
+      tools: [_toolsService.aiTool],
+    );
+
+    _currentChat = model.startChat();
+    LoggerService.info('AiService', 'Chat session started with persona: \$persona');
+  }
+
+  Future<String> sendMessage(String text) async {
+    if (_currentChat == null) {
+      return 'กรุณาเริ่มแชทก่อน (Start Chat)';
     }
 
-    final url = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey');
-
     try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'contents': [
-            {
-              'parts': [
-                {'text': prompt}
-              ]
-            }
-          ]
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'] ??
-            'ไม่มีคำตอบจาก AI';
-      } else if (response.statusCode == 429) {
-        return '🤖 AI ทำงานหนักเกินไป (Error 429)\nโควต้า API Key ของคุณเต็ม หรือเรียกใช้งานถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ หรือเปลี่ยน API Key ครับ';
-      } else {
-        debugPrint('Gemini Error: ${response.body}');
-        return 'เกิดข้อผิดพลาดในการเรียก AI: ${response.statusCode}';
+      var response = await _currentChat!.sendMessage(Content.text(text));
+      
+      // Handle Function Calling Loop
+      while (response.functionCalls.isNotEmpty) {
+        final functionResponses = <FunctionResponse>[];
+        
+        for (var functionCall in response.functionCalls) {
+           final result = await _toolsService.handleFunctionCall(functionCall);
+           functionResponses.add(FunctionResponse(functionCall.name, result));
+        }
+        
+        // Send the function response back to the model
+        response = await _currentChat!.sendMessage(
+          Content.functionResponses(functionResponses)
+        );
       }
+
+      return response.text ?? 'ไม่มีคำตอบจาก AI';
     } catch (e) {
-      debugPrint('Gemini Exception: $e');
-      return 'ไม่สามารถเชื่อมต่อกับ AI ได้: $e';
+      LoggerService.error('AiService', 'SendMessage Exception', e);
+      return 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI: \$e';
     }
   }
 
+  // Backward compatibility for old single-shot methods
   Future<String> predictSales(String salesCsv) async {
-    final prompt = '''
-บทบาท: คุณคือที่ปรึกษากิตติมศักดิ์และผู้เชี่ยวชาญด้านการวางแผนกลยุทธ์การตลาด (Chief Marketing Strategist) ที่มีความน่าเชื่อถือสูง
-หน้าที่: วิเคราะห์ข้อมูลยอดขายเชิงลึกจาก CSV ด้านล่าง เพื่อวางแผนกลยุทธ์การตลาดที่แม่นยำและสร้างยอดขายเติบโตอย่างยั่งยืน
-
-ข้อมูลการขาย (CSV):
-$salesCsv
-
-สิ่งที่ต้องวิเคราะห์และนำเสนอ (ในรูปแบบมืออาชีพ):
-1. 📊 **Executive Summary**: สรุปสถานการณ์ภาพรวมปัจจุบัน แนวโน้มการเติบโต และจุดที่ต้องจับตามองเป็นพิเศษ
-2. 🏆 **Hero Product Strategy**: วิเคราะห์สินค้าที่ทำรายได้หลัก และกลยุทธ์ในการรักษาฐานลูกค้ากลุ่มนี้
-3. 📦 **Inventory Optimization**: คำแนะนำการบริหารสต็อกเชิงกลยุทธ์ สินค้าใดควรระบายออกเพื่อเพิ่ม Cash Flow
-4. 🧠 **SWOT Analysis**: จุดแข็ง จุดอ่อน โอกาส และอุปสรรค ของข้อมูลชุดนี้
-5. 🚀 **Strategic Action Plan**: แผนการตลาด 3 ข้อที่โฟกัสผลลัพธ์ (Results-Oriented) สำหรับสัปดาห์ถัดไป
-
-โทนการตอบ: สุภาพ ทางการ น่าเชื่อถือ เหมือนที่ปรึกษามืออาชีพรายงานต่อผู้บริหาร (Professional & Trustworthy) ใช้ศัพท์ธุรกิจฟังก์ชันได้ตามความเหมาะสม
-''';
-    return getResponse(prompt);
+    await startChat(persona: 'analyst');
+    return sendMessage('วิเคราะห์ยอดขายจากข้อมูลนี้:\\n\$salesCsv');
   }
 
   Future<String> optimizeInventory(String inventoryData) async {
-    final prompt = '''
-บทบาท: เพื่อนคู่คิดเจ้าของร้าน (Inventory Guru Friend)
-หน้าที่: ช่วยวิเคราะห์สุขภาพสต็อกสินค้าจาก CSV ด้านล่างนี้ แล้วแนะนำอย่างตรงไปตรงมา
-
-ข้อมูลสต็อก (รูปแบบ: ชื่อสินค้า, สต็อกปัจจุบัน, จุดสั่งซื้อ, ยอดขาย 30 วันล่าสุด, วันที่ขายล่าสุด):
-$inventoryData
-
-สิ่งที่อยากให้ช่วยดู (แยกหัวข้อชัดเจน):
-1. 🚨 **ของต้องเติมด่วน (Reorder)**: สินค้าที่สต็อกต่ำกว่าจุดสั่งซื้อ หรือขายดีมากจนของจะขาด (Run Rate สูง)
-2. ⚠️ **ของล้นสต็อก (Overstock)**: สินค้าที่สต็อกจม นอนนิ่งมานาน (ขายไม่ออกใน 30 วัน หรือขายได้น้อยมากเมื่อเทียบกับสต็อกที่มี)
-3. 💡 **คำแนะนำพิเศษ**: ไอเดียระบายของหรือจัดโปรโมชั่น
-
-โทนการตอบ: เพื่อนคุยกับเพื่อน สนุก เข้าใจง่าย และใช้ Emoji ประกอบ
-''';
-    return getResponse(prompt);
+    await startChat(persona: 'analyst');
+    return sendMessage('วิเคราะห์สต็อกสินค้าจากข้อมูลนี้:\\n\$inventoryData');
   }
 }

@@ -50,7 +50,7 @@ class _ProductSearchDialogForSelectState
 
   Future<void> _loadInitialProducts() async {
     try {
-      final list = await widget.repo.getRecentProducts(5);
+      final list = await widget.repo.getRecentProducts(50);
       if (mounted) {
         setState(() {
           _filteredProducts = list;
@@ -80,16 +80,16 @@ class _ProductSearchDialogForSelectState
     try {
       List<Product> results;
       if (query.isEmpty) {
-        results = await widget.repo.getRecentProducts(5);
+        results = await widget.repo.getRecentProducts(50);
       } else {
         results =
-            await widget.repo.getProductsPaginated(1, 20, searchTerm: query);
+            await widget.repo.getProductsPaginated(1, 100, searchTerm: query);
         
         // ✅ Barcode Fix Logic
         if (results.isEmpty && BarcodeUtils.isThaiInput(query)) {
           final fixedQuery = BarcodeUtils.fixThaiInput(query);
           if (fixedQuery != query) {
-            results = await widget.repo.getProductsPaginated(1, 20, searchTerm: fixedQuery);
+            results = await widget.repo.getProductsPaginated(1, 100, searchTerm: fixedQuery);
           }
         }
       }
@@ -233,6 +233,7 @@ class _ProductSearchDialogForSelectState
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: ListTile(
+                                  dense: true,
                                   hoverColor:
                                       Colors.indigo.withValues(alpha: 0.05),
                                   title: Text(

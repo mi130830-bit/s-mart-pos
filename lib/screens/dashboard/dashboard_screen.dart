@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/auth_provider.dart';
-import '../../widgets/sync_status_widget.dart';
 import '../reports/financial_report_screen.dart';
 import '../reports/best_selling_screen.dart';
 
@@ -69,12 +68,6 @@ class DashboardScreen extends ConsumerWidget {
             unselectedLabelColor: Colors.grey,
           ),
           actions: [
-            const SyncStatusWidget(),
-            IconButton(
-              icon: const Icon(Icons.local_shipping_outlined, color: Colors.orange),
-              tooltip: 'ดาวน์โหลดรายงานการจัดส่ง (Excel)',
-              onPressed: () => ref.read(dashboardProvider.notifier).exportDeliveryHistory(context),
-            ),
             IconButton(
               icon: const Icon(Icons.refresh), 
               onPressed: () => ref.read(dashboardProvider.notifier).loadData(),

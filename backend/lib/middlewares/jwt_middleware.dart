@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:shelf/shelf.dart';
-import '../services/firebase_auth_verifier.dart';
-
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 /// Middleware สำหรับตรวจสอบ Firebase ID Token
 Middleware jwtMiddleware() {
   return (Handler innerHandler) {
@@ -23,23 +22,16 @@ Middleware jwtMiddleware() {
 
       final token = authHeader.substring(7); // ตัดคำว่า "Bearer " ออก
       
-      // ตรวจสอบ JWT
-      final verifier = FirebaseAuthVerifier();
+      // ตรวจสอบ JWT (Custom JWT by POS Desktop)
       Map<String, dynamic>? payload;
       try {
-        payload = await verifier.verify(token);
+        final jwt = JWT.verify(token, SecretKey('s_link_pos_secret_key_2026'));
+        payload = jwt.payload as Map<String, dynamic>;
       } catch (e) {
         // ignore: avoid_print
         print('⚠️ JWT Middleware: Token rejected. Error: $e');
         return Response.forbidden(
           jsonEncode({'error': 'Token Rejected: $e'}),
-          headers: {'content-type': 'application/json'},
-        );
-      }
-
-      if (payload == null) {
-        return Response.forbidden(
-          jsonEncode({'error': 'Unauthorized or Invalid Token'}),
           headers: {'content-type': 'application/json'},
         );
       }

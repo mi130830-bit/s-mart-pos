@@ -295,6 +295,7 @@ This system is designed to manage suppliers and generate Purchase Orders (POs) f
 *   **ระบบสแกนลายนิ้วมือ (Fingerprint Setup):**
     *   เชื่อมต่อผ่าน WiFi/LAN (ค่าเริ่มต้น `fingerprint.local`)
     *   รองรับพนักงานสูงสุด 31 คน (ใช้คนละ 4 Slots)
+    *   **การทำงานแบบออฟไลน์ (Offline Mode):** ตัวสแกนมีระบบจำเวลาในตัว (NTP Time) หากคอมพิวเตอร์ POS ปิดอยู่ พนักงานยังคงสามารถสแกนเข้า/ออกงานได้ตามปกติ โดยอุปกรณ์จะบันทึกเวลาที่สแกนจริงไว้ และทำการซิงค์ส่งข้อมูลเข้าคอมพิวเตอร์ให้อัตโนมัติทันทีที่เปิดร้าน
     *   **การลงทะเบียนนิ้ว:** สแกนนิ้วเดียวกัน 3 มุม (ตรง, ซ้าย, ขวา) มุมละ 2 ครั้ง รวม 6 ครั้งต่อ 1 คน
     *   เมื่อแตะนิ้วเพื่อเข้า/ออกงาน ระบบจะดึงข้อมูลอัปเดตสถานะบน Dashboard ทันที
     *   *กรณีฉุกเฉิน:* มีฟังก์ชัน "ปิดร้านฉุกเฉิน" (Emergency Close Shop) เพื่อบังคับ Clock Out พนักงานทุกคน (ต้องใช้ PIN ผู้ดูแล)
@@ -311,6 +312,7 @@ A complete system for managing employees, fingerprint attendance, and automated 
 *   **Fingerprint Setup:**
     *   Connects via WiFi/LAN (default: `fingerprint.local`).
     *   Supports up to 31 employees (4 memory slots per person).
+    *   **Offline Mode:** The scanner features an internal clock (NTP Time). If the POS computer is off, employees can still scan in/out normally. The device will save the exact timestamp and automatically sync the data back to the POS once the shop opens.
     *   **Enrollment Process:** Scan the same finger at 3 angles (Center, Left, Right) twice per angle (6 scans total).
     *   Clock in/out instantly updates the dashboard in real-time.
     *   *Emergency:* An "Emergency Close Shop" function allows admins to force clock out all active employees (Admin PIN required).

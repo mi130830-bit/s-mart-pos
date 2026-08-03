@@ -69,14 +69,13 @@ class FingerprintAttendanceService {
   // Private: Helpers
   // ---------------------------------------------------------------------------
 
-  /// ตรวจสอบว่าตอนนี้อยู่ในช่วงเวลาเลิกงาน (16:40 - 17:30)
+  /// ตรวจสอบว่าตอนนี้อยู่ในช่วงเวลาเลิกงาน (ตั้งแต่ 16:40 เป็นต้นไป)
   /// ถ้าใช่ → Auto Clock Out ทันที ไม่ต้องขึ้น card ให้เลือก
   bool _isEndOfDay() {
     final now = DateTime.now();
     final startMinute = 16 * 60 + 40; // 16:40
-    final endMinute = 17 * 60 + 30; // 17:30
     final currentMinute = now.hour * 60 + now.minute;
-    return currentMinute >= startMinute && currentMinute <= endMinute;
+    return currentMinute >= startMinute;
   }
 
   /// เริ่มต้น Background Listener
@@ -96,8 +95,9 @@ class FingerprintAttendanceService {
     // ตั้งค่า Callbacks
     _network.onMatchDetected = _handleFingerprintMatch;
     _network.onClockOutDetected = _handleClockOutMatch;
-    _network.onBreakStartDetected =
-        _handleClockOutMatch; // กดปุ่ม = เลิกงานนอกเวลา
+    _network.onBreakStartDetected = _handleClockOutMatch;
+    _network.onOfflineLogDetected = _handleOfflineLog;
+    _network.onOfflineBreakDetected = _handleOfflineBreak;
     _network.onAlertReceived = (msg) {
       debugPrint('⚠️ [FingerprintAttendance] Alert: $msg');
       onUnknownFingerprint?.call(msg);
@@ -289,6 +289,59 @@ class FingerprintAttendanceService {
       await AttendanceSyncService().syncAttendanceToCloud(employeeId);
     } catch (e) {
       debugPrint('❌ [FingerprintAttendance] DB Error: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Offline Sync Handlers
+  // ---------------------------------------------------------------------------
+  
+  Future<void> _handleOfflineLog(int fingerprintSlotId, DateTime timestamp) async {
+    try {
+      final employeeId = await _employeeRepo.getEmployeeIdByFingerprint(fingerprintSlotId);
+      if (employeeId == null) return;
+      
+      final todayLog = await _attendanceRepo.getTodayLogByEmployee(employeeId);
+      if (todayLog == null) {
+        // Auto Clock In (Offline)
+        await _attendanceRepo.clockIn(
+          employeeId,
+          'FINGERPRINT (OFFLINE)',
+          deviceInfo: 'ESP32_OFFLINE',
+          overrideTime: timestamp,
+          overrideReason: 'OFFLINE_SYNC',
+        );
+        debugPrint('✅ [FingerprintAttendance] Offline Clock In: Employee #$employeeId at $timestamp');
+      } else if (todayLog.clockOut == null) {
+        // Not checked out yet. Since it's offline, they might just be returning from a break or starting a break.
+        // Simplified offline logic: If they are working, assume returning from temp leave or starting temp leave.
+        if (todayLog.activeTempLeaveRound != null) {
+          await _attendanceRepo.endTempLeave(employeeId, method: 'FINGERPRINT (OFFLINE)', overrideTime: timestamp, overrideReason: 'OFFLINE_SYNC');
+        } else if (todayLog.canStartNewTempLeave) {
+          await _attendanceRepo.startTempLeave(employeeId, method: 'FINGERPRINT (OFFLINE)', overrideTime: timestamp, overrideReason: 'OFFLINE_SYNC');
+        }
+      }
+      
+      await AttendanceSyncService().syncAttendanceToCloud(employeeId);
+    } catch (e) {
+      debugPrint('❌ [FingerprintAttendance] Offline DB Error: $e');
+    }
+  }
+
+  Future<void> _handleOfflineBreak(int fingerprintSlotId, DateTime timestamp) async {
+    try {
+      final employeeId = await _employeeRepo.getEmployeeIdByFingerprint(fingerprintSlotId);
+      if (employeeId == null) return;
+      
+      final todayLog = await _attendanceRepo.getTodayLogByEmployee(employeeId);
+      if (todayLog != null && todayLog.clockOut == null) {
+        await _attendanceRepo.clockOut(employeeId, method: 'FINGERPRINT_BTN (OFFLINE)', overrideTime: timestamp, overrideReason: 'OFFLINE_SYNC');
+        debugPrint('✅ [FingerprintAttendance] Offline Clock Out: Employee #$employeeId at $timestamp');
+        
+        await AttendanceSyncService().syncAttendanceToCloud(employeeId);
+      }
+    } catch (e) {
+      debugPrint('❌ [FingerprintAttendance] Offline DB Error (Break): $e');
     }
   }
 }

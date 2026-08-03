@@ -6,14 +6,156 @@ import 'dart:io';
 
 /// POST /jobs/complete — เรียกจาก S-Link เมื่อพนักงานส่งของเสร็จ
 /// POST /jobs/list     — ดูประวัติจาก MySQL (สำหรับตรวจสอบ)
+/// GET  /jobs/active   — [Milestone 2] ดึงงานที่ยังไม่เสร็จทั้งหมด (สำหรับ Offline Cache)
 class JobController {
   Router get router {
     final router = Router();
     router.post('/complete', _completeJob);
     router.get('/list', _listJobs);
     router.get('/stats', _getStats);
+    router.get('/active', _getActiveJobs); // ✅ [M2] Offline Sync Endpoint
     return router;
   }
+
+  /// GET /jobs/active?since=2026-08-01T00:00:00Z
+  /// ส่งคืนงานที่สถานะยัง PENDING ทั้งหมด พร้อม JOIN ข้อมูลลูกค้าและรายการสินค้า
+  /// รองรับ ?since= เพื่อทำ Delta Sync (โหลดเฉพาะงานที่อัปเดตล่าสุด)
+  Future<Response> _getActiveJobs(Request request) async {
+    final tag = '[JobController/active]';
+    final startTime = DateTime.now();
+    try {
+      final params = request.url.queryParameters;
+      final String? since = params['since']; // ISO8601 timestamp (optional)
+
+      stdout.writeln('📥 $tag Request received. since=$since');
+
+      final conn = await DbConfig().connection;
+
+      // ── 1. ดึง delivery_jobs ที่ยัง PENDING ──────────────────────────────
+      String jobSql = '''
+        SELECT
+          dj.orderId,
+          dj.firebaseJobId,
+          dj.status,
+          dj.createdAt AS jobCreatedAt,
+          o.grandTotal,
+          o.note,
+          o.deliveryType,
+          o.paymentMethod,
+          c.id         AS customerId,
+          CONCAT(c.firstName, ' ', c.lastName) AS customerName,
+          c.phone      AS customerPhone,
+          c.address    AS customerAddress,
+          NULL         AS customerLat,
+          NULL         AS customerLng,
+          NULL         AS customerDistKm
+        FROM delivery_jobs dj
+        LEFT JOIN `order` o  ON o.id  = dj.orderId
+        LEFT JOIN customer c ON c.id  = o.customerId
+        WHERE dj.status = 'PENDING'
+      ''';
+
+      final Map<String, dynamic> sqlParams = {};
+      if (since != null && since.isNotEmpty) {
+        jobSql += ' AND dj.createdAt >= :since';
+        sqlParams['since'] = since;
+        stdout.writeln('🔍 $tag Delta sync mode: fetching jobs since $since');
+      }
+
+      jobSql += ' ORDER BY dj.createdAt DESC LIMIT 50';
+
+      final jobResult = await conn.execute(jobSql, sqlParams);
+      final jobs = jobResult.rows.map((r) => r.assoc()).toList();
+      stdout.writeln('📦 $tag Found ${jobs.length} active jobs from MySQL');
+
+      if (jobs.isEmpty) {
+        final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+        stdout.writeln('✅ $tag No active jobs. Responded in ${elapsed}ms');
+        return Response.ok(
+          jsonEncode({'success': true, 'data': [], 'count': 0}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      // ── 2. ดึงรายการสินค้าสำหรับแต่ละ order (batch query) ──────────────
+      final orderIds = jobs
+          .map((j) => j['orderId']?.toString() ?? '0')
+          .where((id) => id != '0')
+          .toSet()
+          .toList();
+
+      Map<String, List<Map<String, dynamic>>> itemsByOrderId = {};
+
+      if (orderIds.isNotEmpty) {
+        final idsPlaceholder = orderIds.map((id) => id).join(',');
+        final itemResult = await conn.execute('''
+          SELECT
+            oi.orderId,
+            oi.productName AS name,
+            oi.quantity    AS qty,
+            oi.price,
+            oi.total
+          FROM orderitem oi
+          WHERE oi.orderId IN ($idsPlaceholder)
+          ORDER BY oi.id ASC
+        ''');
+
+        for (final row in itemResult.rows) {
+          final r = row.assoc();
+          final oid = r['orderId']?.toString() ?? '';
+          if (oid.isNotEmpty) {
+            itemsByOrderId.putIfAbsent(oid, () => []).add({
+              'name': r['name'] ?? '',
+              'qty': r['qty'] ?? '1',
+              'price': r['price'] ?? '0',
+              'total': r['total'] ?? '0',
+            });
+          }
+        }
+        stdout.writeln('📋 $tag Loaded items for ${itemsByOrderId.length} orders');
+      }
+
+      // ── 3. ประกอบร่างข้อมูลส่งกลับ ─────────────────────────────────────
+      final List<Map<String, dynamic>> result = jobs.map((j) {
+        final oid = j['orderId']?.toString() ?? '0';
+        return {
+          'orderId':        j['orderId'],
+          'firebaseJobId':  j['firebaseJobId'] ?? '',
+          'status':         (j['status'] ?? 'pending').toString().toLowerCase(),
+          'jobType':        j['deliveryType'] ?? 'delivery',
+          'paymentMethod':  j['paymentMethod'] ?? 'cash',
+          'note':           j['note'] ?? '',
+          'totalAmount':    j['grandTotal'] ?? '0',
+          'createdAt':      j['jobCreatedAt']?.toString() ?? '',
+          'customer': {
+            'id':      j['customerId'] ?? '',
+            'name':    j['customerName'] ?? '',
+            'phone':   j['customerPhone'] ?? '',
+            'address': j['customerAddress'] ?? '',
+            'lat':     j['customerLat'] ?? '',
+            'lng':     j['customerLng'] ?? '',
+          },
+          'items': itemsByOrderId[oid] ?? [],
+        };
+      }).toList();
+
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      stdout.writeln('✅ $tag Responded ${result.length} jobs in ${elapsed}ms');
+
+      return Response.ok(
+        jsonEncode({'success': true, 'data': result, 'count': result.length}),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (e, stack) {
+      stderr.writeln('❌ $tag Error: $e');
+      stderr.writeln('$tag Stack: $stack');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Failed to get active jobs: $e'}),
+        headers: {'content-type': 'application/json'},
+      );
+    }
+  }
+
 
   /// POST /jobs/complete
   /// Body: {

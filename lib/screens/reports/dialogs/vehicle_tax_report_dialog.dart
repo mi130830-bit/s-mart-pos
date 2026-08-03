@@ -42,7 +42,7 @@ class _VehicleTaxReportDialogState extends State<VehicleTaxReportDialog> {
   }
 
   Future<void> _fetchVehicles() async {
-    if (widget.endDate.difference(widget.startDate).inDays > 90) {
+    if (widget.endDate.difference(widget.startDate).inDays > 366) {
       return;
     }
 
@@ -175,10 +175,10 @@ class _VehicleTaxReportDialogState extends State<VehicleTaxReportDialog> {
             ),
             const SizedBox(height: 10),
             
-            if (widget.endDate.difference(widget.startDate).inDays > 90)
+            if (widget.endDate.difference(widget.startDate).inDays > 366)
               const Center(child: Padding(
                 padding: EdgeInsets.all(20.0),
-                child: Text('❌ ไม่สามารถสร้างรายงานได้\nกรุณาเลือกช่วงเวลาไม่เกิน 3 เดือนเพื่อป้องกันระบบค้าง', textAlign: TextAlign.center, style: TextStyle(color: Colors.red)),
+                child: Text('❌ ไม่สามารถสร้างรายงานได้\nกรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', textAlign: TextAlign.center, style: TextStyle(color: Colors.red)),
               ))
             else if (_isLoading)
               const Center(child: Padding(
@@ -232,7 +232,7 @@ class _VehicleTaxReportDialogState extends State<VehicleTaxReportDialog> {
           child: const Text('ยกเลิก'),
         ),
         ElevatedButton.icon(
-          onPressed: _vehicles.isEmpty || _isExporting || widget.endDate.difference(widget.startDate).inDays > 90 ? null : _export,
+          onPressed: _vehicles.isEmpty || _isExporting || widget.endDate.difference(widget.startDate).inDays > 366 ? null : _export,
           icon: _isExporting 
             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
             : const Icon(Icons.download),

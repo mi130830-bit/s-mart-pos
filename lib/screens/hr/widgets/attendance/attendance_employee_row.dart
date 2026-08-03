@@ -116,7 +116,7 @@ class AttendanceEmployeeRow extends ConsumerWidget {
                 );
                 if (confirm && context.mounted) {
                   try {
-                    await ref.read(attendanceProvider.notifier).deleteTodayLog(emp.id);
+                    await ref.read(attendanceProvider.notifier).deleteTodayLog(emp);
                     if (context.mounted) {
                       AlertService.show(context: context, message: 'ล้างข้อมูลของ ${emp.displayName} เรียบร้อยแล้วครับ 🟢', type: 'success');
                     }
