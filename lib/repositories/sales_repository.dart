@@ -4,6 +4,7 @@ import '../services/telegram_service.dart';
 import '../services/settings_service.dart';
 // import '../services/api_service.dart';
 import '../models/order_item.dart';
+import '../models/payment_record.dart';
 import '../services/ai_office_service.dart'; // [Added] AI Office Webhook
 import './activity_repository.dart';
 import './debtor_repository.dart'; // Added

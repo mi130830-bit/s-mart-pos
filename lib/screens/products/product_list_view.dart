@@ -56,7 +56,7 @@ class _ProductListSectionState extends ConsumerState<ProductListSection> {
   int? _filterTypeId; // null = All
 
   int _currentPage = 1;
-  final int _pageSize = 8;
+  final int _pageSize = 7;
   int _totalItems = 0;
   ProductSortOption _currentSort = ProductSortOption.recent;
   Timer? _debounceTimer;

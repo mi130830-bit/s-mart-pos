@@ -40,7 +40,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
       if (event is KeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.space) {
           final posState = ref.read(posProvider.notifier);
-          final grandTotal = Decimal.parse(posState.grandTotal.toString());
+          final grandTotal = Decimal.parse(posState.paymentDue.toString());
           ref.read(paymentSessionProvider.notifier).fillRemainingAmount(grandTotal);
           final session = ref.read(paymentSessionProvider);
           if (session.receivedAmount > Decimal.zero) {
@@ -62,7 +62,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       amountFocusNode.requestFocus();
       final posState = ref.read(posProvider.notifier);
-      final grandTotal = Decimal.parse(posState.grandTotal.toString());
+      final grandTotal = Decimal.parse(posState.paymentDue.toString());
       ref.read(paymentSessionProvider.notifier).fillRemainingAmount(grandTotal);
       final session = ref.read(paymentSessionProvider);
       if (session.receivedAmount > Decimal.zero) {
@@ -86,7 +86,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
     final posState = ref.read(posProvider.notifier);
     final session = ref.watch(paymentSessionProvider);
     final sessionNotifier = ref.read(paymentSessionProvider.notifier);
-    final Decimal grandTotal = Decimal.parse(posState.grandTotal.toString());
+    final Decimal grandTotal = Decimal.parse(posState.paymentDue.toString());
 
     final Decimal totalPaidInList = sessionNotifier.totalPaid;
     final Decimal currentlyTyping = session.receivedAmount;
@@ -145,6 +145,9 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                       children: [
                         PaymentSummarySection(
                           grandTotal: grandTotal,
+                          originalGrandTotal: Decimal.parse(posState.grandTotal.toString()),
+                          alreadyPaid: Decimal.parse(posState.editingOriginalReceived.toString()),
+                          isEditing: posState.editingOrderId != null,
                           totalPaid: totalCaptured,
                           remaining: remaining,
                           change: change,
@@ -168,7 +171,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                           onClearCoupon: () => clearCoupon(posState),
                           onValidateCoupon: () => validateAndApplyCoupon(
                               posState, () {
-                                final gt = Decimal.parse(posState.grandTotal.toString());
+                                final gt = Decimal.parse(posState.paymentDue.toString());
                                 sessionNotifier.fillRemainingAmount(gt);
                                 updateDisplayToCustomer(posState);
                               }),
@@ -230,7 +233,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                   receivedAmount: session.receivedAmount,
                   onRemovePayment: (i) {
                     sessionNotifier.removePayment(i);
-                    final gt = Decimal.parse(posState.grandTotal.toString());
+                    final gt = Decimal.parse(posState.paymentDue.toString());
                     sessionNotifier.fillRemainingAmount(gt);
                     updateDisplayToCustomer(posState);
                   },
@@ -241,7 +244,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                   onProcessFinish: () => processFinish(posState),
                   onAddPayment: () {
                     sessionNotifier.addPayment();
-                    final gt = Decimal.parse(posState.grandTotal.toString());
+                    final gt = Decimal.parse(posState.paymentDue.toString());
                     sessionNotifier.fillRemainingAmount(gt);
                     updateDisplayToCustomer(posState);
                   },

@@ -7,13 +7,13 @@ import '../pages/stock_in_create_page.dart';
 class SupplierOrderHistoryScreen extends StatefulWidget {
   final int supplierId;
   final String supplierName;
-  final DateTime? dateFilter;
+  final DateTimeRange? dateRange;
 
   const SupplierOrderHistoryScreen({
     super.key,
     required this.supplierId,
     required this.supplierName,
-    this.dateFilter,
+    this.dateRange,
   });
 
   @override
@@ -36,9 +36,9 @@ class _SupplierOrderHistoryScreenState extends State<SupplierOrderHistoryScreen>
     try {
       DateTime? startDate;
       DateTime? endDate;
-      if (widget.dateFilter != null) {
-        startDate = DateTime(widget.dateFilter!.year, widget.dateFilter!.month, widget.dateFilter!.day, 0, 0, 0);
-        endDate = DateTime(widget.dateFilter!.year, widget.dateFilter!.month, widget.dateFilter!.day, 23, 59, 59);
+      if (widget.dateRange != null) {
+        startDate = widget.dateRange!.start;
+        endDate = widget.dateRange!.end;
       }
       final received = await _stockRepo.getPurchaseOrders(
         status: 'RECEIVED',
@@ -72,13 +72,13 @@ class _SupplierOrderHistoryScreenState extends State<SupplierOrderHistoryScreen>
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                if (widget.dateFilter != null)
+                if (widget.dateRange != null)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     color: Colors.orange.shade50,
                     child: Text(
-                      'ข้อมูลประจำวันที่: ${DateFormat('dd/MM/yyyy').format(widget.dateFilter!)}',
+                      'ข้อมูลช่วงวันที่: ${DateFormat('dd/MM/yyyy').format(widget.dateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(widget.dateRange!.end)}',
                       style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),

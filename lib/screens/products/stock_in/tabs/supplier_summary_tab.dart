@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../repositories/stock_repository.dart';
 import '../screens/supplier_order_history_screen.dart';
+import '../../../../widgets/common/quick_date_range_selector.dart';
 
 class SupplierSummaryTab extends StatefulWidget {
   const SupplierSummaryTab({super.key});
@@ -15,7 +16,7 @@ class _SupplierSummaryTabState extends State<SupplierSummaryTab> {
   final StockRepository _stockRepo = StockRepository();
   bool _isLoading = false;
   List<Map<String, dynamic>> _summaryList = [];
-  DateTime? _selectedDate;
+  DateTimeRange? _selectedRange;
 
   @override
   void initState() {
@@ -28,9 +29,9 @@ class _SupplierSummaryTabState extends State<SupplierSummaryTab> {
     try {
       DateTime? startDate;
       DateTime? endDate;
-      if (_selectedDate != null) {
-        startDate = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
-        endDate = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
+      if (_selectedRange != null) {
+        startDate = _selectedRange!.start;
+        endDate = _selectedRange!.end;
       }
       final received = await _stockRepo.getPurchaseOrders(status: 'RECEIVED', startDate: startDate, endDate: endDate, limit: 1000);
       final Map<int, Map<String, dynamic>> grouped = {};
@@ -56,18 +57,9 @@ class _SupplierSummaryTabState extends State<SupplierSummaryTab> {
     }
   }
 
-  Future<void> _pickDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('th', 'TH'),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() => _selectedDate = picked);
-      _loadData();
-    }
+  void _applyDateRange(DateTimeRange range) {
+    setState(() => _selectedRange = range);
+    _loadData();
   }
 
   @override
@@ -80,19 +72,24 @@ class _SupplierSummaryTabState extends State<SupplierSummaryTab> {
         // 🔎 Filter Bar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              OutlinedButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.calendar_today),
-                label: Text(_selectedDate == null ? 'ทุกวัน (All Time)' : 'วันที่: ${DateFormat('dd/MM/yyyy').format(_selectedDate!)}'),
+              QuickDateRangeSelector(
+                currentRange: _selectedRange ??
+                    DateTimeRange(start: DateTime.now(), end: DateTime.now()),
+                onChanged: _applyDateRange,
               ),
-              if (_selectedDate != null) ...[
-                const SizedBox(width: 8),
+              if (_selectedRange != null) ...[
+                Text(
+                  '${DateFormat('dd/MM/yyyy').format(_selectedRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_selectedRange!.end)}',
+                ),
                 IconButton(
                   icon: const Icon(Icons.clear, color: Colors.red),
                   tooltip: 'ล้างวันที่',
-                  onPressed: () { setState(() => _selectedDate = null); _loadData(); },
+                  onPressed: () { setState(() => _selectedRange = null); _loadData(); },
                 ),
               ],
             ],
@@ -139,7 +136,7 @@ class _SupplierSummaryTabState extends State<SupplierSummaryTab> {
                         builder: (_) => SupplierOrderHistoryScreen(
                           supplierId: item['supplierId'],
                           supplierName: item['supplierName'],
-                          dateFilter: _selectedDate,
+                          dateRange: _selectedRange,
                         ),
                       ),
                     );

@@ -64,6 +64,25 @@ class DebtController {
             'รับชำระ COD โดยคนขับ${driverId.isNotEmpty ? " ($driverId)" : ""} (Job: $jobId)';
 
         try {
+          // A mobile retry may arrive after the previous request committed but
+          // before its response reached the device. Treat the job id as the
+          // idempotency key so COD is never deducted twice.
+          if (jobId.isNotEmpty) {
+            final duplicate = await conn.execute('''
+              SELECT id FROM debtor_transaction
+              WHERE transactionType = 'DEBT_PAYMENT'
+                AND note LIKE :jobMarker
+              LIMIT 1
+            ''', {'jobMarker': '%(Job: $jobId)%'});
+            if (duplicate.rows.isNotEmpty) {
+              await conn.execute('COMMIT;');
+              return Response.ok(
+                jsonEncode({'success': true, 'message': 'COD already recorded'}),
+                headers: {'content-type': 'application/json'},
+              );
+            }
+          }
+
           // 1. Get current debt
           final custRes = await conn.execute(
             'SELECT currentDebt FROM customer WHERE id = :id FOR UPDATE',

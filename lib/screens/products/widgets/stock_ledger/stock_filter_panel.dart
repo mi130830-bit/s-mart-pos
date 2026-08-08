@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../widgets/common/custom_buttons.dart';
+import '../../../../widgets/common/quick_date_range_selector.dart';
 
 class StockFilterPanel extends StatelessWidget {
   final DateTimeRange? dateRange;
   final VoidCallback onPickDateRange;
   final VoidCallback onClearFilter;
+  final ValueChanged<DateTimeRange> onDateRangeChanged;
 
   const StockFilterPanel({
     super.key,
     required this.dateRange,
     required this.onPickDateRange,
     required this.onClearFilter,
+    required this.onDateRangeChanged,
   });
 
   @override
@@ -19,8 +22,19 @@ class StockFilterPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: Colors.grey[100],
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          QuickDateRangeSelector(
+            currentRange: dateRange ??
+                DateTimeRange(
+                  start: DateTime.now(),
+                  end: DateTime.now(),
+                ),
+            onChanged: onDateRangeChanged,
+          ),
+          const SizedBox(height: 6),
+          Row(children: [
           const Icon(Icons.calendar_today, size: 20, color: Colors.indigo),
           const SizedBox(width: 8),
           Expanded(
@@ -42,6 +56,7 @@ class StockFilterPanel extends StatelessWidget {
             label: 'เลือกช่วงเวลา',
             type: ButtonType.primary,
           ),
+          ]),
         ],
       ),
     );

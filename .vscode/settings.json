@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "C:/pos_desktop/windows"
+    "cmake.sourceDirectory": "C:/pos_desktop/windows",
+    "C_Cpp.default.configurationProvider": ""
 }

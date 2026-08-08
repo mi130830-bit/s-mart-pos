@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../widgets/common/quick_date_range_selector.dart';
 
 class DeliveryReportFilterBar extends StatelessWidget {
   final DateTime startDate;
@@ -11,6 +12,7 @@ class DeliveryReportFilterBar extends StatelessWidget {
   final VoidCallback onPickStartDate;
   final VoidCallback onPickEndDate;
   final Function(String) onSearchChanged;
+  final ValueChanged<DateTimeRange> onDateRangeChanged;
 
   const DeliveryReportFilterBar({
     super.key,
@@ -23,6 +25,7 @@ class DeliveryReportFilterBar extends StatelessWidget {
     required this.onPickStartDate,
     required this.onPickEndDate,
     required this.onSearchChanged,
+    required this.onDateRangeChanged,
   });
 
   @override
@@ -34,8 +37,16 @@ class DeliveryReportFilterBar extends StatelessWidget {
     return Container(
       color: colorScheme.surfaceContainerHighest,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          QuickDateRangeSelector(
+            currentRange: DateTimeRange(start: startDate, end: endDate),
+            onChanged: onDateRangeChanged,
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
           const Icon(Icons.date_range, size: 20),
           const SizedBox(width: 12),
           const Text('เริ่ม:', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -101,6 +112,8 @@ class DeliveryReportFilterBar extends StatelessWidget {
                     color: Colors.red,
                     fontSize: 12),
               ),
+            ],
+          ),
             ],
           ),
         ],

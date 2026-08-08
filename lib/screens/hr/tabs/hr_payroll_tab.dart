@@ -486,10 +486,10 @@ class _HrPayrollTabState extends ConsumerState<HrPayrollTab> {
               historyEnd: _historyEnd,
               historyEmployeeFilter: _historyEmployeeFilter,
               onSelectHistoryRange: () => _selectHistoryRange(context),
-              onSelectQuickRange: (days) {
+              onSelectQuickRange: (range) {
                 setState(() {
-                  _historyEnd = DateTime.now();
-                  _historyStart = DateTime.now().subtract(Duration(days: days));
+                  _historyStart = range.start;
+                  _historyEnd = range.end;
                 });
                 _loadHistory();
               },

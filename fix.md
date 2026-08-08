@@ -4,6 +4,134 @@
 
 ---
 
+## [2026-08-08] จำกัดลิงก์ติดตามเฉพาะรถที่มี GPS
+
+**ไทย:** ขณะนี้อนุญาตให้แนบลิงก์ติดตามลูกค้าเฉพาะรถเครน (`รถเครน`) ซึ่งเป็นรถที่
+ติดตั้ง ESP GPS แล้ว งานที่ปล่อยรถคันอื่นยังส่งข้อความ LINE OA ว่า "กำลังเดินทาง"
+ตามปกติ แต่จะไม่สร้างหรือแนบลิงก์ที่ยังแสดงตำแหน่งไม่ได้
+
+**English:** Customer tracking links are currently enabled only for the crane
+(`รถเครน`), the sole vehicle with an ESP GPS tracker. Jobs assigned to other
+vehicles still receive the normal LINE OA shipping notification, without an
+unusable tracking link.
+
+---
+
+## [2026-08-08] Customer delivery tracking through LINE OA
+
+**ไทย:** Stage 2 ของ LINE OA สร้างลิงก์ติดตามเฉพาะออเดอร์และแนบพร้อมข้อความ
+“กำลังเดินทางจัดส่ง” หน้าลูกค้าเห็นเฉพาะพิกัดรถคันที่ถูกปล่อยงานนั้น และ token
+ถูกเพิกถอนทันทีเมื่อ backend รับการปิดงาน
+
+**English:** LINE OA Stage 2 now issues and attaches an order-scoped tracking
+link to the shipping notification. The customer page exposes only the assigned
+vehicle's location, and its token is revoked as soon as the backend records
+job completion.
+
+---
+
+## [2026-08-08] Canonical GPS vehicle identity
+
+**ไทย:** กำหนดชื่อรหัส GPS กลางสำหรับรถดั้มเป็น `ดั้มเล็ก` และ `ดั้มใหญ่`
+ให้ ESP32, S-Link, POS GPS backend และหน้าเว็บใช้ค่าเดียวกัน S-Link จะส่งชื่อ
+รถก่อนทะเบียนในสถานะปล่อยรถและปิดงาน เพื่อไม่ให้เกิดรถคนละรายการบนแผนที่
+
+**English:** Defined `ดั้มเล็ก` and `ดั้มใหญ่` as the canonical GPS vehicle
+keys shared by ESP32 trackers, S-Link, the POS GPS backend, and the web map.
+S-Link now prefers the vehicle name over the registration plate for departure
+and completion GPS status updates, avoiding split vehicle records.
+
+---
+
+## [2026-08-08] Vehicle-specific GPS tracker sketches
+
+**ไทย:** เพิ่มสเก็ตช์อัปโหลดแยกสำหรับ `ดั้มเล็ก` และ `ดั้มใหญ่` ใน
+`GPS/vehicles/` โดยใช้ firmware กลางชุดเดียวกัน ชื่อรถที่ ESP32 ส่งขึ้น API
+ตรงกับชื่อ canonical บนหน้า GPS จึงไม่ปะปนกับรถคันอื่น
+
+**English:** Added separate upload sketches for `ดั้มเล็ก` and `ดั้มใหญ่`
+under `GPS/vehicles/`. Both reuse the shared tracker firmware and send the
+canonical GPS vehicle names, preventing vehicle-status mismatches.
+
+---
+
+## [2026-08-07] Paid-order edits, additional settlement, and audit trail
+
+**ไทย:** การแก้ไขบิลที่เคยชำระแล้วจะแสดงยอดบิลใหม่, ยอดเก็บไปแล้ว และยอดคงค้างเฉพาะส่วนเพิ่มอย่างถูกต้อง หากเลือกเงินเชื่อ ระบบสร้างลูกหนี้และงานส่งแบบ “เก็บปลายทางเพิ่ม” เฉพาะส่วนต่าง; หากชำระทันที ระบบบันทึกเป็น “ชำระเพิ่ม (แก้ไขบิล)” โดยไม่สร้างหนี้ซ้ำ พร้อมป้องกันการลดบิลต่ำกว่าเงินที่รับแล้วซึ่งต้องใช้ขั้นตอนคืนเงินเฉพาะทาง นอกจากนี้เพิ่ม Audit Log สำหรับการแก้ไขลูกค้าและบิล เพื่อระบุผู้ทำ เวลา และรายละเอียดสำคัญของการเปลี่ยนแปลง
+
+**English:** Paid-order edits now preserve the amount already collected and settle only the additional balance. Credit creates a receivable and COD job only for that difference; immediate payment is recorded as an additional settlement without duplicate debt. Refund-requiring reductions are blocked for an explicit refund flow. Customer and order edits now write audit records with the actor, timestamp, and key change details.
+
+**Thai addendum:** สำหรับบิลเดิมที่เก็บ `received` เป็นเงินที่ลูกค้ายื่นมา ระบบแก้ไขบิลจะหัก `changeAmount` ก่อนเสมอ เช่น รับ 11,000 และทอน 685 จะนับว่ารับจริง 10,315; ยอดเพิ่ม 225 จึงปิดบิลหรือเป็น COD/ลูกหนี้เพียง 225 เท่านั้น.
+
+**English addendum:** For historical bills that store the tendered amount in `received`, order edits now subtract `changeAmount` first. A ฿11,000 tender with ฿685 change is treated as ฿10,315 collected, so only the ฿225 increase is settled or sent as COD.
+
+**Maintenance:** Removed an unused delivery-edit calculation so `flutter analyze` remains warning-free.
+
+**Release:** Bumped POS Desktop to `1.8.3` for the paid-order edit settlement, COD adjustment, and audit-log fixes.
+
+**S-Link sync:** The active-job API now sends the outstanding balance rather than the full order total. It deducts prior change from tendered cash first, so an edited paid order with a ฿225 credit increase remains the same job and shows only ฿225 COD in S-Link.
+
+**Settlement base:** Fully paid order edits now use the original bill total as the settled base directly. The additional amount is therefore always `new bill total − original bill total`; tendered cash and change are only relevant to bills that were already unpaid.
+
+**GPS diagnostics:** `GPS/GPS.ino` now prints the HTTP response body after every position upload, making API acceptance or rejection visible in the Serial Monitor.
+
+**4G recovery:** GPS sketches now reject the false-success `0.0.0.0` PDP state, reconnect the APN once, and skip HTTP until the A7670E has a usable mobile-data IP.
+
+**GPS compile fix:** Replaced the non-Arduino `String.isNotEmpty()` call with `!String.isEmpty()` in the 4G IP check.
+
+
+## [2026-08-04] Canonical Driver Identity & Safe Attendance Sync
+
+**ไทย:** API รายชื่อคนขับส่ง `user.id` เป็นรหัส assignment หลัก พร้อมส่ง
+`employee_profile.id` ใน `employee_id` เพื่อรองรับงานเดิมและงาน HR
+นอกจากนี้ Attendance API จะ rollback และตอบ error เมื่อจับคู่พนักงานไม่ได้
+แทนการข้ามรายการแล้วตอบสำเร็จ ซึ่งป้องกันเวลาเข้างานหายเงียบ ๆ
+
+**English:** The driver API now exposes `user.id` as the canonical assignment
+identity while retaining `employee_profile.id` as `employee_id` for legacy
+jobs and HR. Attendance sync now rolls back when employee resolution fails,
+so the mobile offline record remains queued for retry instead of being
+silently marked as synchronized.
+
+## [2026-08-03] Dual-Stack Backend Server, Smart Identity Resolution & S-Link Attendance Real-time Auto-Sync
+
+### 🖥️ POS Backend & API Server
+- **[Network & Cloudflare Fix] Dual-Stack Binding (IPv4 & IPv6):**
+  - **ไฟล์:** `backend/bin/server.dart`
+  - **รายละเอียด:** ปรับการเปิด Port ของ `shelf_io` ให้ใช้ `HttpServer.bind(InternetAddress.anyIPv6, port, v6Only: false)` เพื่อรองรับการเชื่อมต่อพร้อมกันทั้ง IPv4 (`127.0.0.1`) และ IPv6 (`[::1]`) แก้ปัญหา Cloudflare Tunnel เด้ง Error `dial tcp [::1]:8080: connectex` ขาดการเชื่อมต่อ
+- **[Security & Identity] Smart Employee Identity Resolver (`_resolveEmployeeId`):**
+  - **ไฟล์:** `backend/lib/controllers/attendance_controller.dart`
+  - **รายละเอียด:** เพิ่มฟังก์ชันแปลงตัวตนแบบยืดหยุ่น รองรับการระบุตัวตนด้วยทั้ง Username (`miti`) หรือ User ID (`10`) โดยจับคู่เฉพาะ `employee_profile` ตัวจริงที่เปิดใช้งานอยู่ (`is_active = 1`) เพื่อป้องกันปัญหา ID ขยะในฐานข้อมูลแทรกแซง
+- **[Data Integrity] Stale `clock_out` Sanitization:**
+  - **ไฟล์:** `backend/lib/controllers/attendance_controller.dart`
+  - **รายละเอียด:** เพิ่ม Logic เคลียร์ค่า `clock_out` ตกค้างในอดีตให้เป็น `NULL` เมื่อมีการเข้างานรอบใหม่ และกรอง `clock_out` ที่ลงไว้ก่อน `clock_in` ออกจากผลลัพธ์การดึงข้อมูล
+
+- **[Feature & UX] Simplified Job Completion (Optional Photo):**
+  - **ไฟล์:** `lib/features/jobs/screens/complete_job_form.dart`
+  - **รายละเอียด:** ปรับกระบวนการปิดงานส่งสินค้าให้เรียบง่าย (Lazy-friendly) ปลดการบังคับถ่ายรูปออก คนขับสามารถกด **[ยืนยันการปิดงาน]** ได้ทันทีในคลิกเดียว โดยส่งเฉพาะยอด COD (ถ้ามี) และพิกัด GPS กลับมา ส่วนการถ่ายรูปปรับเป็นแบบ Optional (เลือกถ่ายหรือไม่ก็ได้)
+
+- **[Feature & Admin UI] Delete Job from Delivery Dashboard:**
+  - **ไฟล์:** `lib/screens/reports/delivery_dashboard_screen.dart`, `lib/screens/reports/widgets/delivery_dashboard/delivery_records_table.dart`, `lib/repositories/delivery_history_repository.dart`
+  - **รายละเอียด:** เพิ่มฟังก์ชันและปุ่ม "ลบ" (Delete) ในหน้าแดชบอร์ดติดตามงานส่งของ (Delivery Dashboard) บน POS เพื่อให้ร้านค้าสามารถเลือกลบรายการงานที่สร้างผิด หรือเกิดจากการเทสระบบออกจากฐานข้อมูล MySQL (`delivery_history`) ได้โดยตรง
+
+---
+
+## [2026-08-03] Architecture Shift: Direct API & Offline Retry for Attendance (POS Desktop & S-Link)
+
+### 📱 S-Link
+- **[Feature & Fix] Auto-Push Offline Attendance Logs on Open:**
+  - **ไฟล์:** `lib/features/hr/services/attendance_service.dart`
+  - **รายละเอียด:** เพิ่ม `await syncUnsyncedLogs()` ไว้ที่จุดเริ่มต้นของ `fetchTodayLogFromServer()` ทำให้ทุกครั้งที่เปิดหรือรีเฟรชหน้าลงเวลา ระบบจะดันคิวที่บันทึกไว้ใน Isar ขณะออฟไลน์ (`isSynced = false`) ขึ้นไปยัง POS Backend API ทันทีเมื่อกลับมาเชื่อมต่อได้
+
+### 🖥️ POS Desktop
+- **[UI Clean & Architecture Alignment] Refreshed HR Attendance Tab:**
+  - **ไฟล์:** `lib/screens/hr/tabs/hr_attendance_tab.dart`, `lib/screens/hr/hr_screen.dart`
+  - **รายละเอียด:** ปรับปรุงข้อความปุ่มรีเฟรชและแจ้งเตือนจากคำว่า "ซิงค์ข้อมูลจากคลาวด์" (Firestore เดิม) เป็น "รีเฟรชข้อมูลลงเวลาล่าสุด" และเชื่อมต่อการดึงข้อมูลจาก MySQL ท้องถิ่นโดยตรง 100%
+- **[Clean Code] Cleaned obsolete scratch test files:**
+  - ลบไฟล์ทดสอบเก่าที่ไม่ใช้งาน (`check_db.dart`, `test_api.dart`, `test_db.dart`, `test_firestore.dart`, `test_mysql2.dart`) เพื่อให้ Visual Studio Code ดีบักได้อย่างลื่นไหล 0 Error
+
+---
+
 ## [2026-08-03] UI & Sorting Enhancement: Product Search Dialog (POS v1.7.10) & S-Link Attendance Fix
 
 ### 📱 S-Link → v3.4.13+96
@@ -402,3 +530,154 @@
 1. สร้าง setDocumentFull ใน irestore_rest_core.dart และ irestore_rest_service.dart ซึ่งจะทำงานเป็น PATCH แบบไม่ระบุ updateMask (Full Upsert)
 2. เปลี่ยน AttendanceSyncService ให้เรียกใช้ setDocumentFull แทน updateDocument เพื่อสร้าง/เขียนทับ log ได้สมบูรณ์โดยไม่เกิด Error 404
 3. Build S_MartPOS_Setup_v1.7.10.exe และ S-Link version 3.4.15+98 เรียบร้อยแล้ว
+## 2026-08-04 — แก้ปุ่มลบในหน้าติดตามงานส่ง / Fix delivery tracking delete action
+
+- แก้การอ่าน `delivery_history.id` ให้รองรับค่าจาก MySQL ทั้งชนิดตัวเลขและข้อความ ก่อนส่งไปลบในฐานข้อมูล
+- เพิ่มข้อความแจ้งเตือนเมื่อรายการไม่มีรหัสประวัติ แทนการกดแล้วไม่มีการตอบสนอง
+- การลบมีผลเฉพาะประวัติงานใน `delivery_history` ไม่กระทบบิลขาย ยอดเงิน หรือข้อมูลลูกค้า
+- Parse `delivery_history.id` safely from either numeric or string MySQL values before deletion.
+- Show an explicit error when a history row has no valid ID; deletion remains scoped to `delivery_history` only.
+## 2026-08-04 — ตัวกรองช่วงวันที่มาตรฐาน / Shared date-range filters
+
+**ไทย**
+
+- เพิ่ม `DateRangeHelper` และ `QuickDateRangeSelector` เป็นมาตรฐานกลางสำหรับ วันนี้, สัปดาห์นี้ (จันทร์–วันนี้), เดือนนี้, ปีนี้ และกำหนดช่วงเอง
+- แบบกำหนดเองเปิดโหมดกรอกวันที่เริ่มต้น/สิ้นสุดโดยตรงและสลับไปปฏิทินได้ เหมาะสำหรับข้อมูลย้อนหลังหลายปี
+- ยกเลิกข้อจำกัดช่วงรายงานขนส่งไม่เกิน 366 วัน โดยยังคงใช้ขอบเขตต้นวัน–สิ้นวันให้ query SQL ตรงกัน
+- นำตัวกรองกลางไปใช้ในหน้าติดตามงานส่ง, รายงานขนส่ง, รายรับ–รายจ่าย, Stock Ledger, สินค้าขายดี, ประวัติเงินเดือน และสรุปการรับเข้าตามผู้ขาย
+- ไม่เปลี่ยนช่องวันที่เชิงธุรกรรม เช่น วันที่เอกสาร วันลา วันหยุด โปรโมชั่น และวันที่ราคาน้ำมัน เพราะไม่ใช่ตัวกรองรายงาน
+
+**English**
+
+- Added shared `DateRangeHelper` and `QuickDateRangeSelector` presets for today, week-to-date, month-to-date, year-to-date, and custom ranges.
+- Custom selection starts in direct date-entry mode with a calendar toggle, making multi-year history easier to query.
+- Removed the delivery report's 366-day limit and reused normalized start/end-of-day boundaries across report filters.
+- Adopted the shared selector in delivery tracking/reporting, income/expense, stock ledger, best sellers, payroll history, and supplier receiving summary screens.
+- Transaction-specific dates remain unchanged because they are data-entry fields rather than report filters.
+## 2026-08-04 — HR Override API routing and release 1.8.2
+
+**ไทย:** ย้าย route `GET /hr/attendance/list` มาไว้ใน
+`AttendanceController` ซึ่งเป็น controller ที่ router จับ path นี้จริง
+พร้อมคืนสถานะ/วิธีบันทึกสำหรับหน้าจอเข้างานแทน อัปเดต backend ให้รักษา
+`PRESENT_OVERRIDE` และ `HR_OVERRIDE` ทั้งกรณี insert และ update และเตรียม
+POS Desktop รุ่น `1.8.2` พร้อม backend executable รุ่นเดียวกับซอร์สล่าสุด
+
+**English:** Registered `GET /hr/attendance/list` on the effective
+`AttendanceController`, returned override metadata, preserved
+`PRESENT_OVERRIDE`/`HR_OVERRIDE` during inserts and updates, and prepared POS
+Desktop `1.8.2` with a backend executable compiled from the current source.
+## 2026-08-04 — Analyzer warning cleanup
+
+**ไทย:** แก้ deprecated color API, exception rethrow, string interpolation,
+วงเล็บเงื่อนไข และ production logging ใน POS/backend พร้อมแยกไฟล์ Isar ที่
+generate อัตโนมัติและสคริปต์ CLI/scratch ออกจากขอบเขต `flutter analyze`
+โดยยังคงตรวจ source production และ test ปกติครบถ้วน
+
+**English:** Cleaned deprecated color APIs, exception rethrowing, string
+interpolation, conditional braces, and production backend logging. Generated
+Isar files and standalone CLI/scratch tools are excluded from Flutter analysis,
+while application source and normal tests remain fully analyzed.
+## 2026-08-05 — Product list vertical overflow
+
+**ไทย:** ลดจำนวนสินค้าในหน้า Product List จาก 8 เป็น 7 แถวต่อหน้า เพื่อให้
+แถวรายการและแถบแบ่งหน้าอยู่ภายในพื้นที่หน้าจอครบถ้วน สินค้าไม่ได้ถูกลบและ
+รายการส่วนเกินจะเลื่อนไปหน้าถัดไปโดยระบบ pagination เดิม
+
+**English:** Reduced the Product List page size from eight to seven rows so
+the list and pagination controls fit within the available vertical space. No
+products are removed; remaining products continue on the next page.
+# 2026-08-05 — POS auto-refreshes S-Link attendance from MySQL
+
+**ไทย:** หลังเปลี่ยน Attendance ให้ S-Link ส่งตรงเข้า POS API/MySQL หน้า
+สถานะพนักงานของ POS ยังโหลดเฉพาะตอนเปิดหน้าหรือกดรีเฟรช จึงไม่เห็นรายการใหม่
+เมื่อเปิดหน้าค้างไว้ แก้ให้แท็บลงเวลาโหลดจาก MySQL อัตโนมัติทุก 10 วินาที
+แบบป้องกัน request ซ้อน และให้ปุ่มรีเฟรชรอผลจริงก่อนแจ้งว่าสำเร็จ
+
+**English:** After attendance moved to the POS API/MySQL source of truth, the
+POS attendance tab only loaded on entry or manual refresh. It now polls MySQL
+every 10 seconds while mounted, prevents overlapping requests, and waits for
+manual refresh completion before reporting success.
+# 2026-08-05 - Idempotent SQL attendance merge / รวมข้อมูลลงเวลาใน SQL แบบส่งซ้ำได้อย่างปลอดภัย
+
+- TH: ปรับ API ลงเวลาให้เวลาเข้างานเลือกค่าที่เก่าที่สุด และเวลาออกงานเลือกค่าที่ใหม่ที่สุด โดยข้อมูลค้างที่ไม่มีเวลาออกงานจะไม่สามารถล้างค่าออกงานใน MySQL ได้อีก
+- EN: Attendance API now keeps the earliest clock-in and latest clock-out; stale payloads without a clock-out can no longer clear a confirmed MySQL clock-out.
+- TH: ป้องกันการส่งเหตุการณ์ออกชั่วคราวซ้ำแล้วสร้างรอบใหม่ และไม่ให้สถานะ PRESENT จากมือถือเขียนทับสถานะที่ POS คำนวณ
+- EN: Duplicate temporary-leave events no longer create extra rounds, and normal mobile PRESENT payloads no longer overwrite POS-calculated status.
+# 2026-08-05 - A7670E GPS tracker production path / เส้นทาง GPS A7670E สำหรับใช้งานจริง
+
+- TH: เปิดโหมด 4G ในเฟิร์มแวร์รถ เปลี่ยนไปใช้ TinyGSM A7672X driver ที่รองรับตระกูล A7670E และเพิ่มขั้นตอนรอเครือข่าย, ตรวจสัญญาณ, reconnect และ HTTPS timeout
+- EN: Enabled vehicle 4G mode, selected TinyGSM's A7672X-family driver for A7670E, and added network registration, signal diagnostics, reconnect, and HTTPS timeout handling.
+- TH: แยก GPS API เป็นช่องรับพิกัดสาธารณะที่ต้องมี device key, ช่องอ่านสำหรับหน้าแผนที่ และช่องอัปเดตสถานะงานที่ยังบังคับ JWT
+- EN: Split GPS access into a device-key-protected location ingest path, public map reads, and a JWT-protected job-status update path.
+# 2026-08-05 - JWT refresh endpoint / API ต่ออายุ JWT
+
+- TH: เพิ่ม `/api/v1/auth/refresh` เพื่อออก Access Token ใหม่จาก Refresh Token อายุ 30 วัน และอ่านสิทธิ์ผู้ใช้ล่าสุดจาก MySQL ก่อนออก Token
+- EN: Added `/api/v1/auth/refresh` to issue a new access token from a 30-day refresh token and reload the user's current MySQL identity before issuing it.
+- TH: เปลี่ยนกรณี Token ขาดหาย/หมดอายุเป็น HTTP 401 เพื่อให้ client แยกจากข้อผิดพลาดสิทธิ์ธุรกิจได้ถูกต้อง
+- EN: Missing, invalid, and expired tokens now return HTTP 401 so clients can distinguish authentication failures from business authorization errors.
+
+# 2026-08-06 - Staged GPS / Wi-Fi / A7670E diagnostics
+
+- TH: เพิ่มสเก็ตช์แยก `GPS_WIFI_TEST.ino` สำหรับ GPS + Wi-Fi + API และ `GPS_4G_A7670E.ino` สำหรับยืนยันโมเด็ม/เครือข่าย 4G โดยไม่ต้องต่อ GPS พร้อมคู่มือ `GPS/README_TESTING.md` ที่เรียงการต่อไฟและทดสอบจาก ESP32, GPS, Wi-Fi ไปจนถึง A7670E
+- EN: Added separate `GPS_WIFI_TEST.ino` and GPS-free `GPS_4G_A7670E.ino` diagnostics, plus `GPS/README_TESTING.md` with a staged ESP32, GPS, Wi-Fi, then A7670E power-up/test sequence.
+- TH: ลบค่า Wi-Fi และ device key จริงออกจากสเก็ตช์ที่เกี่ยวข้อง; ทุกไฟล์ใช้ placeholder และการทดสอบ 4G จะไม่ส่งพิกัดทดสอบโดยค่าเริ่มต้น
+- EN: Removed real Wi-Fi/device-key values from the related sketches; all use placeholders and the 4G diagnostic does not post a test location by default.
+- TH: ตั้งค่า Wi-Fi test สำหรับรถเครนให้ใช้การตั้งค่า deployment ในเครื่องและชื่อรถจริง โดย device key ตรวจตรงกับ backend แล้ว
+- EN: Set the Wi-Fi test's local deployment configuration and real crane-vehicle label; the device key was verified against the backend configuration.
+- TH: ตั้งค่าสเก็ตช์ A7670E 4G สำหรับรถเครนด้วย APN และ API deployment จริง โดยคง network-only test เป็นค่าเริ่มต้นเพื่อไม่ส่งพิกัดทดสอบ 0,0 ขึ้นแผนที่
+- EN: Configured the A7670E 4G test with the crane's local APN/API deployment values while retaining network-only mode by default to avoid posting a 0,0 test location.
+- TH: ย้ายสเก็ตช์ทดสอบ Wi-Fi และ 4G เข้าโฟลเดอร์ของตัวเอง เพื่อป้องกัน Arduino IDE รวม `.ino` หลายไฟล์แล้วเกิด `redefinition`; เพิ่มการตั้งค่า VS Code ให้ IntelliSense เห็น ESP32 core และไลบรารีที่ติดตั้งแล้ว
+- EN: Moved each test sketch into its own folder to prevent Arduino IDE from combining multiple `.ino` files and causing redefinitions; added VS Code IntelliSense paths for the installed ESP32 core and libraries.
+- TH: เพิ่มการพิมพ์ข้อความตอบกลับจาก API เมื่อ Wi-Fi test ได้รหัส HTTP ที่ไม่ใช่ 2xx เพื่อแยกการถูก Cloudflare/เซิร์ฟเวอร์ปฏิเสธออกจากปัญหา Wi-Fi หรือ GPS
+- EN: Added API error-body logging for non-2xx Wi-Fi test responses, distinguishing Cloudflare/server rejection from Wi-Fi or GPS failures.
+# 2026-08-07 — POS: การแก้ไขบิลที่ชำระแล้ว / Paid-order edit settlement
+
+- แยกยอดที่ลูกค้าจ่ายก่อนแก้ไขออกจากยอดส่วนเพิ่ม ทำให้หน้าชำระเงินแสดงยอดบิลใหม่, เก็บไปแล้ว, และยอดคงค้างที่ต้องรับจริง
+- เลือกเงินเชื่อหลังเพิ่มรายการจะสร้างลูกหนี้เฉพาะยอดคงค้าง พร้อมบันทึก `เก็บปลายทางเพิ่ม (แก้ไขบิล #...)`; งานส่งของจะรับยอดส่วนต่างนั้นเป็น COD
+- ชำระเงินสด/โอน/QR หลังแก้ไขจะบันทึก `ชำระเพิ่ม (แก้ไขบิล #...)` และบันทึกรายการใน `order_payment` โดยไม่สร้างลูกหนี้
+- ป้องกันการลดบิลให้ต่ำกว่าเงินที่รับแล้ว เพื่อไม่ให้เกิดการคืนเงินหรือยอดลูกหนี้ติดลบโดยไม่ตั้งใจ
+- The paid amount is now preserved during order edits. Credit creates receivables only for the new outstanding balance, while immediate payment is audited as an additional payment. Edits that require a refund are blocked for a separate, explicit refund workflow.
+
+# 2026-08-07 — GPS: รอ Data IP ให้เสถียรก่อนส่ง HTTPS / Wait for stable data IP before HTTPS
+
+- TH: หลัง A7670E ตอบรับ APN จะรอรับ IP จริงสูงสุด 15 วินาที (และอ่านข้อมูล GPS ต่อเนื่องระหว่างรอ) ก่อนตัดต่อใหม่; เมื่อได้ IP แล้วจะยืนยันว่า session คงอยู่ต่ออีก 2 วินาทีก่อนเริ่ม HTTPS เพื่อลดอาการ IP แกว่งระหว่างเริ่มเชื่อมต่อ
+- EN: After A7670E accepts the APN, the tracker waits up to 15 seconds for a real IP while continuously consuming GPS serial data before reconnecting; after an IP arrives, it confirms the data session remains alive for a further 2 seconds before HTTPS begins to reduce connection flapping.
+
+- TH: เพิ่ม log คำสั่ง AT เฉพาะกรณีที่ต่อ APN แล้วไม่ได้ IP เพื่อแสดงสถานะ SIM, การลงทะเบียน packet/LTE, APN, PDP activation และ IP ที่เครือข่ายตอบกลับ โดยไม่ส่งผลกับรอบที่เชื่อมต่อสำเร็จ
+- EN: Added raw AT-command diagnostics only when APN succeeds without an IP, reporting SIM, packet/LTE registration, APN, PDP activation, and the network-assigned IP without affecting successful connection cycles.
+
+- TH: แก้การตรวจ IP ของ A7670E ให้ใช้ `AT+CGPADDR=1` โดยตรง หลังพบว่าไลบรารี TinyGSM รายงาน `0.0.0.0` ทั้งที่ modem ได้ PDP IP จริงแล้ว จึงไม่ตัดการเชื่อมต่อที่ใช้งานได้ทิ้งก่อนส่ง HTTPS
+- EN: Corrected A7670E IP detection to query `AT+CGPADDR=1` directly after diagnostics showed TinyGSM reported `0.0.0.0` despite a valid PDP IP, preventing valid data sessions from being discarded before HTTPS.
+
+- TH: แยกการเปิด TLS ไปยัง API ออกจากการส่ง HTTP เพื่อระบุได้ว่าความล้มเหลวอยู่ที่ secure socket หรือ request/response; เมื่อ TLS เปิดไม่สำเร็จจะแสดงค่า `AT+CSSLCFG?` สำหรับตรวจ config ของโมเด็ม
+- EN: Split TLS socket establishment from the HTTP request so failures can be located at the secure socket or request/response stage; unsuccessful TLS setup prints `AT+CSSLCFG?` for modem SSL configuration diagnostics.
+
+- TH: เมื่อ TLS เปิดไม่สำเร็จ เพิ่มการทดสอบ DNS ของ host และ plain TCP ไปพอร์ต 443 แยกจาก SSL เพื่อแยกปัญหาเครือข่าย/DNS ออกจาก TLS handshake โดยไม่เพิ่มการเชื่อมต่อในรอบที่ส่งสำเร็จ
+- EN: When TLS setup fails, added host DNS and plain-TCP-to-443 checks separate from SSL to distinguish network/DNS faults from TLS handshakes without adding connections to successful reporting cycles.
+
+- TH: เปิด TinyGSM AT debug ชั่วคราว เพื่อแสดงคำตอบ `+CCHOPEN` ที่มีรหัสความผิดพลาดของ TLS จาก A7670E โดยตรง; ต้องปิดบรรทัด debug นี้หลังวิเคราะห์เสร็จเพื่อลด serial log
+- EN: Temporarily enabled TinyGSM AT debug to expose A7670E's `+CCHOPEN` TLS failure code directly; the debug line should be disabled after diagnosis to reduce serial logging.
+
+- TH: จากผล `+CCHOPEN: 0,15` (TLS handshake error) ของ Cloudflare edge เปลี่ยน transport ของรถเครนเฉพาะโหมด 4G เป็น HTTP พอร์ต 80 ชั่วคราว เพื่อให้ส่งพิกัดใช้งานได้ โดย API ยังคงตรวจ `GPS_DEVICE_KEY`; ถอด TLS debug ที่ใช้วิเคราะห์ออกแล้ว
+- EN: After `+CCHOPEN: 0,15` confirmed a Cloudflare-edge TLS handshake error, temporarily switched the crane's 4G transport to HTTP on port 80 so GPS reporting can operate while the API continues enforcing `GPS_DEVICE_KEY`; removed the diagnostic TLS debug.
+
+- TH: เปิด TinyGSM AT debug ชั่วคราวอีกครั้งและเพิ่ม `NETOPEN?`/`CIPOPEN?` เมื่อ TCP พอร์ต 80 เปิดไม่สำเร็จ เพื่ออ่านรหัสตอบกลับของ A7670E ก่อนแก้การเชื่อมต่อ HTTP
+- EN: Temporarily re-enabled TinyGSM AT debug and added `NETOPEN?`/`CIPOPEN?` after a failed port-80 TCP open to obtain A7670E's response code before correcting the HTTP connection.
+
+- TH: เปลี่ยน diagnostic TCP เป็นการสั่ง `AT+CIPOPEN` ตรงและรอผล asynchronous `+CIPOPEN` สูงสุด 20 วินาที เพื่อให้เห็นรหัสเปิด socket จริง แทนคำสั่ง query ที่ไม่คืนสาเหตุการล้มเหลว
+- EN: Replaced the TCP diagnostic with a direct `AT+CIPOPEN` attempt that waits up to 20 seconds for its asynchronous `+CIPOPEN` result, exposing the actual socket-open code instead of an uninformative status query.
+
+- TH: หลังยืนยัน `AT+CIPOPEN` เปิด socket สำเร็จแต่ TinyGSM เปิด TCP ไม่ได้ เปลี่ยนเส้นทางส่ง GPS 4G ให้ใช้ native A7670E socket (`CIPOPEN` → `CIPSEND` → `CIPRXGET` → `CIPCLOSE`) โดยตรง พร้อม log ผลส่งและคำตอบ API
+- EN: After direct `AT+CIPOPEN` succeeded while TinyGSM TCP failed, changed the 4G GPS reporting path to use native A7670E sockets directly (`CIPOPEN` → `CIPSEND` → `CIPRXGET` → `CIPCLOSE`) with send-result and API-response logging.
+
+- TH: เมื่อ native `CIPOPEN` ไม่สำเร็จ จะไม่สั่งปิด socket ที่ยังไม่เปิดแล้ว; เปลี่ยนเป็น refresh PDP data session และ retry เปิด TCP หนึ่งครั้ง เพื่อฟื้นจาก socket state ค้างโดยไม่ส่งพิกัดซ้ำ
+- EN: When native `CIPOPEN` fails, the tracker no longer closes a socket that was never opened; it refreshes the PDP data session and retries TCP once to recover from a stale socket state without duplicating the location post.
+
+- TH: แยก DNS ออกจาก `CIPOPEN`: resolve `api.namecheap.work` ด้วย `CDNSGIP` ก่อน แล้วให้ socket เชื่อมต่อด้วย IPv4 ที่ได้ ขณะที่ HTTP `Host` ยังคงชื่อโดเมนเดิม เพื่อลดความไม่เสถียรของ DNS ภายใน TCP socket ของ A7670E
+- EN: Separated DNS from `CIPOPEN`: resolve `api.namecheap.work` via `CDNSGIP` first, then connect the socket to the returned IPv4 while retaining the original HTTP `Host`, reducing A7670E socket-internal DNS instability.
+
+- TH: แก้ลำดับ native TCP ให้สั่ง `AT+NETOPEN` และรอ `+NETOPEN: 0` ก่อน `CIPOPEN`; ก่อนหน้านี้ TinyGSM เคยเปิด Socket Service ขั้นนี้โดยอ้อม แต่ native path ยังขาดอยู่จึงทำให้ `CIPOPEN: 0,2`
+- EN: Corrected the native TCP sequence to issue `AT+NETOPEN` and wait for `+NETOPEN: 0` before `CIPOPEN`; TinyGSM previously opened this socket service indirectly, while the native path omitted it and caused `CIPOPEN: 0,2`.
+
+- TH: รองรับรูปแบบผลส่งของ firmware A7670E คือ `+CIPSEND:<link>,<sent>,<requested>` โดยถือว่าการส่งสำเร็จเมื่อ link 0 รายงาน byte count; API ตอบ 204 แล้วปิด connection เอง จึงตัดการอ่าน body/ปิด socket ซ้ำที่ทำให้ log error ปลอม
+- EN: Added support for A7670E firmware's `+CIPSEND:<link>,<sent>,<requested>` result format, treating link-0 byte counts as success; because the API returns 204 and closes the connection itself, removed body reads/redundant socket close calls that produced false error logs.

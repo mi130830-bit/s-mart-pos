@@ -105,3 +105,6 @@ backend/add_van.dart
 backend/check_*.dart
 backend/reset_*.dart
 backend/test_*.dart
+
+# AI Team Guide (private)
+AGENTS.md

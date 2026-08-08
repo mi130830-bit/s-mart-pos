@@ -11,21 +11,28 @@
 //    - ปิด comment (#define USE_4G) ไว้ก่อน  = ทดสอบผ่าน WiFi
 //    - เปิด comment (#define USE_4G)         = ใช้งานจริงผ่าน 4G SIM
 // ------------------------------------------------------------------
-// #define USE_4G
+#define USE_4G
 
 // ------------------------------------------------------------------
 // 📋 ตั้งค่าหลัก (แก้ได้ที่นี่จุดเดียว)
 // ------------------------------------------------------------------
-const char* VEHICLE_NAME = "รถเครน";              // ชื่อรถ (แสดงบนแผนที่และ Telegram)
+// Vehicle-specific sketches can override this before including this firmware.
+// Keep the identifier identical to the vehicle name used by the GPS web map.
+#ifndef GPS_VEHICLE_NAME
+#define GPS_VEHICLE_NAME "รถเครน"
+#endif
+const char* VEHICLE_NAME = GPS_VEHICLE_NAME;       // ชื่อรถ (แสดงบนแผนที่และ Telegram)
 const char* SERVER_URL   = "https://api.namecheap.work/api/v1/gps";
 const unsigned long SEND_INTERVAL_MS = 5000;       // ส่งพิกัดทุก 5 วินาที
 
 // -- WiFi (โหมดทดสอบ) --
-const char* WIFI_SSID     = "Ti";
-const char* WIFI_PASSWORD = "12345678";
+const char* WIFI_SSID     = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 
-// -- 4G SIM (Finn Mobile ใช้เครือข่าย DTAC) --
-const char* APN = "internet";  // APN ของ DTAC / Finn Mobile
+// -- 4G SIM (AIS) --
+const char* APN = "internet";  // APN ของ AIS
+// ต้องตรงกับ GPS_DEVICE_KEY ใน backend/.env
+const char* GPS_DEVICE_KEY = "s-mart-gps-a7670e-2026";
 
 // ------------------------------------------------------------------
 // 📌 Pin Mapping (ตรวจสอบให้ตรงกับการต่อสายจริง)
@@ -48,12 +55,11 @@ const char* APN = "internet";  // APN ของ DTAC / Finn Mobile
 
 #ifdef USE_4G
   // โหมด 4G: ใช้ TinyGSM Library
-  #define TINY_GSM_MODEM_A7670
+  // TinyGSM ใช้ไดรเวอร์ชื่อ A7672X สำหรับโมเด็มตระกูล A7670/A7672
+  #define TINY_GSM_MODEM_A7672X
   #define TINY_GSM_RX_BUFFER 1024
   #include <TinyGsmClient.h>
-  #include <ArduinoHttpClient.h>
   TinyGsm        modem(Serial1);
-  TinyGsmClientSecure gsmClient(modem);
 #else
   // โหมด WiFi: ใช้ WiFi + HTTPClient
   #include <WiFi.h>
@@ -69,18 +75,344 @@ unsigned long lastSendTime     = 0;
 unsigned long lastCheckGpsTime = 0;
 bool          isConnected       = false;
 
+#ifdef USE_4G
+// TinyGSM's A7672X localIP() parser can report 0.0.0.0 even though the
+// modem's PDP context has an address. Read the documented PDP query directly.
+String getDataIpFromModem() {
+  while (Serial1.available() > 0) {
+    Serial1.read();
+  }
+  Serial1.print("AT+CGPADDR=1\r\n");
+
+  String response;
+  const unsigned long startedAt = millis();
+  unsigned long lastByteAt = startedAt;
+  bool receivedAnyByte = false;
+  while (millis() - startedAt < 1800L &&
+         (!receivedAnyByte || millis() - lastByteAt < 250L)) {
+    while (Serial1.available() > 0) {
+      response += static_cast<char>(Serial1.read());
+      receivedAnyByte = true;
+      lastByteAt = millis();
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+
+  const int labelAt = response.indexOf("+CGPADDR:");
+  const int commaAt = response.indexOf(',', labelAt);
+  if (labelAt < 0 || commaAt < 0) return "";
+
+  int endAt = response.indexOf('\n', commaAt);
+  if (endAt < 0) endAt = response.length();
+  String ip = response.substring(commaAt + 1, endAt);
+  ip.trim();
+  ip.replace("\"", "");
+  return ip;
+}
+
+bool hasUsableDataIp() {
+  const String ip = getDataIpFromModem();
+  return !ip.isEmpty() && ip != "0.0.0.0";
+}
+
+// Keep GPS serial data flowing while the cellular network assigns a PDP IP.
+// A7670E can take several seconds after APN success before its IP is usable.
+void serviceGpsWhileWaiting(unsigned long waitMs) {
+  const unsigned long startedAt = millis();
+  while (millis() - startedAt < waitMs) {
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(10);
+  }
+}
+
+bool waitForUsableDataIp(unsigned long timeoutMs) {
+  const unsigned long startedAt = millis();
+  while (millis() - startedAt < timeoutMs) {
+    if (hasUsableDataIp()) return true;
+    serviceGpsWhileWaiting(1000);
+    Serial.print('.');
+  }
+  Serial.println();
+  return false;
+}
+
+void printAtResponse(const char* command, unsigned long timeoutMs = 1800L) {
+  while (Serial1.available() > 0) {
+    Serial1.read();
+  }
+
+  Serial.print("[AT] >> ");
+  Serial.println(command);
+  Serial1.print(command);
+  Serial1.print("\r\n");
+
+  const unsigned long startedAt = millis();
+  unsigned long lastByteAt = startedAt;
+  bool receivedAnyByte = false;
+  while (millis() - startedAt < timeoutMs &&
+         (!receivedAnyByte || millis() - lastByteAt < 300L)) {
+    while (Serial1.available() > 0) {
+      Serial.write(Serial1.read());
+      receivedAnyByte = true;
+      lastByteAt = millis();
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+  if (!receivedAnyByte) Serial.print("(no response)");
+  Serial.println();
+}
+
+void dumpDataSessionDiagnostics() {
+  Serial.println("[4G] --- Raw data-session diagnostics ---");
+  printAtResponse("AT+CPIN?");     // SIM ready / PIN state
+  printAtResponse("AT+CGREG?");    // packet-service registration
+  printAtResponse("AT+CEREG?");    // LTE EPS registration
+  printAtResponse("AT+CGATT?");    // attached to packet service
+  printAtResponse("AT+CGDCONT?");  // configured APN context
+  printAtResponse("AT+CGACT?");    // PDP context activation
+  printAtResponse("AT+CGPADDR=1"); // assigned PDP IP address
+  Serial.println("[4G] --- End diagnostics ---");
+}
+
+bool openTcpSocket(const char* host, uint16_t port) {
+  while (Serial1.available() > 0) {
+    Serial1.read();
+  }
+
+  const String command = String("AT+CIPOPEN=0,\"TCP\",\"") + host +
+                         "\"," + String(port);
+  Serial.print("[AT] >> ");
+  Serial.println(command);
+  Serial1.print(command);
+  Serial1.print("\r\n");
+
+  String response;
+  const unsigned long startedAt = millis();
+  unsigned long lastByteAt = startedAt;
+  bool receivedResult = false;
+  while (millis() - startedAt < 20000L &&
+         (!receivedResult || millis() - lastByteAt < 500L)) {
+    while (Serial1.available() > 0) {
+      const char c = static_cast<char>(Serial1.read());
+      Serial.write(c);
+      response += c;
+      lastByteAt = millis();
+      if (response.indexOf("+CIPOPEN:") >= 0) receivedResult = true;
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+  if (!receivedResult) {
+    Serial.println("[AT] TCP open timed out without +CIPOPEN result");
+    return false;
+  }
+  return response.indexOf("+CIPOPEN: 0,0") >= 0;
+}
+
+bool ensureSocketServiceOpen() {
+  while (Serial1.available() > 0) {
+    Serial1.read();
+  }
+  Serial.println("[AT] >> AT+NETOPEN");
+  Serial1.print("AT+NETOPEN\r\n");
+
+  String response;
+  const unsigned long startedAt = millis();
+  while (millis() - startedAt < 20000L &&
+         (response.indexOf("+NETOPEN:") < 0 &&
+          response.indexOf("Network is already opened") < 0)) {
+    while (Serial1.available() > 0) {
+      const char c = static_cast<char>(Serial1.read());
+      Serial.write(c);
+      response += c;
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+
+  const bool ready = response.indexOf("+NETOPEN: 0") >= 0 ||
+                     response.indexOf("Network is already opened") >= 0;
+  if (ready) {
+    Serial.println("[4G] ✅ Socket service พร้อมใช้งาน");
+  } else {
+    Serial.println("[4G] ❌ เปิด Socket service ไม่สำเร็จ");
+  }
+  return ready;
+}
+
+String resolveHostIp(const char* host) {
+  while (Serial1.available() > 0) {
+    Serial1.read();
+  }
+  const String command = String("AT+CDNSGIP=\"") + host + "\"";
+  Serial.print("[DNS] Resolving ");
+  Serial.println(host);
+  Serial1.print(command);
+  Serial1.print("\r\n");
+
+  String response;
+  const unsigned long startedAt = millis();
+  unsigned long lastByteAt = startedAt;
+  bool receivedResult = false;
+  while (millis() - startedAt < 10000L &&
+         (!receivedResult || millis() - lastByteAt < 300L)) {
+    while (Serial1.available() > 0) {
+      const char c = static_cast<char>(Serial1.read());
+      Serial.write(c);
+      response += c;
+      lastByteAt = millis();
+      if (response.indexOf("+CDNSGIP:") >= 0) receivedResult = true;
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+
+  const int resultAt = response.indexOf("+CDNSGIP:");
+  const int firstQuote = response.indexOf('"', resultAt);
+  const int secondQuote = response.indexOf('"', firstQuote + 1);
+  const int thirdQuote = response.indexOf('"', secondQuote + 1);
+  const int fourthQuote = response.indexOf('"', thirdQuote + 1);
+  if (resultAt < 0 || thirdQuote < 0 || fourthQuote < 0) {
+    Serial.println("[DNS] ❌ DNS lookup failed");
+    return "";
+  }
+
+  const String ip = response.substring(thirdQuote + 1, fourthQuote);
+  Serial.println("[DNS] ✅ " + ip);
+  return ip;
+}
+
+bool connect4G(bool restartModem);
+
+bool sendHttpPostViaA7670(const char* host, const char* path,
+                           const String& payload) {
+  if (!ensureSocketServiceOpen()) return false;
+  String endpoint = resolveHostIp(host);
+  if (endpoint.isEmpty()) return false;
+
+  if (!openTcpSocket(endpoint.c_str(), 80)) {
+    Serial.println("[HTTP] ⚠️ TCP socket ไม่พร้อม — รีเฟรช Data session แล้วลองอีกครั้ง...");
+    modem.gprsDisconnect();
+    serviceGpsWhileWaiting(1000);
+    isConnected = connect4G(false);
+    if (isConnected && !ensureSocketServiceOpen()) return false;
+    endpoint = resolveHostIp(host);
+    if (!isConnected || endpoint.isEmpty() || !openTcpSocket(endpoint.c_str(), 80)) {
+      Serial.println("[HTTP] ❌ A7670E เปิด TCP socket ไม่สำเร็จหลัง retry");
+      return false;
+    }
+  }
+
+  const String request = String("POST ") + path + " HTTP/1.1\r\n" +
+      "Host: " + host + "\r\n" +
+      "User-Agent: ESP32-GPS\r\n" +
+      "Content-Type: application/json\r\n" +
+      "X-GPS-Device-Key: " + GPS_DEVICE_KEY + "\r\n" +
+      "Content-Length: " + String(payload.length()) + "\r\n" +
+      "Connection: close\r\n\r\n" + payload;
+
+  while (Serial1.available() > 0) {
+    Serial1.read();
+  }
+  Serial.print("[AT] >> AT+CIPSEND=0,");
+  Serial.println(request.length());
+  Serial1.print("AT+CIPSEND=0,");
+  Serial1.print(request.length());
+  Serial1.print("\r\n");
+
+  String promptResponse;
+  const unsigned long promptStartedAt = millis();
+  while (millis() - promptStartedAt < 5000L && promptResponse.indexOf('>') < 0) {
+    while (Serial1.available() > 0) {
+      const char c = static_cast<char>(Serial1.read());
+      Serial.write(c);
+      promptResponse += c;
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+  if (promptResponse.indexOf('>') < 0) {
+    Serial.println("[HTTP] ❌ A7670E ไม่ส่ง prompt สำหรับข้อมูล HTTP");
+    printAtResponse("AT+CIPCLOSE=0");
+    return false;
+  }
+
+  Serial1.print(request);
+  Serial1.flush();
+  String sendResponse;
+  const unsigned long sendStartedAt = millis();
+  unsigned long lastByteAt = sendStartedAt;
+  while (millis() - sendStartedAt < 15000L &&
+         (sendResponse.indexOf("+CIPSEND:") < 0 || millis() - lastByteAt < 300L)) {
+    while (Serial1.available() > 0) {
+      const char c = static_cast<char>(Serial1.read());
+      Serial.write(c);
+      sendResponse += c;
+      lastByteAt = millis();
+    }
+    while (Serial2.available() > 0) {
+      gps.encode(Serial2.read());
+    }
+    delay(5);
+  }
+
+  // A7670E firmware reports +CIPSEND:<link>,<sent>,<requested>.
+  // The send is successful when link 0 reports its byte counts.
+  const bool sent = sendResponse.indexOf("+CIPSEND: 0,") >= 0;
+  Serial.println(sent
+    ? "[HTTP] ✅ ส่งพิกัดเข้า API สำเร็จ"
+    : "[HTTP] ❌ A7670E ส่งข้อมูล TCP ไม่สำเร็จ");
+  // API returns 204 and Connection: close; the modem reports +IPCLOSE itself.
+  // Avoid CIPCLOSE after that server-initiated close, which only creates noise.
+  if (!sent && sendResponse.indexOf("+IPCLOSE:") < 0) {
+    printAtResponse("AT+CIPCLOSE=0");
+  }
+  Serial.println();
+  return sent;
+}
+
+#endif
+
 // ------------------------------------------------------------------
 // 📡 ฟังก์ชัน: เชื่อมต่อ 4G (เรียกตอน setup และตอน reconnect)
 // ------------------------------------------------------------------
 #ifdef USE_4G
-bool connect4G() {
-  Serial.println("[4G] กำลัง Restart โมดูล A7670E...");
-  modem.restart();
-  delay(3000);
+bool connect4G(bool restartModem) {
+  if (restartModem) {
+    Serial.println("[4G] กำลัง Restart โมดูล A7670E...");
+    if (!modem.restart()) {
+      Serial.println("[4G] ❌ โมเด็มไม่ตอบสนอง");
+      return false;
+    }
+  }
 
   Serial.print("[4G] IMEI: ");
   Serial.println(modem.getIMEI());
 
+  Serial.println("[4G] กำลังลงทะเบียนเครือข่าย...");
+  if (!modem.waitForNetwork(60000L)) {
+    Serial.println("[4G] ❌ ไม่พบเครือข่ายภายใน 60 วินาที");
+    return false;
+  }
+
+  Serial.print("[4G] สัญญาณ: ");
+  Serial.println(modem.getSignalQuality());
   Serial.print("[4G] กำลังเชื่อมต่อ APN: ");
   Serial.println(APN);
 
@@ -89,9 +421,37 @@ bool connect4G() {
     return false;
   }
 
+  // AIS may acknowledge APN before assigning a usable PDP IP. Wait first;
+  // disconnecting immediately can make the session flap indefinitely.
+  Serial.print("[4G] รอรับ Data IP สูงสุด 15 วินาที ");
+  if (!waitForUsableDataIp(15000L)) {
+    Serial.println("[4G] ⚠️ APN ต่อได้ แต่ยังไม่ได้ IP จริง — กำลังต่อใหม่...");
+    modem.gprsDisconnect();
+    serviceGpsWhileWaiting(2000);
+    if (!modem.gprsConnect(APN, "", "")) {
+      Serial.println("[4G] ❌ ต่อ APN ซ้ำไม่สำเร็จ");
+      return false;
+    }
+    Serial.print("[4G] รอรับ Data IP รอบสุดท้าย ");
+  }
+
+  if (!hasUsableDataIp() && !waitForUsableDataIp(15000L)) {
+    Serial.println("[4G] ❌ ยังไม่ได้ IP จากเครือข่าย (0.0.0.0)");
+    dumpDataSessionDiagnostics();
+    return false;
+  }
+
+  // Confirm that the PDP session remains alive before sending data.
+  Serial.println("[4G] ได้ IP แล้ว — รอให้ Data session นิ่ง 2 วินาที...");
+  serviceGpsWhileWaiting(2000);
+  if (!hasUsableDataIp()) {
+    Serial.println("[4G] ⚠️ IP หลุดระหว่างรอความนิ่ง");
+    return false;
+  }
+
   Serial.println("[4G] ✅ เชื่อมต่อ 4G สำเร็จ!");
   Serial.print("[4G] IP Address: ");
-  Serial.println(modem.localIP());
+  Serial.println(getDataIpFromModem());
   return true;
 }
 #endif
@@ -114,30 +474,18 @@ void sendGpsData(double lat, double lng, double speed) {
 
 #ifdef USE_4G
   // --- โหมด 4G ---
-  if (!modem.isGprsConnected()) {
+  if (!modem.isGprsConnected() || !hasUsableDataIp()) {
     Serial.println("[4G] ⚠️ GPRS หลุด! กำลัง Reconnect...");
-    isConnected = connect4G();
+    isConnected = connect4G(false);
     if (!isConnected) return;
   }
 
-  // แยก Host และ Path จาก URL
+  // Temporary compatibility path: A7670E cannot complete TLS negotiation
+  // with this Cloudflare edge. The API still requires GPS_DEVICE_KEY.
   const char* host = "api.namecheap.work";
   const char* path = "/api/v1/gps";
 
-  HttpClient httpClient(gsmClient, host, 443);
-  httpClient.connectionKeepAlive();
-
-  int err = httpClient.post(path, "application/json", payload);
-  if (err == 0) {
-    int statusCode = httpClient.responseStatusCode();
-    Serial.print("[4G] ✅ ส่งพิกัดสำเร็จ HTTP: ");
-    Serial.println(statusCode);
-    httpClient.skipResponseHeaders();
-  } else {
-    Serial.print("[4G] ❌ HTTP POST Error: ");
-    Serial.println(err);
-  }
-  httpClient.stop();
+  sendHttpPostViaA7670(host, path, payload);
 
 #else
   // --- โหมด WiFi ---
@@ -169,6 +517,7 @@ void sendGpsData(double lat, double lng, double speed) {
   if (httpCode > 0) {
     Serial.print("[WiFi] ✅ ส่งพิกัดสำเร็จ HTTP: ");
     Serial.println(httpCode);
+    Serial.println("[HTTP] Response: " + http.getString());
   } else {
     Serial.print("[WiFi] ❌ ส่งพิกัดผิดพลาด Error: ");
     Serial.println(httpCode);
@@ -198,7 +547,7 @@ void setup() {
   Serial1.begin(GSM_BAUD, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
   Serial.println("[4G] กำลังเริ่มต้นโมดูล A7670E...");
   delay(1000);
-  isConnected = connect4G();
+  isConnected = connect4G(true);
 #else
   // เชื่อมต่อ WiFi
   Serial.print("[WiFi] กำลังเชื่อมต่อ SSID: ");

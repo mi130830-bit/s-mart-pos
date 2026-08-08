@@ -96,16 +96,69 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
       DateTime newEnd = isStart ? _endDate : picked;
       if (newEnd.isBefore(newStart)) newEnd = newStart;
       
-      if (newEnd.difference(newStart).inDays > 366) {
-        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', type: 'warning');
-        return;
-      }
-
       setState(() { 
         _startDate = newStart; 
         _endDate = newEnd; 
       });
       await _loadData();
+    }
+  }
+
+  void _applyDateRange(DateTimeRange range) {
+    setState(() {
+      _startDate = range.start;
+      _endDate = range.end;
+    });
+    _loadData();
+  }
+
+  Future<void> _deleteJob(Map<String, dynamic> record) async {
+    final historyId = int.tryParse(record['id']?.toString() ?? '');
+    if (historyId == null || historyId <= 0) {
+      AlertService.show(
+        context: context,
+        message: 'ไม่พบรหัสประวัติงาน จึงไม่สามารถลบรายการนี้ได้',
+        type: 'error',
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยืนยันการลบงาน'),
+        content: const Text('คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้? \nข้อมูลการส่งของจะถูกลบออกจากระบบอย่างถาวร'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('ลบงาน'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        final success = await _coordinator.deleteJob(historyId);
+        if (success && mounted) {
+          AlertService.show(context: context, message: 'ลบงานสำเร็จ', type: 'success');
+          await _loadData();
+        } else if (mounted) {
+          AlertService.show(context: context, message: 'ลบงานไม่สำเร็จ', type: 'error');
+          setState(() => _isLoading = false);
+        }
+      } catch (e) {
+        if (mounted) {
+          AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -452,6 +505,7 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
             onPickEndDate: () => _pickDate(isStart: false),
             onVehicleSelected: (vehicle) =>
                 setState(() => _selectedVehicle = vehicle),
+            onDateRangeChanged: _applyDateRange,
           ),
 
           // ── Summary Cards ──
@@ -474,6 +528,7 @@ class _DeliveryDashboardScreenState extends State<DeliveryDashboardScreen> {
                   _showAssignVehicleDialog(context, record),
               onViewOrderDetails: (orderId) => _showOrderDetail(orderId),
               onCalculateFuelCost: (record) => double.tryParse(record['_calculatedFuelCost']?.toString() ?? '0') ?? 0.0,
+              onDeleteJob: _deleteJob,
             ),
           ),
         ],

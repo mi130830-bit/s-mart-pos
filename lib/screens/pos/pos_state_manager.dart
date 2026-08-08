@@ -157,6 +157,15 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
   int? _editingOrderId;
   String? _editingOldStatus;
   double _editingOldGrandTotal = 0.0;
+  double _editingOriginalReceived = 0.0;
+
+  /// เงินที่รับไว้ก่อนเริ่มแก้ไขบิล ใช้เป็นฐานในการเก็บเฉพาะส่วนเพิ่ม
+  double get editingOriginalReceived => _editingOriginalReceived;
+
+  /// ยอดที่ยังต้องรับของบิลที่กำลังแก้ไข (ไม่รวมเงินที่เคยรับไปแล้ว)
+  double get paymentDue => _editingOrderId == null
+      ? grandTotal
+      : (grandTotal - _editingOriginalReceived).clamp(0.0, double.infinity);
 
   double _billDiscount = 0.0;
   bool _isPercentDiscount = false;

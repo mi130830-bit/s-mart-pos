@@ -43,6 +43,11 @@ class DeliveryCoordinator {
         _fuelRepo = fuelRepo ?? FuelPriceRepository(),
         _vehicleRepo = vehicleRepo ?? VehicleSettingsRepository();
 
+  // ── 1. ดึงรถจาก MySQL vehicle_settings (Base) ──
+  Future<bool> deleteJob(int historyId) async {
+    return await _historyRepo.deleteHistory(historyId);
+  }
+
   /// Loads and merges vehicle settings, remote Firestore active fleets,
   /// archived histories in date range, fuel prices, and fuel efficiencies.
   Future<DeliveryDashboardData> loadDashboardData(DateTime startDate, DateTime endDate) async {

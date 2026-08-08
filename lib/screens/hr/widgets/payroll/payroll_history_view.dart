@@ -6,6 +6,7 @@ import '../../../../state/hr/employee_provider.dart';
 import '../../../../repositories/expense_repository.dart';
 import '../../../../utils/snackbar_utils.dart';
 import 'payroll_detail_dialog.dart';
+import '../../../../widgets/common/quick_date_range_selector.dart';
 
 class PayrollHistoryView extends ConsumerStatefulWidget {
   final PayrollState state;
@@ -15,7 +16,7 @@ class PayrollHistoryView extends ConsumerStatefulWidget {
   final DateTime historyEnd;
   final int? historyEmployeeFilter;
   final VoidCallback onSelectHistoryRange;
-  final void Function(int days) onSelectQuickRange;
+  final ValueChanged<DateTimeRange> onSelectQuickRange;
   final void Function(int? val) onEmployeeFilterChanged;
   final VoidCallback onLoadHistory;
 
@@ -40,13 +41,6 @@ class PayrollHistoryView extends ConsumerStatefulWidget {
 class _PayrollHistoryViewState extends ConsumerState<PayrollHistoryView> {
   String? _expandedPeriodKey;
 
-  Widget _buildQuickRangeChip(String label, int days) {
-    return ActionChip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
-      onPressed: () => widget.onSelectQuickRange(days),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final employees = ref.watch(employeeProvider).employees;
@@ -63,12 +57,13 @@ class _PayrollHistoryViewState extends ConsumerState<PayrollHistoryView> {
                 label: Text('${widget.dateFormat.format(widget.historyStart)} - ${widget.dateFormat.format(widget.historyEnd)}'),
               ),
               const SizedBox(width: 8),
-              // Quick select buttons
-              _buildQuickRangeChip('สัปดาห์นี้', 7),
-              const SizedBox(width: 4),
-              _buildQuickRangeChip('เดือนนี้', 30),
-              const SizedBox(width: 4),
-              _buildQuickRangeChip('3 เดือน', 90),
+              QuickDateRangeSelector(
+                currentRange: DateTimeRange(
+                  start: widget.historyStart,
+                  end: widget.historyEnd,
+                ),
+                onChanged: widget.onSelectQuickRange,
+              ),
               const SizedBox(width: 12),
               // Employee filter dropdown
               SizedBox(

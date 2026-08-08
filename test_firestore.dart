@@ -1,1 +1,0 @@
-import 'dart:convert'; import 'dart:io'; void main() async { final url = Uri.parse('https://firestore.googleapis.com/v1/projects/fir-link-a8266/databases/(default)/documents/attendance_logs'); final res = await HttpClient().getUrl(url).then((r) => r.close()); final body = await res.transform(utf8.decoder).join(); print(body); }

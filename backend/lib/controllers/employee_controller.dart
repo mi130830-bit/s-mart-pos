@@ -17,7 +17,7 @@ class EmployeeController {
       // ค้นหาพนักงานที่มี role_type = 'DRIVER' หรือที่มีคำว่า driver ใน position
       final result = await conn.execute(
         '''
-        SELECT id, display_name, phone, role_type
+        SELECT id, user_id, display_name, phone, role_type
         FROM employee_profile
         WHERE is_active = 1 AND (role_type = 'DRIVER' OR LOWER(position) LIKE '%driver%' OR LOWER(position) LIKE '%คนขับ%')
         ORDER BY display_name ASC
@@ -26,11 +26,16 @@ class EmployeeController {
 
       final List<Map<String, dynamic>> drivers = [];
       for (final row in result.rows) {
+        final employeeId = row.colAt(0);
+        final userId = row.colAt(1);
         drivers.add({
-          'id': row.colAt(0),
-          'name': row.colAt(1),
-          'phone': row.colAt(2),
-          'role': row.colAt(3),
+          // Account id is canonical for new S-Link assignments. Keep the
+          // employee id so existing assignments and HR records remain valid.
+          'id': userId ?? employeeId,
+          'employee_id': employeeId,
+          'name': row.colAt(2),
+          'phone': row.colAt(3),
+          'role': row.colAt(4),
         });
       }
 

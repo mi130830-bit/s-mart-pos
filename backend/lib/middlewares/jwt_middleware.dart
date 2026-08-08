@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shelf/shelf.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
+
 /// Middleware สำหรับตรวจสอบ Firebase ID Token
 Middleware jwtMiddleware() {
   return (Handler innerHandler) {
@@ -14,14 +15,14 @@ Middleware jwtMiddleware() {
       // ดึง Header Authorization
       final authHeader = request.headers['authorization'];
       if (authHeader == null || !authHeader.startsWith('Bearer ')) {
-        return Response.forbidden(
+        return Response.unauthorized(
           jsonEncode({'error': 'Missing or invalid Authorization header'}),
           headers: {'content-type': 'application/json'},
         );
       }
 
       final token = authHeader.substring(7); // ตัดคำว่า "Bearer " ออก
-      
+
       // ตรวจสอบ JWT (Custom JWT by POS Desktop)
       Map<String, dynamic>? payload;
       try {
@@ -30,7 +31,7 @@ Middleware jwtMiddleware() {
       } catch (e) {
         // ignore: avoid_print
         print('⚠️ JWT Middleware: Token rejected. Error: $e');
-        return Response.forbidden(
+        return Response.unauthorized(
           jsonEncode({'error': 'Token Rejected: $e'}),
           headers: {'content-type': 'application/json'},
         );

@@ -74,8 +74,9 @@ void main(List<String> args) async {
   // Start Firestore -> MySQL Bridge
   PrintBridgeService().startBridge();
 
-  // Start Server
-  final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
+  // Start Server (Dual-stack IPv4 & IPv6 for Cloudflare Tunnel compatibility)
+  final server = await HttpServer.bind(InternetAddress.anyIPv6, port, v6Only: false);
+  shelf_io.serveRequests(server, handler);
 
   stdout.writeln('====================================');
   stdout.writeln('  S-Link POS Backend API');

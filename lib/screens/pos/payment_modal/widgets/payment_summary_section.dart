@@ -4,6 +4,9 @@ import 'package:intl/intl.dart';
 
 class PaymentSummarySection extends StatelessWidget {
   final Decimal grandTotal;
+  final Decimal originalGrandTotal;
+  final Decimal alreadyPaid;
+  final bool isEditing;
   final Decimal totalPaid;
   final Decimal remaining;
   final Decimal change;
@@ -12,6 +15,9 @@ class PaymentSummarySection extends StatelessWidget {
   const PaymentSummarySection({
     super.key,
     required this.grandTotal,
+    required this.originalGrandTotal,
+    required this.alreadyPaid,
+    required this.isEditing,
     required this.totalPaid,
     required this.remaining,
     required this.change,
@@ -53,9 +59,11 @@ class PaymentSummarySection extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildInfoColumn('ยอดรวมทั้งหมด', grandTotal, Colors.black87),
+          _buildInfoColumn(isEditing ? 'ยอดบิลใหม่' : 'ยอดรวมทั้งหมด',
+              isEditing ? originalGrandTotal : grandTotal, Colors.black87),
           _buildDivider(height: 50),
-          _buildInfoColumn('รับเงินมาแล้ว', totalPaid, Colors.blue.shade800),
+          _buildInfoColumn(isEditing ? 'เก็บไปแล้ว' : 'รับเงินมาแล้ว',
+              isEditing ? alreadyPaid : totalPaid, Colors.blue.shade800),
           _buildDivider(height: 50),
           if (!isFullyPaid)
             _buildInfoColumn('ยังค้างชำระ', remaining, Colors.red)

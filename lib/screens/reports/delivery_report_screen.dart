@@ -149,10 +149,6 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
     );
     if (picked != null && mounted) {
       DateTime newEndDate = _endDate.isBefore(picked) ? picked : _endDate;
-      if (newEndDate.difference(picked).inDays > 366) {
-        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', type: 'warning');
-        return;
-      }
       setState(() {
         _startDate = picked;
         _endDate = newEndDate;
@@ -177,15 +173,19 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
       },
     );
     if (picked != null && mounted) {
-      if (picked.difference(_startDate).inDays > 366) {
-        AlertService.show(context: context, message: 'กรุณาเลือกช่วงเวลาไม่เกิน 1 ปีเพื่อป้องกันระบบค้าง', type: 'warning');
-        return;
-      }
       setState(() {
         _endDate = picked;
       });
       await _loadData();
     }
+  }
+
+  void _applyDateRange(DateTimeRange range) {
+    setState(() {
+      _startDate = range.start;
+      _endDate = range.end;
+    });
+    _loadData();
   }
 
 
@@ -376,6 +376,7 @@ class _DeliveryReportScreenState extends State<DeliveryReportScreen> {
             totalFuelCost: _totalFuelCost,
             onPickStartDate: _pickStartDate,
             onPickEndDate: _pickEndDate,
+            onDateRangeChanged: _applyDateRange,
             onSearchChanged: (value) {
               setState(() {
                 _searchQuery = value;

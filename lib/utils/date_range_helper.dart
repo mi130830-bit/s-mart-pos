@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 enum DateRangeType {
   today,
-  yesterday,
-  last7Days,
-  last30Days,
+  thisWeek,
   thisMonth,
+  thisYear,
   custom,
 }
 
@@ -14,14 +13,12 @@ class DateRangeHelper {
     switch (type) {
       case DateRangeType.today:
         return 'วันนี้';
-      case DateRangeType.yesterday:
-        return 'เมื่อวาน';
-      case DateRangeType.last7Days:
-        return '7 วันย้อนหลัง';
-      case DateRangeType.last30Days:
-        return '30 วันย้อนหลัง';
+      case DateRangeType.thisWeek:
+        return 'สัปดาห์นี้';
       case DateRangeType.thisMonth:
         return 'เดือนนี้';
+      case DateRangeType.thisYear:
+        return 'ปีนี้';
       case DateRangeType.custom:
         return 'กำหนดเอง';
     }
@@ -38,29 +35,20 @@ class DateRangeHelper {
             end: today
                 .add(const Duration(days: 1))
                 .subtract(const Duration(seconds: 1)));
-      case DateRangeType.yesterday:
-        final yesterday = today.subtract(const Duration(days: 1));
+      case DateRangeType.thisWeek:
         return DateTimeRange(
-            start: yesterday,
-            end: yesterday
-                .add(const Duration(days: 1))
-                .subtract(const Duration(seconds: 1)));
-      case DateRangeType.last7Days:
-        return DateTimeRange(
-            start: today.subtract(const Duration(days: 6)),
-            end: today
-                .add(const Duration(days: 1))
-                .subtract(const Duration(seconds: 1)));
-      case DateRangeType.last30Days:
-        return DateTimeRange(
-            start: today.subtract(const Duration(days: 29)),
+            start: today.subtract(Duration(days: today.weekday - 1)),
             end: today
                 .add(const Duration(days: 1))
                 .subtract(const Duration(seconds: 1)));
       case DateRangeType.thisMonth:
         final startOfMonth = DateTime(now.year, now.month, 1);
-        final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-        return DateTimeRange(start: startOfMonth, end: endOfMonth);
+        return DateTimeRange(start: startOfMonth, end: _endOfToday(today));
+      case DateRangeType.thisYear:
+        return DateTimeRange(
+          start: DateTime(now.year, 1, 1),
+          end: _endOfToday(today),
+        );
       case DateRangeType.custom:
         return DateTimeRange(
             start: today,
@@ -69,4 +57,19 @@ class DateRangeHelper {
                 .subtract(const Duration(seconds: 1)));
     }
   }
+
+  static DateTimeRange normalize(DateTimeRange range) => DateTimeRange(
+        start: DateTime(range.start.year, range.start.month, range.start.day),
+        end: DateTime(
+          range.end.year,
+          range.end.month,
+          range.end.day,
+          23,
+          59,
+          59,
+        ),
+      );
+
+  static DateTime _endOfToday(DateTime today) =>
+      today.add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
 }

@@ -56,7 +56,7 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
         border: Border.all(color: Colors.deepPurple.shade100),
         boxShadow: [
           BoxShadow(
-            color: Colors.deepPurple.withOpacity(0.05),
+            color: Colors.deepPurple.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -69,7 +69,8 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
               color: Colors.deepPurple.shade50,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Row(
               children: [
@@ -84,18 +85,20 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
                 TextButton.icon(
                   onPressed: widget.onClearChat,
                   icon: const Icon(Icons.clear_all, color: Colors.deepPurple),
-                  label: const Text('เริ่มใหม่', style: TextStyle(color: Colors.deepPurple)),
+                  label: const Text('เริ่มใหม่',
+                      style: TextStyle(color: Colors.deepPurple)),
                 ),
               ],
             ),
           ),
-          
+
           // Chat Messages
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
-              itemCount: widget.chatHistory.length + (widget.isAnalyzing ? 1 : 0),
+              itemCount:
+                  widget.chatHistory.length + (widget.isAnalyzing ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == widget.chatHistory.length) {
                   return const Align(
@@ -112,7 +115,7 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
               },
             ),
           ),
-          
+
           // Input Area
           Container(
             padding: const EdgeInsets.all(16),
@@ -129,7 +132,8 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
                     ),
                     onSubmitted: (_) => _handleSend(),
                   ),
@@ -168,7 +172,8 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
                   fontWeight: FontWeight.bold,
                   color: Colors.deepPurple)),
           const SizedBox(height: 8),
-          const Text('ผู้ช่วยสามารถดึงข้อมูลยอดขาย ลูกหนี้ สินค้าคงคลัง และรายจ่าย มาตอบคำถามได้',
+          const Text(
+              'ผู้ช่วยสามารถดึงข้อมูลยอดขาย ลูกหนี้ สินค้าคงคลัง และรายจ่าย มาตอบคำถามได้',
               style: TextStyle(color: Colors.black54)),
           const SizedBox(height: 32),
           Row(
@@ -211,7 +216,7 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             )
@@ -221,9 +226,13 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
           children: [
             Icon(icon, size: 48, color: Colors.deepPurple),
             const SizedBox(height: 16),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(title,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
-            Text(description, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            Text(description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey, fontSize: 13)),
           ],
         ),
       ),
@@ -242,8 +251,10 @@ class _DashboardAiSectionState extends State<DashboardAiSection> {
         decoration: BoxDecoration(
           color: isUser ? Colors.deepPurple : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(16).copyWith(
-            bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(16),
-            bottomLeft: !isUser ? const Radius.circular(0) : const Radius.circular(16),
+            bottomRight:
+                isUser ? const Radius.circular(0) : const Radius.circular(16),
+            bottomLeft:
+                !isUser ? const Radius.circular(0) : const Radius.circular(16),
           ),
         ),
         child: SelectableText(

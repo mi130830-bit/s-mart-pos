@@ -33,7 +33,7 @@ class WorkLogController {
           final items = logData['items'] as List<dynamic>? ?? [];
 
           // Insert or Update the log
-          final logResult = await conn.execute(
+          await conn.execute(
             '''
             INSERT INTO shop_work_logs (sync_id, deliverer_id, logged_at)
             VALUES (:syncId, :delivererId, :loggedAt)
@@ -74,7 +74,7 @@ class WorkLogController {
         return Response.ok(jsonEncode({'status': 'success', 'synced_count': logs.length}));
       } catch (e) {
         await conn.execute('ROLLBACK');
-        throw e;
+        rethrow;
       }
     } catch (e) {
       return Response.internalServerError(body: jsonEncode({'error': e.toString()}));

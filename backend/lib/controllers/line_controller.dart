@@ -5,6 +5,7 @@ import 'dart:io';
 import '../db_config.dart';
 import '../env_config.dart';
 import '../services/line_service.dart';
+import 'customer_tracking_controller.dart';
 
 class LineController {
   final LineService _lineService = LineService();
@@ -442,6 +443,17 @@ class LineController {
     try {
       stdout.writeln('📦 Stage 2 Notification Request for Order #$orderId');
 
+      String vehicleKey = '';
+      try {
+        final body = await request.readAsString();
+        if (body.isNotEmpty) {
+          vehicleKey = (jsonDecode(body) as Map<String, dynamic>)['vehicle']
+                  ?.toString()
+                  .trim() ??
+              '';
+        }
+      } catch (_) {}
+
       final conn = await DbConfig().connection;
 
       // หา line_user_id จาก order_id
@@ -467,9 +479,18 @@ class LineController {
         return Response(400, body: 'Customer has no Line account');
       }
 
-      // ส่ง Line Message
-      final message =
+      final trackingToken = !CustomerTrackingController.canTrackVehicle(vehicleKey)
+          ? null
+          : await CustomerTrackingController.issue(
+              orderId: int.tryParse(orderId) ?? 0,
+              vehicleKey: vehicleKey,
+            );
+      final trackingUrl = trackingToken == null
+          ? null
+          : '${EnvConfig().publicUrl}/public/customer_tracking.html#$trackingToken';
+      var message =
           '🚚 สินค้าของท่านกำลังเดินทางจัดส่งครับ\nหากมีข้อสงสัยสามารถติดต่อได้ที่เบอร์ร้าน 085-1377402 ครับ';
+      if (trackingUrl != null) message += '\n\n📍 ติดตามตำแหน่งรถได้ที่:\n$trackingUrl';
       await _lineService.pushMessage(lineUserId, message);
 
       stdout.writeln('✅ Stage 2 Line sent to $lineUserId for Order #$orderId');

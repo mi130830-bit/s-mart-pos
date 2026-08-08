@@ -8,10 +8,6 @@ import 'tabs/hr_advance_tab.dart';
 import 'tabs/hr_payroll_tab.dart';
 import 'tabs/hr_summary_tab.dart';
 
-import '../../services/hr/attendance_sync_service.dart';
-import '../../services/hr/advance_sync_service.dart';
-import '../../services/hr/leave_sync_service.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/hr/attendance_provider.dart';
 import '../../state/hr/advance_provider.dart';
@@ -28,7 +24,8 @@ class HrScreen extends ConsumerStatefulWidget {
   ConsumerState<HrScreen> createState() => _HrScreenState();
 }
 
-class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderStateMixin {
+class _HrScreenState extends ConsumerState<HrScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isSyncing = false;
 
@@ -49,22 +46,26 @@ class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderSt
     setState(() => _isSyncing = true);
 
     try {
-      await AttendanceSyncService().syncAttendanceFromCloud();
-      await AdvanceSyncService().syncAdvanceRequestsFromCloud();
-      await LeaveSyncService().syncLeaveRequestsFromCloud();
-
       if (mounted) {
-        ref.read(attendanceProvider.notifier).loadToday();
-        ref.read(advanceProvider.notifier).loadPending();
-        ref.read(advanceProvider.notifier).loadAllHistory();
-        ref.read(leaveProvider.notifier).loadPending();
-        ref.read(leaveProvider.notifier).loadAllHistory();
+        await Future.wait([
+          ref.read(attendanceProvider.notifier).loadToday(),
+          ref.read(advanceProvider.notifier).loadPending(),
+          ref.read(advanceProvider.notifier).loadAllHistory(),
+          ref.read(leaveProvider.notifier).loadPending(),
+          ref.read(leaveProvider.notifier).loadAllHistory(),
+        ]);
         ref.invalidate(dashboardAttendanceProvider);
-        SnackbarUtils.showLeft(context, 'ซิงค์ข้อมูลจากคลาวด์เรียบร้อยแล้ว');
+        final attendanceError = ref.read(attendanceProvider).error;
+        if (attendanceError != null) {
+          throw StateError(attendanceError);
+        }
+        if (!mounted) return;
+        SnackbarUtils.showLeft(context, 'รีเฟรชข้อมูลเรียบร้อยแล้ว');
       }
     } catch (e) {
       if (mounted) {
-        SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาดในการซิงค์: $e', isError: true);
+        SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาดในการซิงค์: $e',
+            isError: true);
       }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
@@ -84,13 +85,14 @@ class _HrScreenState extends ConsumerState<HrScreen> with SingleTickerProviderSt
                     child: SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
                     ),
                   ),
                 )
               : IconButton(
                   icon: const Icon(Icons.sync),
-                  tooltip: 'ซิงค์ข้อมูลคลาวด์',
+                  tooltip: 'รีเฟรชข้อมูลทั้งหมด',
                   onPressed: _manualSync,
                 ),
         ],

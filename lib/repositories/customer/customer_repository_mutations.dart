@@ -1,7 +1,7 @@
 part of '../customer_repository.dart';
 
 extension CustomerRepositoryMutations on CustomerRepository {
-  Future<int> saveCustomer(Customer customer) async {
+  Future<int> saveCustomer(Customer customer, {int? userId}) async {
     if (!_dbService.isConnected()) {
       await _dbService.connect();
     }
@@ -67,6 +67,12 @@ extension CustomerRepositoryMutations on CustomerRepository {
         return result.lastInsertID.toInt();
       } else {
         // Update
+        final beforeRows = await _dbService.query(
+          '''SELECT memberCode, firstName, lastName, phone, address,
+                    shippingAddress, taxId, creditLimit, remarks, distanceKm, tierId
+             FROM customer WHERE id = :id''',
+          {'id': customer.id},
+        );
         const sql = '''
           UPDATE customer SET 
             memberCode = :code, firstName = :fname, lastName = :lname, phone = :phone,
@@ -107,6 +113,31 @@ extension CustomerRepositoryMutations on CustomerRepository {
             '🔍 [CustomerRepo]: Executing UPDATE for ID: ${customer.id}');
         await _dbService.execute(sql, params);
         debugPrint('✅ [CustomerRepo]: UPDATE successful');
+        final before = beforeRows.isNotEmpty ? beforeRows.first : const <String, dynamic>{};
+        final changes = <String>[];
+        void addChange(String label, dynamic oldValue, dynamic newValue) {
+          if ((oldValue?.toString() ?? '') != (newValue?.toString() ?? '')) {
+            changes.add(label);
+          }
+        }
+
+        addChange('รหัสสมาชิก', before['memberCode'], customer.memberCode);
+        addChange('ชื่อ', before['firstName'], customer.firstName);
+        addChange('นามสกุล', before['lastName'], customer.lastName);
+        addChange('โทรศัพท์', before['phone'], customer.phone);
+        addChange('ที่อยู่', before['address'], customer.address);
+        addChange('ที่อยู่จัดส่ง', before['shippingAddress'], customer.shippingAddress);
+        addChange('เลขผู้เสียภาษี', before['taxId'], customer.taxId);
+        addChange('วงเงินเครดิต', before['creditLimit'], customer.creditLimit);
+        addChange('หมายเหตุ', before['remarks'], customer.remarks);
+        addChange('ระยะทาง', before['distanceKm'], customer.distanceKm);
+        addChange('ระดับสมาชิก', before['tierId'], customer.tierId);
+        await _activityRepo.log(
+          userId: userId,
+          action: 'EDIT_CUSTOMER',
+          details: 'แก้ไขลูกค้า #${customer.id} ${customer.name}'
+              '${changes.isEmpty ? '' : ' | เปลี่ยน: ${changes.join(', ')}'}',
+        );
         clearCustomerCache();
         return customer.id;
       }

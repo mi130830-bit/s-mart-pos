@@ -11,6 +11,7 @@ class DeliveryRecordsTable extends StatelessWidget {
   final void Function(Map<String, dynamic>) onAssignVehicle;
   final void Function(int) onViewOrderDetails;
   final double Function(Map<String, dynamic>) onCalculateFuelCost;
+  final void Function(Map<String, dynamic>)? onDeleteJob;
 
   const DeliveryRecordsTable({
     super.key,
@@ -20,6 +21,7 @@ class DeliveryRecordsTable extends StatelessWidget {
     required this.onAssignVehicle,
     required this.onViewOrderDetails,
     required this.onCalculateFuelCost,
+    this.onDeleteJob,
   });
 
   @override
@@ -165,6 +167,38 @@ class DeliveryRecordsTable extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onDeleteJob != null) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => onDeleteJob!(r),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: Colors.red.withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.delete_outline,
+                              size: 14, color: Colors.red),
+                          SizedBox(width: 4),
+                          Text(
+                            'ลบ',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
             const Divider(height: 14),

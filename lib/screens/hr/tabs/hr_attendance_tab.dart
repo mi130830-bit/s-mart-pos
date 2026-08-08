@@ -1,4 +1,4 @@
-// import 'dart:async'; removed
+import 'dart:async';
 import 'package:pos_desktop/utils/snackbar_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +7,6 @@ import '../../../state/hr/attendance_provider.dart';
 import '../../../state/hr/employee_provider.dart';
 import '../../../widgets/dialogs/admin_pin_dialog.dart';
 import '../../../services/alert_service.dart';
-import '../../../services/hr/attendance_sync_service.dart';
 
 // Extracted widgets
 import '../widgets/attendance/attendance_employee_row.dart';
@@ -23,6 +22,37 @@ class HrAttendanceTab extends ConsumerStatefulWidget {
 }
 
 class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
+  Timer? _refreshTimer;
+  bool _isAutoRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // S-Link writes attendance directly to MySQL through the POS API. Poll
+    // while this tab is open so a mobile check-in appears without requiring
+    // the cashier to press Refresh.
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _refreshAttendanceSilently(),
+    );
+  }
+
+  Future<void> _refreshAttendanceSilently() async {
+    if (!mounted || _isAutoRefreshing) return;
+    _isAutoRefreshing = true;
+    try {
+      await ref.read(attendanceProvider.notifier).loadToday();
+    } finally {
+      _isAutoRefreshing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final attendanceState = ref.watch(attendanceProvider);
@@ -40,9 +70,11 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
               children: [
                 Text(
                   '📋 สถานะพนักงานวันนี้ (${DateFormat('d MMM yyyy').format(DateTime.now())})',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                if (attendanceState.isLoading) const CircularProgressIndicator(),
+                if (attendanceState.isLoading)
+                  const CircularProgressIndicator(),
                 Row(
                   children: [
                     IconButton(
@@ -51,31 +83,25 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
                       onPressed: _showSpecialHolidayDialog,
                     ),
                     IconButton(
-                      icon: const Icon(Icons.warning_amber_rounded, color: Colors.deepOrange),
+                      icon: const Icon(Icons.warning_amber_rounded,
+                          color: Colors.deepOrange),
                       tooltip: 'ปิดร้านฉุกเฉิน (Clock Out ทุกคน)',
                       onPressed: _emergencyClose,
                     ),
                     IconButton(
                       icon: const Icon(Icons.refresh),
-                      tooltip: 'รีเฟรชข้อมูลจากคลาวด์',
+                      tooltip: 'รีเฟรชข้อมูลลงเวลาล่าสุด',
                       onPressed: () async {
-                        await AttendanceSyncService().syncAttendanceFromCloud(force: true);
+                        await ref.read(attendanceProvider.notifier).loadToday();
                         if (context.mounted) {
-                          ref.read(attendanceProvider.notifier).loadToday();
-                          SnackbarUtils.showLeft(context, 'ซิงค์ข้อมูลลงเวลาจากคลาวด์เรียบร้อย');
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.cloud_upload, color: Colors.blue),
-                      tooltip: 'บังคับส่งข้อมูลทั้งหมดขึ้นคลาวด์ (S-Link)',
-                      onPressed: () async {
-                        SnackbarUtils.showLeft(context, 'กำลังส่งข้อมูลขึ้น S-Link...');
-                        for (var emp in employeeState.employees) {
-                           await AttendanceSyncService().syncAttendanceToCloud(emp.id);
-                        }
-                        if (context.mounted) {
-                          SnackbarUtils.showLeft(context, 'ส่งข้อมูลลงเวลาทั้งหมดขึ้นคลาวด์เรียบร้อยแล้ว');
+                          final error = ref.read(attendanceProvider).error;
+                          SnackbarUtils.showLeft(
+                            context,
+                            error == null
+                                ? 'รีเฟรชข้อมูลลงเวลาเรียบร้อย'
+                                : 'รีเฟรชไม่สำเร็จ: $error',
+                            isError: error != null,
+                          );
                         }
                       },
                     ),
@@ -100,11 +126,15 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
                 separatorBuilder: (context, index) => const Divider(),
                 itemBuilder: (context, index) {
                   final emp = employeeState.employees[index];
-                  final log = attendanceState.todayAttendance.where((a) => a.employeeId == emp.id).firstOrNull;
-                  final isOnTempLeave = log != null && log.activeTempLeaveRound != null;
+                  final log = attendanceState.todayAttendance
+                      .where((a) => a.employeeId == emp.id)
+                      .firstOrNull;
+                  final isOnTempLeave =
+                      log != null && log.activeTempLeaveRound != null;
 
                   // ✅ Extracted AttendanceEmployeeRow widget
-                  return AttendanceEmployeeRow(emp: emp, log: log, isOnTempLeave: isOnTempLeave);
+                  return AttendanceEmployeeRow(
+                      emp: emp, log: log, isOnTempLeave: isOnTempLeave);
                 },
               ),
             ),
@@ -126,7 +156,12 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
     );
 
     if (!isAuthorized) {
-      if (mounted) AlertService.show(context: context, message: 'รหัสผ่านไม่ถูกต้อง หรือยกเลิกการทำรายการ', type: 'error');
+      if (mounted) {
+        AlertService.show(
+            context: context,
+            message: 'รหัสผ่านไม่ถูกต้อง หรือยกเลิกการทำรายการ',
+            type: 'error');
+      }
       return;
     }
 
@@ -135,7 +170,8 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
     final confirm = await HrConfirmDialog.show(
       context,
       title: 'ยืนยันการล้างข้อมูล',
-      content: 'คุณต้องการล้างรายการเข้าออกงานทั้งหมดในระบบใช่หรือไม่?\n\n(การกระทำนี้ไม่สามารถย้อนกลับได้)',
+      content:
+          'คุณต้องการล้างรายการเข้าออกงานทั้งหมดในระบบใช่หรือไม่?\n\n(การกระทำนี้ไม่สามารถย้อนกลับได้)',
       actionLabel: 'ล้างข้อมูล',
       actionColor: Colors.red,
       titleIcon: Icons.warning_amber_rounded,
@@ -146,9 +182,19 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
       if (!mounted) return;
       try {
         await ref.read(attendanceProvider.notifier).clearAllLogs();
-        if (mounted) AlertService.show(context: context, message: 'ล้างรายการเข้าออกงานทั้งหมดเรียบร้อยแล้ว', type: 'success');
+        if (mounted) {
+          AlertService.show(
+              context: context,
+              message: 'ล้างรายการเข้าออกงานทั้งหมดเรียบร้อยแล้ว',
+              type: 'success');
+        }
       } catch (e) {
-        if (mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: ${e.toString()}', type: 'error');
+        if (mounted) {
+          AlertService.show(
+              context: context,
+              message: 'เกิดข้อผิดพลาด: ${e.toString()}',
+              type: 'error');
+        }
       }
     }
   }
@@ -164,7 +210,10 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
       message: 'กรุณากรอกรหัสผ่านแอดมินเพื่อยืนยัน',
     );
     if (!isAuthorized) {
-      if (mounted) AlertService.show(context: context, message: 'ยกเลิกการทำรายการ', type: 'error');
+      if (mounted) {
+        AlertService.show(
+            context: context, message: 'ยกเลิกการทำรายการ', type: 'error');
+      }
       return;
     }
 
@@ -177,7 +226,8 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.deepOrange),
             SizedBox(width: 8),
-            Text('ยืนยันปิดร้านฉุกเฉิน', style: TextStyle(color: Colors.deepOrange)),
+            Text('ยืนยันปิดร้านฉุกเฉิน',
+                style: TextStyle(color: Colors.deepOrange)),
           ],
         ),
         content: Column(
@@ -204,7 +254,9 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
           ElevatedButton.icon(
             icon: const Icon(Icons.power_settings_new),
             label: const Text('ปิดร้านเลย'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx, true),
           ),
         ],
@@ -213,8 +265,12 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
 
     if (confirmed == true && mounted) {
       try {
-        final reason = reasonController.text.trim().isEmpty ? 'EMERGENCY_CLOSE' : reasonController.text.trim();
-        final count = await ref.read(attendanceProvider.notifier).emergencyCloseShop(reason);
+        final reason = reasonController.text.trim().isEmpty
+            ? 'EMERGENCY_CLOSE'
+            : reasonController.text.trim();
+        final count = await ref
+            .read(attendanceProvider.notifier)
+            .emergencyCloseShop(reason);
         if (mounted) {
           AlertService.show(
             context: context,
@@ -225,7 +281,10 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
           );
         }
       } catch (e) {
-        if (mounted) AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+        if (mounted) {
+          AlertService.show(
+              context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+        }
       }
     }
   }
@@ -241,7 +300,10 @@ class _HrAttendanceTabState extends ConsumerState<HrAttendanceTab> {
       message: 'กรุณากรอกรหัสผ่านแอดมินเพื่อจัดการวันหยุดพิเศษ',
     );
     if (!isAuthorized) {
-      if (mounted) AlertService.show(context: context, message: 'ยกเลิกการทำรายการ', type: 'error');
+      if (mounted) {
+        AlertService.show(
+            context: context, message: 'ยกเลิกการทำรายการ', type: 'error');
+      }
       return;
     }
 

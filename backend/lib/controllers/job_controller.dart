@@ -3,6 +3,8 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import '../db_config.dart';
 import 'dart:io';
+import '../env_config.dart';
+import 'customer_tracking_controller.dart';
 
 /// POST /jobs/complete — เรียกจาก S-Link เมื่อพนักงานส่งของเสร็จ
 /// POST /jobs/list     — ดูประวัติจาก MySQL (สำหรับตรวจสอบ)
@@ -11,6 +13,7 @@ class JobController {
   Router get router {
     final router = Router();
     router.post('/complete', _completeJob);
+    router.post('/upload', _uploadProofImage);
     router.get('/list', _listJobs);
     router.get('/stats', _getStats);
     router.get('/active', _getActiveJobs); // ✅ [M2] Offline Sync Endpoint
@@ -39,6 +42,8 @@ class JobController {
           dj.status,
           dj.createdAt AS jobCreatedAt,
           o.grandTotal,
+          o.received,
+          o.changeAmount,
           o.note,
           o.deliveryType,
           o.paymentMethod,
@@ -118,6 +123,16 @@ class JobController {
       // ── 3. ประกอบร่างข้อมูลส่งกลับ ─────────────────────────────────────
       final List<Map<String, dynamic>> result = jobs.map((j) {
         final oid = j['orderId']?.toString() ?? '0';
+        final grandTotal =
+            double.tryParse(j['grandTotal']?.toString() ?? '0') ?? 0.0;
+        final tendered =
+            double.tryParse(j['received']?.toString() ?? '0') ?? 0.0;
+        final change =
+            double.tryParse(j['changeAmount']?.toString() ?? '0') ?? 0.0;
+        // Historical orders store the tendered cash in `received`; remove the
+        // change already handed back so S-Link receives only the real COD due.
+        final collected = (tendered - change).clamp(0.0, grandTotal);
+        final outstanding = (grandTotal - collected).clamp(0.0, grandTotal);
         return {
           'orderId':        j['orderId'],
           'firebaseJobId':  j['firebaseJobId'] ?? '',
@@ -125,7 +140,7 @@ class JobController {
           'jobType':        j['deliveryType'] ?? 'delivery',
           'paymentMethod':  j['paymentMethod'] ?? 'cash',
           'note':           j['note'] ?? '',
-          'totalAmount':    j['grandTotal'] ?? '0',
+          'totalAmount':    outstanding.toStringAsFixed(2),
           'createdAt':      j['jobCreatedAt']?.toString() ?? '',
           'customer': {
             'id':      j['customerId'] ?? '',
@@ -267,6 +282,7 @@ class JobController {
         } catch (e) {
           stderr.writeln('⚠️ [JobController] delivery_jobs update error: $e');
         }
+        await CustomerTrackingController.revoke(orderId);
       }
 
       stdout.writeln(
@@ -404,6 +420,54 @@ class JobController {
       stderr.writeln('❌ [JobController] getStats error: $e');
       return Response.internalServerError(
         body: jsonEncode({'error': 'Failed to get stats: $e'}),
+        headers: {'content-type': 'application/json'},
+      );
+    }
+  }
+
+  /// POST /jobs/upload — อัปโหลดรูปภาพหลักฐานส่งของมาเก็บไว้ที่เครื่องแม่ (Local Server / สมุดโน๊ต)
+  Future<Response> _uploadProofImage(Request request) async {
+    final tag = '[JobController/upload]';
+    try {
+      final body = await request.readAsString();
+      final Map<String, dynamic> payload = jsonDecode(body);
+
+      final String imageBase64 = payload['image']?.toString() ?? '';
+      final String jobId = payload['jobId']?.toString() ?? 'job';
+      if (imageBase64.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'success': false, 'message': 'No image data'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
+
+      final bytes = base64Decode(imageBase64);
+
+      final proofsDir = Directory('${EnvConfig().writableDir}/bills/proofs');
+      if (!proofsDir.existsSync()) {
+        proofsDir.createSync(recursive: true);
+      }
+
+      final fileName = 'proof_${jobId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final file = File('${proofsDir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      stdout.writeln('📸 $tag Saved proof image to ${file.path}');
+
+      final String relativeUrl = '/public/bills/proofs/$fileName';
+
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'url': relativeUrl,
+          'filename': fileName,
+        }),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (e, st) {
+      stdout.writeln('❌ $tag Error uploading image: $e\n$st');
+      return Response.internalServerError(
+        body: jsonEncode({'success': false, 'message': e.toString()}),
         headers: {'content-type': 'application/json'},
       );
     }

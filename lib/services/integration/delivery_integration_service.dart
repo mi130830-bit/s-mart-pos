@@ -240,6 +240,8 @@ class DeliveryIntegrationService {
     required double grandTotal,
     String? oldStatus,
     double oldGrandTotal = 0.0,
+    double oldReceived = 0.0,
+    double? newOutstanding,
   }) async {
     try {
       // 1. ตรวจสอบว่าบิลนี้มีในระบบส่งของหรือไม่
@@ -298,18 +300,18 @@ class DeliveryIntegrationService {
       }
 
       // ตรวจสอบกรณีหนี้เพิ่ม (แก้ไขบิลเงินสด แล้วมียอดต้องเก็บปลายทาง)
-      double debtDelta = grandTotal - oldGrandTotal;
-      bool isPaidToUnpaid = (oldStatus == 'COMPLETED' || oldStatus == 'PAID') && debtDelta > 0.001;
+      final bool wasFullyPaid = oldGrandTotal - oldReceived <= 0.001;
+      final bool isPaidToUnpaid = wasFullyPaid && (newOutstanding ?? 0) > 0.001;
 
       if (isPaidToUnpaid) {
-        details = '⚠️ จ่ายแล้วบางส่วน! เก็บเงินปลายทางเพิ่มเฉพาะส่วนต่าง: ฿${debtDelta.toStringAsFixed(2)}\n━━━━━━━━━━━━━━━━━━\n$details';
+        details = '⚠️ จ่ายแล้วบางส่วน! เก็บเงินปลายทางเพิ่มเฉพาะส่วนต่าง: ฿${newOutstanding!.toStringAsFixed(2)}\n━━━━━━━━━━━━━━━━━━\n$details';
       } else {
         details = '⚠️ มีการแก้ไขรายการสินค้า!\n━━━━━━━━━━━━━━━━━━\n$details';
       }
 
       final updates = {
         'details': details,
-        'price': isPaidToUnpaid ? debtDelta : grandTotal, // ถ้าเดิมจ่ายแล้ว ให้แอปคนขับเก็บเฉพาะส่วนต่าง!
+        'price': isPaidToUnpaid ? newOutstanding : grandTotal, // ถ้าเดิมจ่ายแล้ว ให้แอปคนขับเก็บเฉพาะส่วนต่าง!
         if (isPaidToUnpaid) 'payment_method': 'credit', // บังคับให้เป็น COD เพื่อเก็บส่วนต่าง
         'items': jobItems.map((item) => {
                   'name': item.productName,

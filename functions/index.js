@@ -45,7 +45,10 @@ exports.notifyShipping = functions.firestore
 
                 console.log(`📤 Calling Backend: POST ${url}`);
 
-                const response = await axios.post(url, {}, {
+                const vehicle = (after.delivery_team || []).find((item) =>
+                    item && (item.type === 'vehicle' || item.type === 'car'));
+                const vehicleKey = vehicle?.name || vehicle?.licensePlate || '';
+                const response = await axios.post(url, { vehicle: vehicleKey }, {
                     headers: { 'Content-Type': 'application/json' },
                     timeout: 10000
                 });

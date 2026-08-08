@@ -127,7 +127,7 @@ class _PosCheckoutScreenState extends ConsumerState<PosCheckoutScreen> with PosB
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '⚠️ กำลังแก้ไขบิลค้างชำระ #$editId — เพิ่ม/ลดรายการแล้วกดชำระเงินเพื่อบันทึก',
+                      '⚠️ กำลังแก้ไขบิล #$editId — เพิ่ม/ลดรายการแล้วกดชำระเงินเพื่อบันทึกส่วนเพิ่ม',
                       style: const TextStyle(
                           color: Colors.white, fontWeight: FontWeight.bold),
                     ),

@@ -71,6 +71,11 @@ class _BestSellingScreenState extends State<BestSellingScreen> {
         firstDate: DateTime(2020),
         lastDate: DateTime.now().add(const Duration(days: 365)),
         initialDateRange: _currentRange,
+        initialEntryMode: DatePickerEntryMode.input,
+        helpText: 'กำหนดช่วงวันที่',
+        fieldStartLabelText: 'วันที่เริ่มต้น',
+        fieldEndLabelText: 'วันที่สิ้นสุด',
+        saveText: 'ใช้ช่วงนี้',
       );
       if (picked != null) {
         setState(() {

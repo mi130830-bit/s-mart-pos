@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/expense.dart';
 import '../../repositories/expense_repository.dart';
+import '../../widgets/common/quick_date_range_selector.dart';
 
 class ExpenseManagementScreen extends StatefulWidget {
   const ExpenseManagementScreen({super.key});
@@ -131,6 +132,14 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
       });
       _loadData();
     }
+  }
+
+  void _applyDateRange(DateTimeRange range) {
+    setState(() {
+      _startDate = range.start;
+      _endDate = range.end;
+    });
+    _loadData();
   }
 
   Future<void> _showEditDialog({Expense? expense}) async {
@@ -362,6 +371,17 @@ class _ExpenseManagementScreenState extends State<ExpenseManagementScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: QuickDateRangeSelector(
+                      currentRange:
+                          DateTimeRange(start: _startDate, end: _endDate),
+                      onChanged: _applyDateRange,
+                    ),
+                  ),
+                ),
                 // Summary Card
                 Container(
                   padding: const EdgeInsets.all(16),

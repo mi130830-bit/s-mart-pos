@@ -298,11 +298,11 @@ class AttendanceRepository {
         clock_in = IF(VALUES(clock_in) IS NOT NULL, VALUES(clock_in), clock_in),
         clock_out = IF(VALUES(clock_out) IS NOT NULL, VALUES(clock_out), clock_out),
         temp_out = IF(VALUES(temp_out) IS NOT NULL, VALUES(temp_out), temp_out),
-        back_to_work = IF(VALUES(back_to_work) IS NOT NULL, VALUES(back_to_work), back_to_work),
+        back_to_work = CASE WHEN VALUES(temp_out) IS NOT NULL AND VALUES(back_to_work) IS NULL THEN NULL ELSE IF(VALUES(back_to_work) IS NOT NULL, VALUES(back_to_work), back_to_work) END,
         temp_out_2 = IF(VALUES(temp_out_2) IS NOT NULL, VALUES(temp_out_2), temp_out_2),
-        back_to_work_2 = IF(VALUES(back_to_work_2) IS NOT NULL, VALUES(back_to_work_2), back_to_work_2),
+        back_to_work_2 = CASE WHEN VALUES(temp_out_2) IS NOT NULL AND VALUES(back_to_work_2) IS NULL THEN NULL ELSE IF(VALUES(back_to_work_2) IS NOT NULL, VALUES(back_to_work_2), back_to_work_2) END,
         temp_out_3 = IF(VALUES(temp_out_3) IS NOT NULL, VALUES(temp_out_3), temp_out_3),
-        back_to_work_3 = IF(VALUES(back_to_work_3) IS NOT NULL, VALUES(back_to_work_3), back_to_work_3),
+        back_to_work_3 = CASE WHEN VALUES(temp_out_3) IS NOT NULL AND VALUES(back_to_work_3) IS NULL THEN NULL ELSE IF(VALUES(back_to_work_3) IS NOT NULL, VALUES(back_to_work_3), back_to_work_3) END,
         latitude = IF(VALUES(latitude) IS NOT NULL, VALUES(latitude), latitude),
         longitude = IF(VALUES(longitude) IS NOT NULL, VALUES(longitude), longitude)
     ''';

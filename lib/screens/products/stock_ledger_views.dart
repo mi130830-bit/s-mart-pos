@@ -540,6 +540,14 @@ class _GenericStockHistoryListState extends State<GenericStockHistoryList> {
     _loadData();
   }
 
+  void _applyDateRange(DateTimeRange range) {
+    setState(() {
+      _dateRange = range;
+      _currentPage = 1;
+    });
+    _loadData();
+  }
+
   void _changePage(int newPage) {
     if (newPage < 1) return;
     setState(() {
@@ -581,6 +589,7 @@ class _GenericStockHistoryListState extends State<GenericStockHistoryList> {
           dateRange: _dateRange,
           onPickDateRange: _pickDateRange,
           onClearFilter: _clearDateFilter,
+          onDateRangeChanged: _applyDateRange,
         ),
         const Divider(height: 1),
 

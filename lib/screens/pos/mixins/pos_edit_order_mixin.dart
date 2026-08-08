@@ -45,6 +45,21 @@ extension PosEditOrderExtension on PosStateNotifier {
       _editingOrderId = orderId;
       _editingOldStatus = orderMap['status']?.toString().toUpperCase();
       _editingOldGrandTotal = double.tryParse(orderMap['grandTotal']?.toString() ?? '0') ?? 0.0;
+      final wasFullyPaid =
+          _editingOldStatus == 'COMPLETED' || _editingOldStatus == 'PAID';
+      // บิลที่จ่ายครบใช้ "ยอดบิลเดิม" เป็นฐานโดยตรง ไม่สนยอดธนบัตรหรือเงินทอน.
+      // บิลค้างชำระเท่านั้นที่ต้องยึดเงินสุทธิที่รับไว้จริง.
+      if (wasFullyPaid) {
+        _editingOriginalReceived = _editingOldGrandTotal;
+      } else {
+        final recordedReceived =
+            double.tryParse(orderMap['received']?.toString() ?? '0') ?? 0.0;
+        final originalChange =
+            double.tryParse(orderMap['changeAmount']?.toString() ?? '0') ??
+                0.0;
+        _editingOriginalReceived =
+            (recordedReceived - originalChange).clamp(0.0, double.infinity);
+      }
 
       _invalidateCalcCache();
       _notify();
@@ -60,6 +75,7 @@ extension PosEditOrderExtension on PosStateNotifier {
     _editingOrderId = null;
     _editingOldStatus = null;
     _editingOldGrandTotal = 0.0;
+    _editingOriginalReceived = 0.0;
     await clearCart(returnStock: false);
     _currentCustomer = null;
     _billDiscount = 0.0;
@@ -70,7 +86,7 @@ extension PosEditOrderExtension on PosStateNotifier {
   }
 
   /// บันทึกการแก้ไขบิล (เรียกแทน saveOrder เมื่ออยู่ใน editingOrderId mode)
-  Future<int> saveOrderAsEdit() async {
+  Future<int> saveOrderAsEdit({required List<PaymentRecord> payments}) async {
     final oid = _editingOrderId;
     if (oid == null) throw Exception('ไม่ได้อยู่ในโหมดแก้ไขบิล');
 
@@ -80,6 +96,8 @@ extension PosEditOrderExtension on PosStateNotifier {
       newTotal: total,
       newDiscountAmount: discountAmount,
       newGrandTotal: grandTotal,
+      payments: payments,
+      userId: _authUser?.id,
     );
 
     // ✅ อัปเดตรายการใหม่ไปที่ Cloud จัดส่ง (เฉพาะบิลที่ส่งของแล้ว)
@@ -90,6 +108,10 @@ extension PosEditOrderExtension on PosStateNotifier {
         grandTotal: grandTotal,
         oldStatus: _editingOldStatus,
         oldGrandTotal: _editingOldGrandTotal,
+        oldReceived: _editingOriginalReceived,
+        newOutstanding: (grandTotal - _editingOriginalReceived -
+                payments.where((p) => p.method.toUpperCase() != 'CREDIT').fold<double>(0, (sum, p) => sum + p.amount))
+            .clamp(0.0, double.infinity),
       );
     } catch (e) {
       debugPrint('❌ [PosEditOrder] Error sync update to delivery job: $e');
@@ -99,6 +121,7 @@ extension PosEditOrderExtension on PosStateNotifier {
     _editingOrderId = null;
     _editingOldStatus = null;
     _editingOldGrandTotal = 0.0;
+    _editingOriginalReceived = 0.0;
     final currentItems = List<OrderItem>.from(cart);
     final currentCust = _currentCustomer;
     final currentTotal = grandTotal;

@@ -13,8 +13,11 @@ import 'controllers/debt_controller.dart';
 import 'controllers/job_controller.dart';
 import 'controllers/reward_controller.dart';
 import 'controllers/gps_controller.dart';
+import 'controllers/customer_tracking_controller.dart';
 import 'controllers/employee_controller.dart';
 import 'controllers/work_log_controller.dart';
+import 'controllers/attendance_controller.dart';
+import 'controllers/hr_controller.dart';
 import 'package:shelf/shelf.dart';
 import 'middlewares/jwt_middleware.dart';
 
@@ -35,18 +38,62 @@ class ApiRouter {
     router.mount('/payment', PaymentController().router.call);
 
     // Secured Routes (Requires Custom JWT from S-Link)
-    router.mount('/products', securedPipeline.addHandler(ProductController().router.call));
-    router.mount('/customers', securedPipeline.addHandler(CustomerController().router.call));
-    router.mount('/orders', securedPipeline.addHandler(OrderController().router.call));
-    router.mount('/stock', securedPipeline.addHandler(StockController().router.call));
-    router.mount('/shortages', securedPipeline.addHandler(ShortageController().router.call));
-    router.mount('/debt', securedPipeline.addHandler(DebtController().router.call));
-    router.mount('/jobs', securedPipeline.addHandler(JobController().router.call));
-    router.mount('/rewards', securedPipeline.addHandler(RewardController().router.call));
-    router.mount('/employees', securedPipeline.addHandler(EmployeeController().router.call));
-    router.mount('/hr/worklogs', securedPipeline.addHandler(WorkLogController().router.call));
-    router.mount('/config', securedPipeline.addHandler(ConfigController().router.call));
-    router.mount('/gps', securedPipeline.addHandler(GpsController().router.call));
+    router.mount(
+      '/products',
+      securedPipeline.addHandler(ProductController().router.call),
+    );
+    router.mount(
+      '/customers',
+      securedPipeline.addHandler(CustomerController().router.call),
+    );
+    router.mount(
+      '/orders',
+      securedPipeline.addHandler(OrderController().router.call),
+    );
+    router.mount(
+      '/stock',
+      securedPipeline.addHandler(StockController().router.call),
+    );
+    router.mount(
+      '/shortages',
+      securedPipeline.addHandler(ShortageController().router.call),
+    );
+    router.mount(
+      '/debt',
+      securedPipeline.addHandler(DebtController().router.call),
+    );
+    router.mount(
+      '/jobs',
+      securedPipeline.addHandler(JobController().router.call),
+    );
+    router.mount(
+      '/rewards',
+      securedPipeline.addHandler(RewardController().router.call),
+    );
+    router.mount(
+      '/employees',
+      securedPipeline.addHandler(EmployeeController().router.call),
+    );
+    router.mount(
+      '/hr/worklogs',
+      securedPipeline.addHandler(WorkLogController().router.call),
+    );
+    router.mount(
+      '/hr/attendance',
+      securedPipeline.addHandler(AttendanceController().router.call),
+    );
+    router.mount('/hr', securedPipeline.addHandler(HrController().router.call));
+    router.mount(
+      '/config',
+      securedPipeline.addHandler(ConfigController().router.call),
+    );
+    final gpsController = GpsController();
+    router.mount('/tracking', CustomerTrackingController().router.call);
+    router.mount(
+      '/gps/update_job',
+      securedPipeline.addHandler(gpsController.jobRouter.call),
+    );
+    router.mount('/gps', gpsController.publicRouter.call);
 
     return router;
   }

@@ -167,6 +167,17 @@ class DeliveryHistoryRepository {
     }
   }
 
+  // ✅ Delete history record
+  Future<bool> deleteHistory(int id) async {
+    try {
+      final res = await _db.execute('DELETE FROM delivery_history WHERE id = :id', {'id': id});
+      return res.affectedRows > BigInt.zero;
+    } catch (e) {
+      debugPrint('⚠️ [DeliveryHistoryRepository] Delete error: $e');
+      return false;
+    }
+  }
+
   // ✅ Get delivery records in date range
   Future<List<Map<String, dynamic>>> getHistoryByDateRange(
       DateTime start, DateTime end) async {

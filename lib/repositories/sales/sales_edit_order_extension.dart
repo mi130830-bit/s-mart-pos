@@ -55,12 +55,14 @@ extension SalesEditOrderExtension on SalesRepository {
     required double newTotal,
     required double newDiscountAmount,
     required double newGrandTotal,
+    required List<PaymentRecord> payments,
+    int? userId,
   }) async {
     if (!_dbService.isConnected()) await _dbService.connect();
 
     // ── 0. ตรวจสอบว่าบิลสามารถแก้ไขได้ ──────────────────────────────────
     final checkRes = await _dbService.query(
-      "SELECT id, grandTotal, customerId, status FROM `order` WHERE id = :id AND status IN ('UNPAID', 'COMPLETED', 'PAID')",
+      "SELECT id, grandTotal, received, changeAmount, customerId, paymentMethod, status FROM `order` WHERE id = :id AND status IN ('UNPAID', 'COMPLETED', 'PAID') FOR UPDATE",
       {'id': orderId},
     );
     if (checkRes.isEmpty) {
@@ -68,8 +70,32 @@ extension SalesEditOrderExtension on SalesRepository {
     }
 
     final oldGrandTotal = double.tryParse(checkRes.first['grandTotal'].toString()) ?? 0.0;
+    final oldStatus = checkRes.first['status']?.toString().toUpperCase();
+    final wasFullyPaid = oldStatus == 'COMPLETED' || oldStatus == 'PAID';
+    final oldReceived = wasFullyPaid
+        ? oldGrandTotal
+        : ((double.tryParse(checkRes.first['received']?.toString() ?? '0') ??
+                    0.0) -
+                (double.tryParse(checkRes.first['changeAmount']?.toString() ??
+                        '0') ??
+                    0.0))
+            .clamp(0.0, double.infinity);
     final customerId = checkRes.first['customerId'];
-    final oldStatus = checkRes.first['status'].toString().toUpperCase();
+
+    if (newGrandTotal + 0.001 < oldReceived) {
+      throw Exception('ยอดใหม่ต่ำกว่าเงินที่รับแล้ว กรุณาทำรายการคืนเงินแยกต่างหาก');
+    }
+
+    final cashPaid = payments
+        .where((p) => p.method.toUpperCase() != 'CREDIT')
+        .fold<double>(0, (sum, p) => sum + p.amount);
+    final newReceived = oldReceived + cashPaid;
+    if (newReceived > newGrandTotal + 0.01) {
+      throw Exception('รับเงินส่วนเพิ่มเกินยอดคงค้าง');
+    }
+    final oldOutstanding = (oldGrandTotal - oldReceived).clamp(0.0, double.infinity);
+    final newOutstanding = (newGrandTotal - newReceived).clamp(0.0, double.infinity);
+    final debtDelta = newOutstanding - oldOutstanding;
 
     final stockRepo = StockRepository();
 
@@ -134,23 +160,26 @@ extension SalesEditOrderExtension on SalesRepository {
       }
 
       // ── 5. อัปเดต order header ──────────────────────────────────────────
-      final debtDelta = newGrandTotal - oldGrandTotal;
-      String newStatus = oldStatus;
-      if ((oldStatus == 'COMPLETED' || oldStatus == 'PAID') && debtDelta > 0.001) {
-        newStatus = 'UNPAID'; // ถ้ายอดใหม่มากกว่ายอดเดิมที่จ่ายไปแล้ว ให้เปลี่ยนเป็นค้างชำระ
-      }
+      final String newStatus = newOutstanding > 0.001 ? 'UNPAID' : 'COMPLETED';
+      final String paymentMethod = newOutstanding > 0.001
+          ? 'CREDIT'
+          : (checkRes.first['paymentMethod']?.toString() ?? 'CASH');
 
       await _dbService.execute(
         '''
         UPDATE `order`
-        SET total = :total, discount = :disc, grandTotal = :grand, status = :status
+        SET total = :total, discount = :disc, grandTotal = :grand,
+            received = :received, changeAmount = 0, status = :status,
+            paymentMethod = :paymentMethod
         WHERE id = :id
         ''',
         {
           'total': newTotal,
           'disc': newDiscountAmount,
           'grand': newGrandTotal,
+          'received': newReceived,
           'status': newStatus,
+          'paymentMethod': paymentMethod,
           'id': orderId,
         },
       );
@@ -160,20 +189,46 @@ extension SalesEditOrderExtension on SalesRepository {
       if (customerId != null) {
         final cid = int.tryParse(customerId.toString()) ?? 0;
         if (cid > 0) {
-          final debtDelta = newGrandTotal - oldGrandTotal;
           if (debtDelta.abs() > 0.001) {
             await _debtorRepo.transactDebt(
               customerId: cid,
               amountChange: Decimal.parse(debtDelta.toStringAsFixed(2)),
-              transactionType: 'CREDIT_ADJUSTMENT',
-              note: 'ปรับยอด (แก้ไขบิล #$orderId)',
+              transactionType: debtDelta > 0 ? 'CREDIT_ADJUSTMENT' : 'DEBT_PAYMENT',
+              note: debtDelta > 0
+                  ? 'เก็บปลายทางเพิ่ม (แก้ไขบิล #$orderId)'
+                  : 'ชำระเพิ่ม (แก้ไขบิล #$orderId)',
               orderId: orderId,
             );
           }
         }
       }
 
+      for (final payment in payments) {
+        // Credit in the payment dialog represents the whole remaining balance.
+        // Store only the new receivable here, so editing an already-credit bill
+        // cannot duplicate its prior credit entry in the audit trail.
+        final isCredit = payment.method.toUpperCase() == 'CREDIT';
+        if (isCredit && debtDelta <= 0.001) continue;
+        await _dbService.execute(
+          '''INSERT INTO order_payment (orderId, paymentMethod, amount, createdAt)
+             VALUES (:oid, :method, :amount, NOW())''',
+          {
+            'oid': orderId,
+            'method': payment.method,
+            'amount': isCredit ? debtDelta : payment.amount,
+          },
+        );
+      }
+
       await _dbService.execute('COMMIT;');
+
+      await _activityRepo.log(
+        userId: userId,
+        action: 'EDIT_ORDER',
+        details: 'แก้ไขบิล #$orderId | ยอดเดิม ${oldGrandTotal.toStringAsFixed(2)} '
+            '→ ${newGrandTotal.toStringAsFixed(2)} | รับเพิ่ม ${cashPaid.toStringAsFixed(2)} '
+            '| ค้างชำระ ${newOutstanding.toStringAsFixed(2)}',
+      );
 
       LoggerService.info('SalesRepository',
           'Order #$orderId updated successfully. Old: $oldGrandTotal, New: $newGrandTotal');

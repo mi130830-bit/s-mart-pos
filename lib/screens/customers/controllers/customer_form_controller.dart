@@ -5,6 +5,7 @@ import '../../../../models/member_tier.dart';
 import '../../../../repositories/customer_repository.dart';
 import '../../../../services/mysql_service.dart';
 import '../../../../services/alert_service.dart';
+import '../../../../state/auth_provider.dart';
 
 class CustomerFormState {
   final DateTime? dateOfBirth;
@@ -253,7 +254,10 @@ class CustomerFormController extends AutoDisposeFamilyNotifier<CustomerFormState
       );
 
       try {
-        final savedId = await repo.saveCustomer(newCustomer);
+        final savedId = await repo.saveCustomer(
+          newCustomer,
+          userId: ref.read(authProvider).currentUser?.id,
+        );
         
         if (!context.mounted) return;
 

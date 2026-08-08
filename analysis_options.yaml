@@ -1,1 +1,9 @@
 include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "backend/bin/gen_token.dart"
+    - "backend/bin/test_query.dart"
+    - "backend/scratch/**"
+    - "backend/test_*.dart"

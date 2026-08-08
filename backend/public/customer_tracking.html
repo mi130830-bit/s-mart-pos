@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>ติดตามการจัดส่ง | ร้าน ส.บริการ ท่าข้าม</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif; background:#f8fafc; color:#172554; }
+    header { padding:16px 20px; background:#0f766e; color:white; font-weight:700; }
+    #map { height:calc(100vh - 212px); min-height:320px; }
+    #card { position:fixed; z-index:1000; left:16px; right:16px; bottom:16px; padding:16px; border-radius:16px; background:white; box-shadow:0 10px 28px #0f172a33; }
+    #status { font-weight:700; font-size:18px; } #detail { margin-top:5px; color:#475569; font-size:14px; }
+    .expired { display:grid; min-height:80vh; place-items:center; text-align:center; padding:32px; } .expired div { max-width:360px; }
+  </style>
+</head>
+<body>
+  <header>🚚 ร้าน ส.บริการ ท่าข้าม · ติดตามการจัดส่ง</header>
+  <div id="map"></div>
+  <section id="card"><div id="status">กำลังเชื่อมต่อข้อมูลรถ…</div><div id="detail">กรุณารอสักครู่</div></section>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const token = location.hash.slice(1);
+    let map, marker, first = true;
+    const status = document.getElementById('status'); const detail = document.getElementById('detail');
+    function ended() { document.body.innerHTML = '<main class="expired"><div><h1>การติดตามสิ้นสุดแล้ว</h1><p>งานจัดส่งนี้ถูกปิดเรียบร้อยแล้ว ขอบคุณที่ใช้บริการครับ</p></div></main>'; }
+    function init(lat, lng) { map = L.map('map').setView([lat,lng], 15); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map); marker=L.marker([lat,lng]).addTo(map); }
+    async function refresh() {
+      if (!token) return ended();
+      try {
+        const res = await fetch('/api/v1/tracking/' + encodeURIComponent(token), { cache:'no-store' });
+        if (!res.ok) return ended();
+        const data = await res.json(); const point=data.location;
+        if (!point) { status.textContent='กำลังรอสัญญาณจากรถ'; detail.textContent='รถกำลังเดินทาง ระบบจะอัปเดตตำแหน่งให้อัตโนมัติ'; return; }
+        const at = new Date(point.time); const age = Math.max(0, Math.round((Date.now()-at.getTime())/1000));
+        status.textContent = point.status === 'ONLINE' ? 'รถกำลังเดินทางมาหาคุณ' : 'กำลังรอสัญญาณจากรถ';
+        detail.textContent = 'อัปเดตล่าสุด ' + (age < 60 ? age + ' วินาทีที่แล้ว' : Math.floor(age/60) + ' นาทีที่แล้ว');
+        if (!map) init(point.lat, point.lng); else { marker.setLatLng([point.lat,point.lng]); if (first) map.setView([point.lat,point.lng],15); }
+        first=false;
+      } catch (_) { status.textContent='กำลังเชื่อมต่อใหม่…'; detail.textContent='ระบบจะลองดึงข้อมูลอีกครั้งอัตโนมัติ'; }
+    }
+    refresh(); setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

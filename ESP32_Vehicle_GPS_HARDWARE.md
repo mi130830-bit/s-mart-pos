@@ -127,3 +127,16 @@
 3. **รับพิกัด (GPS Lock):** ไฟที่ GPS Module จะเริ่มกระพริบ (Fix) เมื่อจับสัญญาณดาวเทียมได้ 
 4. **ส่งข้อมูล (Data Transmission):** ESP32 จะยิงข้อมูล Lat, Lng, Speed ไปที่ API ของเรา (Backend)
 5. **ดับเครื่องรถ (Engine OFF):** ระบบตัดไฟ ESP32 ดับ หน้าจอแอดมินในออฟฟิศจะขึ้นสถานะ "จอดดับเครื่อง" อัตโนมัติ!
+
+---
+
+## 📶 การใช้งาน A7670E ผ่าน 4G (A7670E 4G Operation)
+
+- **TH:** เฟิร์มแวร์ `GPS/GPS.ino` เปิดโหมด 4G เป็นค่าเริ่มต้น ใช้ UART1 ที่ GPIO 26/25 และ APN `internet` สำหรับ Finn Mobile/DTAC
+- **EN:** `GPS/GPS.ino` now enables 4G by default, using UART1 on GPIO 26/25 and the `internet` APN for Finn Mobile/DTAC.
+- **TH:** โมดูล A7670E ต้องใช้แหล่งจ่ายที่รองรับกระแสกระชากอย่างน้อย 2A และกราวด์ต้องร่วมกับ ESP32 ห้ามจ่ายไฟโมดูลจากขา 3.3V ของ ESP32
+- **EN:** The A7670E requires a supply capable of at least 2A peak current and a common ground with the ESP32. Never power it from the ESP32 3.3V pin.
+- **TH:** ค่า `GPS_DEVICE_KEY` ในเฟิร์มแวร์ต้องตรงกับ `backend/.env`; API จะปฏิเสธกล่องที่ไม่ส่งกุญแจนี้
+- **EN:** `GPS_DEVICE_KEY` in the firmware must match `backend/.env`; the API rejects devices without this key.
+- **TH:** หลังอัปโหลด ให้เปิด Serial Monitor ที่ 115200 baud และตรวจข้อความ IMEI, การลงทะเบียนเครือข่าย, IP Address และ HTTP 200
+- **EN:** After uploading, open Serial Monitor at 115200 baud and verify the IMEI, network registration, IP address, and HTTP 200 response.

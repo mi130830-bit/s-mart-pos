@@ -286,7 +286,8 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
     if (session.isLoading) return;
 
     final double grandTotalDouble = posState.grandTotal;
-    final Decimal grandTotal = Decimal.parse(grandTotalDouble.toString());
+    final double paymentDueDouble = posState.paymentDue;
+    final Decimal grandTotal = Decimal.parse(paymentDueDouble.toString());
 
     final snapshotItems = List<OrderItem>.from(posState.cart);
     final snapshotCustomer = posState.currentCustomer;
@@ -366,10 +367,29 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
     try {
       // ✅ [NEW] โหมดแก้ไขบิล UNPAID — Flow แยกต่างหาก ไม่แตะ Flow เดิม
       if (posState.editingOrderId != null) {
-        final editedOrderId = await posState.saveOrderAsEdit();
+        final previouslyReceived = posState.editingOriginalReceived;
+        final editedOrderId = await posState.saveOrderAsEdit(payments: finalPayments);
         if (mounted) {
           Navigator.of(context).pop(true);
           SnackbarUtils.showLeft(context, '✅ บันทึกการแก้ไขบิล #$editedOrderId เรียบร้อย');
+        }
+        if (session.shouldPrint) {
+          final String cashierName = posState.currentUser?.displayName ?? 'Staff';
+          await printReceipt(
+            orderId: editedOrderId,
+            items: snapshotItems,
+            customer: snapshotCustomer,
+            total: snapshotTotal,
+            discount: snapshotDiscount,
+            grandTotal: grandTotalDouble,
+            received: previouslyReceived +
+                finalPayments.where((p) => p.method.toUpperCase() != 'CREDIT')
+                    .fold<double>(0, (sum, p) => sum + p.amount),
+            change: change.toDouble(),
+            payments: finalPayments,
+            cashierName: cashierName,
+            remark: noteCtrl.text.trim(),
+          );
         }
         return;
       }
