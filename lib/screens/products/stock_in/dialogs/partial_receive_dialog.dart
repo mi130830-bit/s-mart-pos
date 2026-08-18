@@ -187,6 +187,7 @@ class _PartialReceiveDialogState extends State<PartialReceiveDialog> {
                     'productName': item.product.name,
                     'quantity': qty, // This is 'Receive Now' qty
                     'costPrice': item.costPrice,
+                    'retailPrice': item.product.retailPrice,
                   });
                 }
               }

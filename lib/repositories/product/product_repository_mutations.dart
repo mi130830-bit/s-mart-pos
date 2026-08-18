@@ -8,19 +8,16 @@ extension ProductRepositoryMutations on ProductRepository {
 
     try {
       int savedId = 0;
+      final conflict = await findBarcodeConflict(
+        product.barcode ?? '',
+        excludingProductId: product.id > 0 ? product.id : null,
+      );
+      if (conflict != null) {
+        throw StateError(
+          'บาร์โค้ด ${product.barcode} ถูกใช้โดยสินค้า ${conflict['name']}',
+        );
+      }
       if (product.id <= 0) {
-        if (product.barcode != null && product.barcode!.isNotEmpty) {
-          final existing = await _dbService.query(
-              'SELECT id FROM product WHERE barcode = :barcode',
-              {'barcode': product.barcode});
-          if (existing.isNotEmpty) {
-            final val = existing.first['id'];
-            final existingId =
-                (val is int) ? val : int.tryParse(val.toString()) ?? 0;
-            return await _updateProduct(product.copyWith(id: existingId));
-          }
-        }
-
         const sql = '''
           INSERT INTO product (
             barcode, name, alias, productType, categoryId, unitId, supplierId,

@@ -79,6 +79,8 @@ drawer_log.txt
 *.key
 *.pem
 *.p12
+GPS/GPS_WIFI_TEST/gps_wifi_test_secrets.h
+GPS/gps_tracker_secrets.h
 
 # Runtime bills
 backend/public/bills/*.png

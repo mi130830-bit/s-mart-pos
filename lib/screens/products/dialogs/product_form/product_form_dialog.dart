@@ -15,6 +15,7 @@ import '../../../../repositories/unit_repository.dart';
 import '../../../../repositories/product_component_repository.dart';
 import '../../../../repositories/product_price_tier_repository.dart';
 import '../../../../services/alert_service.dart';
+import '../../../../services/barcode_product_lookup_service.dart';
 import '../../widgets/product_search_dialog_for_select.dart';
 import '../../widgets/supplier_search_dialog.dart';
 import '../../widgets/component_row.dart';
@@ -63,6 +64,7 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _barcodeLookup = BarcodeProductLookupService();
 
   // Controllers
   late TextEditingController _nameCtrl;
@@ -94,7 +96,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
 
   final SupplierRepository _supplierRepo = SupplierRepository();
   final UnitRepository _unitRepo = UnitRepository();
-  final ProductComponentRepository _componentRepo = ProductComponentRepository();
+  final ProductComponentRepository _componentRepo =
+      ProductComponentRepository();
   final ProductPriceTierRepository _tierRepo = ProductPriceTierRepository();
   final ProductTypeRepository _typeRepo = ProductTypeRepository();
   final ShelfRepository _shelfRepo = ShelfRepository();
@@ -108,7 +111,8 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   List<Shelf> _shelves = [];
 
   int? _selectedTypeId; // 0=General, 1=Weighing
-  int _activeTab = 0; // 0=Linkage, 1=Price Tier, 2=Units, 3=StockIn History, 4=Sales History
+  int _activeTab =
+      0; // 0=Linkage, 1=Price Tier, 2=Units, 3=StockIn History, 4=Sales History
 
   // History Tab State
   List<Map<String, dynamic>>? _stockInHistory;
@@ -133,14 +137,20 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
 
     // Prices
     _costCtrl = TextEditingController(text: p?.costPrice.toString() ?? '0');
-    _retailPriceCtrl = TextEditingController(text: p?.retailPrice.toString() ?? '0');
-    _wholesalePriceCtrl = TextEditingController(text: p?.wholesalePrice?.toString() ?? '0');
-    _memberRetailPriceCtrl = TextEditingController(text: p?.memberRetailPrice?.toString() ?? '0');
-    _memberWholesalePriceCtrl = TextEditingController(text: p?.memberWholesalePrice?.toString() ?? '0');
+    _retailPriceCtrl =
+        TextEditingController(text: p?.retailPrice.toString() ?? '0');
+    _wholesalePriceCtrl =
+        TextEditingController(text: p?.wholesalePrice?.toString() ?? '0');
+    _memberRetailPriceCtrl =
+        TextEditingController(text: p?.memberRetailPrice?.toString() ?? '0');
+    _memberWholesalePriceCtrl =
+        TextEditingController(text: p?.memberWholesalePrice?.toString() ?? '0');
 
     // Stock & Points
-    _stockCtrl = TextEditingController(text: p?.stockQuantity.toString() ?? '0');
-    _reorderPointCtrl = TextEditingController(text: p?.reorderPoint?.toString() ?? '0');
+    _stockCtrl =
+        TextEditingController(text: p?.stockQuantity.toString() ?? '0');
+    _reorderPointCtrl =
+        TextEditingController(text: p?.reorderPoint?.toString() ?? '0');
     _pointsCtrl = TextEditingController(text: p?.points.toString() ?? '0');
 
     _trackStock = p?.trackStock ?? true;
@@ -265,15 +275,15 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                   // Right Header (Tabs simulation)
                                   Container(
                                     color: Colors.blue[50],
-                                    width: double.infinity, // Ensure container takes full width
+                                    width: double
+                                        .infinity, // Ensure container takes full width
                                     child: Wrap(
                                       children: [
                                         InkWell(
                                           onTap: () =>
                                               setState(() => _activeTab = 0),
                                           child: _buildTabHeader(
-                                              'การเชื่อมโยง',
-                                              _activeTab == 0,
+                                              'การเชื่อมโยง', _activeTab == 0,
                                               icon: Icons.link),
                                         ),
                                         InkWell(
@@ -287,8 +297,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                                           onTap: () =>
                                               setState(() => _activeTab = 2),
                                           child: _buildTabHeader(
-                                              'หน่วยเสริม',
-                                              _activeTab == 2,
+                                              'หน่วยเสริม', _activeTab == 2,
                                               icon: Icons.view_module),
                                         ),
                                         if (widget.product != null) ...[
@@ -368,5 +377,77 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
                 ),
               ),
             )));
+  }
+
+  Future<void> _showMagicSearch() async {
+    final barcode = _barcodeCtrl.text.trim();
+    if (!RegExp(r'^\d{8,14}$').hasMatch(barcode)) {
+      AlertService.show(
+        context: context,
+        message: 'กรุณากรอกบาร์โค้ดตัวเลข 8–14 หลักก่อนค้นหา',
+        type: 'warning',
+      );
+      return;
+    }
+
+    final selectedName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.auto_awesome, color: Colors.deepPurple),
+            SizedBox(width: 8),
+            Text('ค้นหาชื่อสินค้าด่วน'),
+          ],
+        ),
+        content: SizedBox(
+          width: 460,
+          child: FutureBuilder<List<BarcodeProductSuggestion>>(
+            future: _barcodeLookup.lookup(barcode),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final results = snapshot.data ?? const [];
+              if (results.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'ยังไม่พบชื่อสินค้าจากฐานข้อมูลภายนอก\nกรอกชื่อเองได้ตามปกติ',
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
+              return ListView.separated(
+                shrinkWrap: true,
+                itemCount: results.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, index) {
+                  final result = results[index];
+                  return ListTile(
+                    leading: const Icon(Icons.inventory_2_outlined),
+                    title: Text(result.name),
+                    subtitle: Text('แหล่งข้อมูล: ${result.source}'),
+                    onTap: () => Navigator.pop(dialogContext, result.name),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('ปิด'),
+          ),
+        ],
+      ),
+    );
+    if (selectedName != null && mounted) {
+      setState(() => _nameCtrl.text = selectedName);
+    }
   }
 }

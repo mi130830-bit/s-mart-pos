@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../../../services/alert_service.dart';
 import '../../../../models/product.dart';
 import '../../../../models/supplier.dart';
@@ -10,7 +9,6 @@ import '../../../../repositories/supplier_repository.dart';
 import '../../../../repositories/unit_repository.dart';
 import '../../product_multi_selection_dialog.dart';
 import '../../dialogs/product_form/product_form_dialog.dart';
-import '../../../../widgets/common/custom_text_field.dart';
 import '../../../../widgets/common/custom_buttons.dart';
 import '../../../../widgets/common/confirm_dialog.dart';
 import '../models/stock_in_item.dart';
@@ -18,6 +16,7 @@ import '../dialogs/partial_receive_dialog.dart';
 import 'widgets/stock_in_table_row.dart';
 import 'widgets/stock_in_settings_panel.dart';
 import 'widgets/stock_in_summary_panel.dart';
+
 class StockInTotals {
   final double subtotal;
   final double vatAmount;
@@ -55,11 +54,12 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   List<Unit> _units = [];
   int? _selectedSupplierId;
   String _poStatus = 'NEW'; // NEW, DRAFT, ORDERED, RECEIVED
-  int _vatType = 0; // 0=Included, 1=Excluded, 2=NoVAT
+  int _vatType = 2; // 0=Included, 1=Excluded, 2=NoVAT
   bool _isPaid = false;
   bool _isLoading = false;
 
-  Map<String, TextEditingController> _createControllersForItem(StockInItem item) {
+  Map<String, TextEditingController> _createControllersForItem(
+      StockInItem item) {
     final qtyStr = item.quantity > 0
         ? item.quantity.toString().replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "")
         : "";
@@ -69,8 +69,14 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     return {
       'qty': TextEditingController(text: qtyStr),
       'cost': TextEditingController(text: costStr),
+      'retail':
+          TextEditingController(text: _formatNumber(item.product.retailPrice)),
+      'total': TextEditingController(text: _formatNumber(item.total)),
     };
   }
+
+  String _formatNumber(double value) =>
+      value.toStringAsFixed(4).replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), '');
 
   void _updateTotals() {
     double subtotal = _stockInItems.fold(0.0, (sum, item) => sum + item.total);
@@ -103,10 +109,12 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
         final qtyCtrl = ctrls['qty'];
         final costCtrl = ctrls['cost'];
         if (qtyCtrl != null) {
-          item.quantity = double.tryParse(qtyCtrl.text.replaceAll(',', '')) ?? 0.0;
+          item.quantity =
+              double.tryParse(qtyCtrl.text.replaceAll(',', '')) ?? 0.0;
         }
         if (costCtrl != null) {
-          item.costPrice = double.tryParse(costCtrl.text.replaceAll(',', '')) ?? 0.0;
+          item.costPrice =
+              double.tryParse(costCtrl.text.replaceAll(',', '')) ?? 0.0;
         }
       }
     }
@@ -125,6 +133,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     for (var ctrls in _itemControllers.values) {
       ctrls['qty']?.dispose();
       ctrls['cost']?.dispose();
+      ctrls['retail']?.dispose();
+      ctrls['total']?.dispose();
     }
     _itemControllers.clear();
     _totalsNotifier.dispose();
@@ -215,7 +225,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               receivedQuantity: received, // ✅ Added
             );
             _stockInItems.add(newItem);
-            _itemControllers[dummyProduct.id] = _createControllersForItem(newItem);
+            _itemControllers[dummyProduct.id] =
+                _createControllersForItem(newItem);
           }
         }
       }
@@ -327,93 +338,6 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     }
   }
 
-  Future<void> _showCostCalculator(StockInItem item) async {
-    double tempTotal = item.total;
-    final totalCtrl = TextEditingController(text: tempTotal.toString());
-    final discountCtrl = TextEditingController(text: "0");
-
-    double calculateCostPerUnit() {
-      double t = double.tryParse(totalCtrl.text.replaceAll(',', '')) ?? 0.0;
-      double d = double.tryParse(discountCtrl.text.replaceAll(',', '')) ?? 0.0;
-      double qty = item.quantity;
-      if (qty == 0) return 0.0;
-      return (t - d) / qty;
-    }
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            double currentCostPerUnit = calculateCostPerUnit();
-            return AlertDialog(
-              title: const Text('คำนวณต้นทุนสินค้า'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'สินค้า: ${item.product.name}',
-                    style: const TextStyle(color: Colors.blue),
-                  ),
-                  const SizedBox(height: 10),
-                  CustomTextField(
-                    controller: totalCtrl,
-                    label: 'ต้นทุนรวม (Total Cost)',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (v) => setDialogState(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  CustomTextField(
-                    controller: discountCtrl,
-                    label: 'ส่วนลดรวม (Total Discount)',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    onChanged: (v) => setDialogState(() {}),
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: Text(
-                      'ต้นทุนต่อหน่วย: ${NumberFormat('#,##0.0000').format(currentCostPerUnit)}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                CustomButton(
-                  onPressed: () => Navigator.pop(context),
-                  label: 'ยกเลิก',
-                  type: ButtonType.secondary,
-                ),
-                CustomButton(
-                  onPressed: () {
-                    setState(() {
-                      item.costPrice = calculateCostPerUnit();
-                      _itemControllers[item.product.id]?['cost']?.text = item.costPrice
-                          .toStringAsFixed(4)
-                          .replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "");
-                      _updateTotals();
-                    });
-                    Navigator.pop(context);
-                  },
-                  label: 'ยืนยัน',
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   void _processAction(String targetStatus) async {
     if (_stockInItems.isEmpty) return;
 
@@ -449,7 +373,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
               }
             });
           } else {
-            throw Exception('ไม่สามารถบันทึกสินค้า "${item.product.name}" ลงฐานข้อมูลได้');
+            throw Exception(
+                'ไม่สามารถบันทึกสินค้า "${item.product.name}" ลงฐานข้อมูลได้');
           }
         }
         if (mounted) setState(() => _isLoading = false); // Close loading
@@ -541,6 +466,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                 'productName': item.product.name,
                 'quantity': item.quantity,
                 'costPrice': item.costPrice,
+                'retailPrice': item.product.retailPrice,
                 'total': item.total,
               })
           .toList();
@@ -708,9 +634,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final double tableWidth = constraints.maxWidth > 850
-                      ? constraints.maxWidth
-                      : 850;
+                  final double tableWidth =
+                      constraints.maxWidth > 1020 ? constraints.maxWidth : 1020;
                   return SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
@@ -726,43 +651,57 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                                 topRight: Radius.circular(8),
                               ),
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 16),
                             child: const Row(
                               children: [
                                 SizedBox(
                                     width: 40,
                                     child: Text('#',
                                         style: TextStyle(
-                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
                                 Expanded(
                                     flex: 3,
                                     child: Text('ชื่อสินค้า',
                                         style: TextStyle(
-                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
                                 Expanded(
                                     flex: 1,
                                     child: Text('จำนวน',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
-                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
                                 Expanded(
                                     flex: 1,
                                     child: Text('หน่วย',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
-                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
                                 Expanded(
                                     flex: 2,
                                     child: Text('ทุน/หน่วย',
-                                        textAlign: TextAlign.right,
+                                        textAlign: TextAlign.center,
                                         style: TextStyle(
-                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
+                                Expanded(
+                                    flex: 2,
+                                    child: Text('ราคาปลีก',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
                                 Expanded(
                                     flex: 1,
                                     child: Text('รวม',
-                                        textAlign: TextAlign.right,
+                                        textAlign: TextAlign.center,
                                         style: TextStyle(
-                                            fontWeight: FontWeight.bold, color: Colors.white))),
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white))),
                                 SizedBox(
                                     width: 50,
                                     child: Center(
@@ -782,21 +721,26 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                                         style: TextStyle(color: Colors.grey)))
                                 : ListView.separated(
                                     itemCount: _stockInItems.length,
-                                    separatorBuilder: (ctx, i) => const Divider(height: 1),
+                                    separatorBuilder: (ctx, i) =>
+                                        const Divider(height: 1),
                                     itemBuilder: (ctx, index) {
                                       final item = _stockInItems[index];
                                       final unitName = _units
                                           .firstWhere(
                                             (u) => u.id == item.product.unitId,
-                                            orElse: () => Unit(id: 0, name: '-'),
+                                            orElse: () =>
+                                                Unit(id: 0, name: '-'),
                                           )
                                           .name;
-                                      final ctrls = _itemControllers.putIfAbsent(
+                                      final ctrls =
+                                          _itemControllers.putIfAbsent(
                                         item.product.id,
                                         () => _createControllersForItem(item),
                                       );
                                       final qtyCtrl = ctrls['qty']!;
                                       final costCtrl = ctrls['cost']!;
+                                      final retailCtrl = ctrls['retail']!;
+                                      final totalCtrl = ctrls['total']!;
 
                                       return StockInTableRow(
                                         item: item,
@@ -805,23 +749,58 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                                         poStatus: _poStatus,
                                         qtyCtrl: qtyCtrl,
                                         costCtrl: costCtrl,
+                                        retailCtrl: retailCtrl,
+                                        totalCtrl: totalCtrl,
+                                        vatType: _vatType,
                                         onEdit: () => _editProductDetail(item),
-                                        onCalculate: () => _showCostCalculator(item),
                                         onDelete: () {
                                           setState(() {
-                                            final deletedCtrls = _itemControllers.remove(item.product.id);
+                                            final deletedCtrls =
+                                                _itemControllers
+                                                    .remove(item.product.id);
                                             deletedCtrls?['qty']?.dispose();
                                             deletedCtrls?['cost']?.dispose();
+                                            deletedCtrls?['retail']?.dispose();
+                                            deletedCtrls?['total']?.dispose();
                                             _stockInItems.removeAt(index);
                                             _calculateTotals();
                                           });
                                         },
                                         onQtyChanged: (val) {
-                                          item.quantity = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                                          item.quantity = double.tryParse(
+                                                  val.replaceAll(',', '')) ??
+                                              0.0;
+                                          totalCtrl.text =
+                                              _formatNumber(item.total);
                                           _updateTotals();
                                         },
                                         onCostChanged: (val) {
-                                          item.costPrice = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                                          item.costPrice = double.tryParse(
+                                                  val.replaceAll(',', '')) ??
+                                              0.0;
+                                          totalCtrl.text =
+                                              _formatNumber(item.total);
+                                          _updateTotals();
+                                        },
+                                        onRetailChanged: (val) {
+                                          final retailPrice = double.tryParse(
+                                                  val.replaceAll(',', '')) ??
+                                              0.0;
+                                          setState(() {
+                                            item.product = item.product
+                                                .copyWith(
+                                                    retailPrice: retailPrice);
+                                          });
+                                        },
+                                        onTotalChanged: (val) {
+                                          final total = double.tryParse(
+                                                  val.replaceAll(',', '')) ??
+                                              0.0;
+                                          if (item.quantity <= 0) return;
+                                          item.costPrice =
+                                              total / item.quantity;
+                                          costCtrl.text =
+                                              _formatNumber(item.costPrice);
                                           _updateTotals();
                                         },
                                       );
@@ -848,7 +827,8 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                     vatType: _vatType,
                     docNoCtrl: _docNoCtrl,
                     isPaid: _isPaid,
-                    onSupplierChanged: (s) => setState(() => _selectedSupplierId = s?.id),
+                    onSupplierChanged: (s) =>
+                        setState(() => _selectedSupplierId = s?.id),
                     onVatChanged: (val) {
                       if (val != null) {
                         setState(() => _vatType = val);

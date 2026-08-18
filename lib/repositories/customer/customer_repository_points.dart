@@ -34,23 +34,47 @@ extension CustomerRepositoryPoints on CustomerRepository {
     }
   }
 
-  Future<void> redeemPoints(int customerId, int amountToUse) async {
+  /// Deducts points FIFO. When called from checkout, set [useTransaction] false
+  /// so the debit stays in the same transaction as the order.
+  Future<void> redeemPoints(int customerId, int amountToUse,
+      {bool useTransaction = true}) async {
     if (amountToUse <= 0) return;
     if (!_dbService.isConnected()) await _dbService.connect();
 
-    await _dbService.execute('START TRANSACTION;');
+    if (useTransaction) await _dbService.execute('START TRANSACTION;');
     try {
+      // Lock the customer first so another register/LINE redemption cannot
+      // calculate and consume the same balance concurrently.
+      final customer = await _dbService.query(
+          'SELECT id, currentPoints FROM customer WHERE id = :cid FOR UPDATE',
+          {'cid': customerId});
+      if (customer.isEmpty) throw StateError('ไม่พบข้อมูลลูกค้า');
+      final currentPoints =
+          int.tryParse(customer.first['currentPoints']?.toString() ?? '0') ?? 0;
+      if (currentPoints < amountToUse) {
+        throw StateError('แต้มคงเหลือไม่เพียงพอ กรุณาตรวจสอบและลองใหม่');
+      }
       // 1. Get available ledgers ordered by expires_at ASC (FIFO)
       final res = await _dbService.query('''
         SELECT id, (points_earned - points_used) as available
         FROM point_ledger
         WHERE customer_id = :cid
-          AND (points_earned > points_used)
           AND (expires_at IS NULL OR expires_at > NOW())
         ORDER BY expires_at ASC
+        FOR UPDATE
       ''', {'cid': customerId});
 
       int remainingToRedeem = amountToUse;
+
+      final availableTotal = res.fold<int>(
+          0,
+          (total, row) =>
+              total +
+              (double.tryParse(row['available']?.toString() ?? '0')?.toInt() ??
+                  0));
+      if (availableTotal < amountToUse) {
+        throw StateError('แต้มคงเหลือไม่เพียงพอ กรุณาตรวจสอบและลองใหม่');
+      }
 
       for (var row in res) {
         if (remainingToRedeem <= 0) break;
@@ -77,13 +101,17 @@ extension CustomerRepositoryPoints on CustomerRepository {
         ''', {'used': usedNow, 'lid': ledgerId});
       }
 
-      await _dbService.execute('COMMIT;');
-      
+      if (remainingToRedeem != 0) {
+        throw StateError('ไม่สามารถตัดแต้มได้ครบตามจำนวนที่ขอ');
+      }
+      if (useTransaction) await _dbService.execute('COMMIT;');
+
       // Even if not enough points in ledger (e.g. legacy mismatch or over-deducted), just recalculate
       await recalculateCustomerPoints(customerId);
     } catch (e) {
-      await _dbService.execute('ROLLBACK;');
+      if (useTransaction) await _dbService.execute('ROLLBACK;');
       debugPrint('Error redeeming points: $e');
+      rethrow;
     }
   }
 
@@ -94,7 +122,6 @@ extension CustomerRepositoryPoints on CustomerRepository {
         SELECT SUM(points_earned - points_used) as total
         FROM point_ledger
         WHERE customer_id = :cid
-          AND (points_earned > points_used)
           AND (expires_at IS NULL OR expires_at > NOW())
       ''', {'cid': customerId});
 

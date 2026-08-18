@@ -4,7 +4,8 @@ import '../../repositories/hr/advance_repository.dart';
 class AdvanceService {
   final AdvanceRepository _advanceRepo = AdvanceRepository();
 
-  Future<int> requestAdvance(int employeeId, double amount, String reason, {double? installmentAmount}) async {
+  Future<int> requestAdvance(int employeeId, double amount, String reason,
+      {double? installmentAmount}) async {
     if (amount <= 0) {
       throw Exception('จำนวนเงินเบิกล่วงหน้าต้องมากกว่า 0');
     }
@@ -33,27 +34,5 @@ class AdvanceService {
 
   Future<double> getOutstandingTotal(int employeeId) async {
     return await _advanceRepo.getTotalOutstanding(employeeId);
-  }
-
-  Future<void> deductFromPayroll(int employeeId, int payrollId, double totalDeduction) async {
-    if (totalDeduction <= 0) return;
-
-    final outstanding = await _advanceRepo.getOutstanding(employeeId);
-    double remainingToDeduct = totalDeduction;
-
-    for (var adv in outstanding) {
-      if (remainingToDeduct <= 0) break;
-
-      double deductAmount = adv.remainingAmount;
-      if (deductAmount > remainingToDeduct) {
-        deductAmount = remainingToDeduct;
-      }
-
-      await _advanceRepo.recordDeduction(adv.id, payrollId, deductAmount);
-      remainingToDeduct -= deductAmount;
-    }
-  }
-  Future<void> revertDeductionsForPayroll(int payrollId) async {
-    await _advanceRepo.revertDeductionsForPayroll(payrollId);
   }
 }

@@ -22,9 +22,12 @@ class FingerprintNetworkService {
   String? _connectedAddress;
   StreamSubscription? _socketSubscription;
   RawDatagramSocket? _udpSocket;
+  bool _isStartingDiscovery = false;
   bool _shouldReconnect = false;
   Timer? _reconnectTimer;
   Timer? _heartbeatTimer; // ตรวจสอบสถานะการเชื่อมต่อเป็นระยะ
+  Future<bool>? _connectionAttempt;
+  int _connectionGeneration = 0;
 
   // ---------------------------------------------------------------------------
   // Callbacks
@@ -32,8 +35,10 @@ class FingerprintNetworkService {
   Function(int fingerprintSlotId)? onMatchDetected;
   Function(int fingerprintSlotId)? onClockOutDetected;
   Function(int fingerprintSlotId)? onBreakStartDetected; // สำหรับปุ่มกดออกพัก
-  Function(int fingerprintSlotId, DateTime timestamp)? onOfflineLogDetected; // ประวัติออฟไลน์
-  Function(int fingerprintSlotId, DateTime timestamp)? onOfflineBreakDetected; // ประวัติออฟไลน์ (ออกพัก)
+  Function(int fingerprintSlotId, DateTime timestamp)?
+      onOfflineLogDetected; // ประวัติออฟไลน์
+  Function(int fingerprintSlotId, DateTime timestamp)?
+      onOfflineBreakDetected; // ประวัติออฟไลน์ (ออกพัก)
   Function(String message)? onAlertReceived;
   Function(bool success, int slotId)? onEnrollResult;
   Function(int step, String message)? onEnrollStep;
@@ -49,17 +54,28 @@ class FingerprintNetworkService {
   bool get isConnected => _socket != null && _isListening;
   String? get connectedAddress => _connectedAddress;
 
+  /// Runs exactly one immediate retry. Concurrent taps/discovery events share
+  /// the same attempt instead of creating competing sockets.
+  Future<bool> retryConnection() {
+    final address = _connectedAddress;
+    if (address == null || address.isEmpty) return Future.value(false);
+    return connect(address);
+  }
+
   /// ดึง IP จาก Hostname ด้วย ping บน Windows (.local)
   Future<String?> _resolveWindowsHostname(String hostname) async {
     if (!Platform.isWindows) return null;
     try {
-      final result = await Process.run('ping', ['-4', '-n', '1', '-w', '1000', hostname]);
+      final result =
+          await Process.run('ping', ['-4', '-n', '1', '-w', '1000', hostname]);
       if (result.exitCode == 0) {
-        final RegExp match = RegExp(r'\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]');
+        final RegExp match =
+            RegExp(r'\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]');
         final ipMatch = match.firstMatch(result.stdout.toString());
         if (ipMatch != null) return ipMatch.group(1);
-        
-        final RegExp match2 = RegExp(r'Reply from (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})');
+
+        final RegExp match2 =
+            RegExp(r'Reply from (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})');
         final ipMatch2 = match2.firstMatch(result.stdout.toString());
         if (ipMatch2 != null) return ipMatch2.group(1);
       }
@@ -70,12 +86,15 @@ class FingerprintNetworkService {
   /// เปิดโหมด Auto-Discovery (ฟัง UDP Broadcast จาก ESP32)
   /// ESP32 จะส่ง `"SMART_POS_FINGERPRINT_HERE:<ip>"` ทุก 3 วินาที
   void startAutoDiscovery() async {
-    if (_udpSocket != null) return;
+    if (_udpSocket != null || _isStartingDiscovery) return;
+    _isStartingDiscovery = true;
     try {
-      _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 8081);
-      _udpSocket!.listen((RawSocketEvent e) {
+      final udpSocket =
+          await RawDatagramSocket.bind(InternetAddress.anyIPv4, 8081);
+      _udpSocket = udpSocket;
+      udpSocket.listen((RawSocketEvent e) {
         if (e == RawSocketEvent.read) {
-          final datagram = _udpSocket!.receive();
+          final datagram = udpSocket.receive();
           if (datagram != null) {
             final msg = utf8.decode(datagram.data);
             if (msg.startsWith('SMART_POS_FINGERPRINT_HERE')) {
@@ -90,32 +109,54 @@ class FingerprintNetworkService {
 
               // ถ้ายังไม่ต่อ หรือ IP เปลี่ยน → ต่อใหม่ทันที
               if (!isConnected || _connectedAddress != espIp) {
-                debugPrint('📡 [Fingerprint Auto-Discovery] พบอุปกรณ์ที่ IP: $espIp');
+                debugPrint(
+                    '📡 [Fingerprint Auto-Discovery] พบอุปกรณ์ที่ IP: $espIp');
                 connect(espIp);
               }
             }
           }
         }
       });
-      debugPrint('📡 [Fingerprint] เริ่มโหมดค้นหาอุปกรณ์อัตโนมัติผ่าน UDP:8081');
+      debugPrint(
+          '📡 [Fingerprint] เริ่มโหมดค้นหาอุปกรณ์อัตโนมัติผ่าน UDP:8081');
     } catch (e) {
       debugPrint('⚠️ [Fingerprint] ไม่สามารถเปิดโหมด Auto-Discovery ได้: $e');
+    } finally {
+      _isStartingDiscovery = false;
     }
   }
 
   /// เชื่อมต่อ TCP Socket ไปยัง IP/Hostname ของ ESP32
-  Future<bool> connect(String address) async {
-    try {
-      disconnect(intentional: true);
+  Future<bool> connect(String address) {
+    if (isConnected && _connectedAddress == address) return Future.value(true);
+    final pending = _connectionAttempt;
+    if (pending != null) return pending;
 
+    final attempt = _connectInternal(address);
+    _connectionAttempt = attempt;
+    return attempt.whenComplete(() {
+      if (identical(_connectionAttempt, attempt)) {
+        _connectionAttempt = null;
+      }
+    });
+  }
+
+  Future<bool> _connectInternal(String address) async {
+    final generation = ++_connectionGeneration;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _disposeCurrentSocket();
+    try {
       String resolvedAddress = address;
 
       // Smart IPv4 Resolution สำหรับ Windows (.local / Hostname)
-      if (Platform.isWindows && !RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(address)) {
+      if (Platform.isWindows &&
+          !RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(address)) {
         try {
-          final addrs = await InternetAddress.lookup(address, type: InternetAddressType.IPv4);
+          final addrs = await InternetAddress.lookup(address,
+              type: InternetAddressType.IPv4);
           if (addrs.isNotEmpty) {
-             resolvedAddress = addrs.first.address;
+            resolvedAddress = addrs.first.address;
           }
         } catch (_) {
           final pingIp = await _resolveWindowsHostname(address);
@@ -125,33 +166,40 @@ class FingerprintNetworkService {
         }
       }
 
-      debugPrint('🔌 [Fingerprint] กำลังพยายามเชื่อมต่อ $resolvedAddress:8080 (จาก $address) ...');
-      _socket = await Socket.connect(resolvedAddress, 8080,
+      debugPrint(
+          '🔌 [Fingerprint] กำลังพยายามเชื่อมต่อ $resolvedAddress:8080 (จาก $address) ...');
+      final socket = await Socket.connect(resolvedAddress, 8080,
           timeout: const Duration(seconds: 5));
+      if (generation != _connectionGeneration) {
+        socket.destroy();
+        return false;
+      }
+      _socket = socket;
       _isListening = true;
-      _connectedAddress = address; // เก็บตัวดั้งเดิมไว้ (เช่น fingerprint.local)
+      _connectedAddress =
+          address; // เก็บตัวดั้งเดิมไว้ (เช่น fingerprint.local)
       _shouldReconnect = true;
 
       final StringBuffer buffer = StringBuffer();
-      
-      _socketSubscription = _socket!.listen(
+
+      _socketSubscription = socket.listen(
         (Uint8List data) {
           try {
             final String chunk = utf8.decode(data, allowMalformed: true);
             buffer.write(chunk);
-            
+
             String content = buffer.toString();
             while (content.contains('\n')) {
               final int nextLineIdx = content.indexOf('\n');
               final String line = content.substring(0, nextLineIdx).trim();
-              
+
               if (line.isNotEmpty) {
                 _parseSerialLine(line);
               }
-              
+
               content = content.substring(nextLineIdx + 1);
             }
-            
+
             buffer.clear();
             buffer.write(content);
           } catch (e) {
@@ -159,35 +207,40 @@ class FingerprintNetworkService {
           }
         },
         onError: (err) {
+          if (generation != _connectionGeneration ||
+              !identical(_socket, socket)) {
+            return;
+          }
           debugPrint('❌ [Fingerprint] Socket Error: $err');
           onAlertReceived?.call('การเชื่อมต่อเครือข่ายขัดข้อง: $err');
-          disconnect(intentional: false);
+          _handleSocketLost(socket, generation);
         },
         onDone: () {
           debugPrint('⚠️ [Fingerprint] Socket Connection Closed by Server');
-          disconnect(intentional: false);
+          _handleSocketLost(socket, generation);
         },
       );
 
       // เริ่ม Heartbeat checker หลังจากต่อสำเร็จ
-      _startHeartbeat();
+      _startHeartbeat(socket, generation);
 
       debugPrint('✅ [Fingerprint] เชื่อมต่อ $address:8080 สำเร็จ');
-      onConnectionChanged?.call(true, address);
+      _emitConnectionChanged(true, address);
       return true;
     } catch (e) {
       debugPrint('❌ [Fingerprint] เกิดข้อผิดพลาดในการเชื่อมต่อ: $e');
+      if (generation != _connectionGeneration) return false;
       _connectedAddress = address;
       _shouldReconnect = true;
       // หยอดระบบ Auto-Reconnect กรณีที่ตอนเปิดแอป เครื่องสแกนยังไม่ได้เปิด
-      disconnect(intentional: false); 
+      _transitionDisconnected(generation, scheduleRetry: true);
       return false;
     }
   }
 
   /// ตัดการเชื่อมต่อ (ถ้า intentional = true จะไม่พยายามต่อใหม่)
   void disconnect({bool intentional = true}) {
-    _stopHeartbeat();
+    ++_connectionGeneration;
 
     if (intentional) {
       _shouldReconnect = false;
@@ -195,22 +248,13 @@ class FingerprintNetworkService {
     }
 
     final wasConnected = _isListening;
-
-    _isListening = false;
-    _socketSubscription?.cancel();
-    _socketSubscription = null;
-
-    if (_socket != null) {
-      try {
-        _socket!.destroy();
-      } catch (_) {}
-      _socket = null;
-    }
-    debugPrint('🔌 [Fingerprint] ตัดการเชื่อมต่อแล้ว (intentional: $intentional)');
+    _disposeCurrentSocket();
+    debugPrint(
+        '🔌 [Fingerprint] ตัดการเชื่อมต่อแล้ว (intentional: $intentional)');
 
     // แจ้ง UI ว่าการเชื่อมต่อขาดหาย (เฉพาะกรณีหลุดโดยไม่ตั้งใจ)
     if (!intentional && wasConnected) {
-      onConnectionChanged?.call(false, _connectedAddress);
+      _emitConnectionChanged(false, _connectedAddress);
     }
 
     // 🚀 Auto-Reconnect (กรณีหลุดโดยไม่ตั้งใจ)
@@ -227,10 +271,56 @@ class FingerprintNetworkService {
     }
   }
 
+  void _handleSocketLost(Socket socket, int generation) {
+    // A socket from an older connection attempt has no authority to tear down
+    // the socket that replaced it.
+    if (generation != _connectionGeneration || !identical(_socket, socket)) {
+      return;
+    }
+    _transitionDisconnected(generation, scheduleRetry: true);
+  }
+
+  void _transitionDisconnected(int generation, {required bool scheduleRetry}) {
+    if (generation != _connectionGeneration) return;
+    final wasConnected = _isListening;
+    _disposeCurrentSocket();
+    if (wasConnected) _emitConnectionChanged(false, _connectedAddress);
+    if (scheduleRetry && _shouldReconnect && _connectedAddress != null) {
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(const Duration(seconds: 5), () {
+        if (_shouldReconnect && _connectedAddress != null && !isConnected) {
+          connect(_connectedAddress!);
+        }
+      });
+    }
+  }
+
+  void _disposeCurrentSocket() {
+    _stopHeartbeat();
+    _isListening = false;
+    _socketSubscription?.cancel();
+    _socketSubscription = null;
+    final socket = _socket;
+    _socket = null;
+    if (socket != null) {
+      try {
+        socket.destroy();
+      } catch (_) {}
+    }
+  }
+
+  bool? _lastNotifiedConnection;
+  void _emitConnectionChanged(bool connected, String? address) {
+    if (_lastNotifiedConnection == connected) return;
+    _lastNotifiedConnection = connected;
+    onConnectionChanged?.call(connected, address);
+  }
+
   /// ส่งคำสั่ง text ผ่าน Socket ไปยัง ESP32
   void sendCommand(String command) {
     if (_socket == null) {
-      debugPrint('⚠️ [Fingerprint] ไม่สามารถส่งคำสั่งได้ เพราะไม่ได้เชื่อมต่ออยู่');
+      debugPrint(
+          '⚠️ [Fingerprint] ไม่สามารถส่งคำสั่งได้ เพราะไม่ได้เชื่อมต่ออยู่');
       return;
     }
     try {
@@ -246,16 +336,18 @@ class FingerprintNetworkService {
   // Heartbeat: เช็คสถานะทุก 15 วินาที
   // ถ้า socket ดูเหมือนเชื่อมอยู่ แต่ส่งข้อมูลไม่ได้ → ถือว่าหลุด
   // ---------------------------------------------------------------------------
-  void _startHeartbeat() {
+  void _startHeartbeat(Socket socket, int generation) {
     _stopHeartbeat();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (!isConnected) return;
+      if (generation != _connectionGeneration || !identical(_socket, socket)) {
+        return;
+      }
       try {
         // ส่ง empty byte เพื่อทดสอบว่า socket ยังมีชีวิตอยู่
-        _socket!.add([]);
+        socket.add([]);
       } catch (e) {
         debugPrint('💔 [Fingerprint Heartbeat] Socket ตายแล้ว: $e');
-        disconnect(intentional: false);
+        _handleSocketLost(socket, generation);
       }
     });
   }
@@ -299,7 +391,7 @@ class FingerprintNetworkService {
       if (parts.length >= 2) {
         final idStr = parts[0];
         final timePart = parts.sublist(1).join(':'); // reconnect
-        
+
         final slotId = int.tryParse(idStr);
         if (slotId != null) {
           bool isBreak = false;
@@ -308,14 +400,16 @@ class FingerprintNetworkService {
             isBreak = true;
             timeStr = timePart.substring('BREAK|'.length);
           }
-          
+
           try {
             final timestamp = DateTime.parse(timeStr);
             if (isBreak) {
-              debugPrint('👆 [Fingerprint] รับข้อมูลออฟไลน์ (ออกพัก) ID: $slotId เวลา: $timestamp');
+              debugPrint(
+                  '👆 [Fingerprint] รับข้อมูลออฟไลน์ (ออกพัก) ID: $slotId เวลา: $timestamp');
               onOfflineBreakDetected?.call(slotId, timestamp);
             } else {
-              debugPrint('👆 [Fingerprint] รับข้อมูลออฟไลน์ ID: $slotId เวลา: $timestamp');
+              debugPrint(
+                  '👆 [Fingerprint] รับข้อมูลออฟไลน์ ID: $slotId เวลา: $timestamp');
               onOfflineLogDetected?.call(slotId, timestamp);
             }
             // ส่ง ACK กลับไปให้ ESP32 เคลียร์คิว

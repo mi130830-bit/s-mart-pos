@@ -4,6 +4,167 @@
 
 ---
 
+## [2026-08-18] Authoritative S-Link checkout endpoint / จุดชำระเงิน S-Link ที่ตรวจสอบโดยเซิร์ฟเวอร์
+
+**ไทย:** เพิ่ม API ที่ป้องกันด้วย JWT คือ `POST /api/v1/mobile-checkout/` แยกจาก
+`/orders` เดิม เพื่อให้มือถือส่งเพียงสินค้าและจำนวน, ลูกค้า, วิธีชำระ และ UUID สำหรับ
+กันคำสั่งซ้ำ. เซิร์ฟเวอร์ล็อกราคา/สต็อก/ledger, คำนวณยอด ส่วนลด และ VAT เอง แล้วสร้าง
+บิล ตัดสต็อก ตัดแต้ม หรือใช้คูปองภายใน transaction เดียวกัน. ใช้แต้มกับคูปองพร้อมกัน
+ไม่ได้ และคูปองถูกตรวจเจ้าของ สถานะ วันหมดอายุ และมูลค่าอีกครั้งก่อน commit. รองรับ
+เฉพาะ CASH และ PROMPTPAY; CREDIT ถูกปฏิเสธจนกว่าจะย้าย logic หนี้มาอยู่บนเส้นทางนี้.
+
+**English:** Added a JWT-protected `POST /api/v1/mobile-checkout/` endpoint,
+separate from legacy `/orders`. Mobile submits only product IDs/quantities,
+customer, payment method, and an idempotency UUID. The server locks and
+calculates product prices, stock, loyalty data, discounts, and VAT, then creates
+the order and consumes stock, points, or a coupon in one transaction. Points
+and coupons are exclusive; coupon ownership, state, expiry, and value are
+rechecked before commit. Only CASH and PROMPTPAY are supported; CREDIT is
+rejected until debt handling is migrated to this authoritative path.
+
+**Addendum:** Added JWT-protected `POST /api/v1/mobile-checkout/quote` for
+read-only mobile UX. It returns the current ledger balance, configured
+redemption rate, and `min(available, floor(pre-VAT base × 75% × rate))`; it
+does not reserve a benefit. The final checkout repeats validation while locked.
+
+---
+
+## [2026-08-18] Point/coupon checkout safeguards / กติกาแต้มและคูปองตอนชำระเงิน
+
+**ไทย:** จำกัดการแลกแต้มสูงสุดที่ 75% ของยอดหลังส่วนลดปกติและโปรโมชั่น (ก่อน VAT)
+และป้องกันการใช้แต้มร่วมกับคูปอง LINE OA. คูปองและแต้มถูกตรวจซ้ำและตัดสิทธิ์ภายใน
+transaction เดียวกับบิล; ตรวจเจ้าของคูปอง, สถานะ, วันหมดอายุ และมูลค่าส่วนลดก่อน commit.
+ส่วนลดคูปองถูกคำนวณก่อน VAT แล้ว เพื่อให้ VAT ในบิลคำนวณจากยอดขายหลังส่วนลด.
+
+**English:** Point redemption is capped at 75% of the post-discount/promotion,
+pre-VAT sale base, and cannot be combined with a LINE OA coupon. Coupon and
+point debits are revalidated and consumed inside the same order transaction,
+including coupon owner, status, expiry, and discount value. Coupon discounts
+now reduce the taxable base before VAT is calculated.
+
+---
+
+## [2026-08-15] GPS Wi-Fi bench-test kit / ชุดทดสอบ GPS ผ่าน Wi-Fi
+
+**ไทย:** แยกชุดทดสอบ ESP32 + NEO-M8N ผ่าน Wi-Fi ออกจาก 4G โดยย้าย Wi-Fi, URL และ
+device key ไปไว้ใน header ภายในเครื่องที่ Git ไม่เก็บ พร้อมไฟล์ตัวอย่าง. Serial Monitor
+แสดงผล PASS/FAIL ชัดเจนสำหรับ Wi-Fi, พิกัดใหม่ (อายุ/ดาว/HDOP) และ HTTP 2xx; เพิ่ม
+คู่มือต่อสายและแก้ปัญหา 401/400 แบบไทย–อังกฤษ. `setInsecure()` ถูกระบุชัดว่าใช้เฉพาะ
+bench test เท่านั้น.
+
+**English:** Refreshed the ESP32 + NEO-M8N Wi-Fi-only bench kit with ignored
+local secrets and a committed example. Serial diagnostics now assert Wi-Fi,
+fresh GPS quality (age/satellites/HDOP) and HTTP 2xx success. A bilingual
+wiring/troubleshooting guide covers 401/400, and `setInsecure()` is explicitly
+limited to the bench test.
+
+---
+
+## [2026-08-15] Duplicate barcode guard / ป้องกันบาร์โค้ดซ้ำ
+
+**ไทย:** เตือนทันทีเมื่อกรอกบาร์โค้ดหลักเสร็จหากถูกใช้กับสินค้าอื่น และตรวจซ้ำอีกครั้ง
+ก่อนบันทึกเพื่อกันข้อมูลเปลี่ยนระหว่างกรอก. ครอบคลุมบาร์โค้ดหน่วยย่อย/แพ็คด้วย และการ
+แก้ไขสินค้าจะไม่เตือนบาร์โค้ดของสินค้าเดิมเอง.
+
+**English:** The product form warns after entering a primary barcode already
+owned by another product and checks again at save time. It also covers
+unit/package barcodes, while editing a product never flags that product's own
+barcodes.
+
+---
+
+## [2026-08-15] Fingerprint disconnect notification stability / ป้องกันแจ้งเตือนเครื่องสแกนนิ้วหลุดซ้ำ
+
+**ไทย:** ทำให้การเชื่อมต่อ, auto-discovery และ retry ของเครื่องสแกนนิ้วทำงานทีละรอบ
+และละทิ้ง callback ของ socket เก่า จึงไม่ตัดการเชื่อมต่อใหม่หรือทำให้ popup เด้งวนซ้ำ.
+ปุ่มเชื่อมต่อใหม่รอผล retry จริงและจะปิดเมื่อสำเร็จเท่านั้น; ปุ่ม X ซ่อนเฉพาะเหตุการณ์
+หลุดรอบนั้น แล้วจะแจ้งเหตุการณ์ใหม่อีกครั้งเมื่อกลับมาเชื่อมต่อและหลุดในภายหลัง.
+
+**English:** Fingerprint connection, discovery and retry attempts are now
+serialized, and stale socket callbacks cannot tear down a replacement socket or
+loop the popup. Reconnect waits for one real retry and dismisses only on
+success; X snoozes only the current outage, with a later post-recovery outage
+shown again.
+
+---
+
+## [2026-08-15] Safe S-Link stock-count approval / ปิดใบตรวจนับ S-Link อย่างปลอดภัย
+
+**ไทย:** เพิ่มแบบตรวจนับพื้นฐานที่แก้ไขได้จาก S-Link และ POS จะนำเข้าเฉพาะใบที่ยัง
+รอยืนยันเท่านั้น เมื่อปรับครบทุกบรรทัดจึงปิดใบแบบมีเงื่อนไขและตรวจสอบผล ทำให้ใบเดิม
+ไม่นำมาปรับซ้ำได้. API ล็อกใบที่ตรวจแล้ว: การส่งซ้ำด้วยข้อมูลเดิมเป็น no-op ที่ปลอดภัย
+แต่การแก้ไขหรือลบใบที่ปิดแล้วจะได้ 409; ผู้ใช้ทั่วไปส่งหรือลบได้เฉพาะใบของตนเอง.
+หน้าจอ POS ยังปฏิเสธใบหรือสินค้าที่ซ้ำในรายการรอบันทึก และเมื่อบางรายการล้มเหลวจะ
+เก็บเฉพาะรายการที่ล้มเหลวไว้ให้ลองใหม่ ไม่ล้างทิ้ง.
+
+**English:** Added an editable S-Link stock-count template and made POS import
+only sheets still awaiting review. A sheet is conditionally marked reviewed and
+verified only after all its rows apply, preventing a second adjustment. Checked
+sheets are immutable at the API: an identical retry is a safe no-op, while a
+changed retry or deletion returns 409; non-privileged users may only manage
+their own sheets. POS rejects duplicate pending sheets/products and keeps only
+failed rows for retry instead of clearing them.
+
+**ไทย (เพิ่มเติม):** การปรับจาก S-Link ทำใน transaction เดียว: ล็อกใบที่ยัง
+เปิดอยู่ทั้งหมดก่อน แล้วปรับสินค้า/บันทึก ledger/ปิดใบพร้อมกัน หากเครื่องอื่นปิดใบ
+ไปก่อน จะ rollback ทั้งชุดและไม่เปลี่ยนสต๊อกแม้แต่รายการเดียว.
+
+**English (additional):** S-Link approval is now one transaction: it locks all
+open source sheets first, then updates products, ledger and sheet status
+together. If another POS session closed a sheet first, the entire operation
+rolls back with zero stock changes.
+
+**ไทย (เพิ่มเติม):** ใบตรวจนับจาก S-Link ไม่ถามรหัสแอดมินแม้ส่วนต่างมาก;
+การปรับสต๊อกด้วยมือยังคงถามตามค่าตั้งเดิมของระบบ.
+
+**English (additional):** S-Link stock-count sheets never request an admin
+PIN, regardless of variance; ad-hoc manual adjustments retain the existing
+optional PIN setting.
+
+---
+
+## [2026-08-15] Magic Search product-name suggestions
+
+**ไทย:** เพิ่มปุ่ม 🪄 ข้างช่องชื่อสินค้าในหน้าสร้าง/แก้ไขสินค้า เมื่อมีบาร์โค้ด 8–14
+หลัก ระบบจะแสดง popup ค้นหาชื่อจาก UPCitemdb และ Open Food Facts ให้เลือกเองก่อน
+เติมชื่อสินค้า หากไม่พบหรือบริการภายนอกขัดข้องยังกรอกชื่อแบบเดิมได้ และไม่มีการบันทึก
+ชื่อจากภายนอกโดยอัตโนมัติ
+
+**English:** The product form now has a 🪄 Magic Search button beside the name
+field. For an 8–14 digit barcode, it shows optional UPCitemdb and Open Food
+Facts name suggestions in a popup. The user must select a result; no external
+name is saved automatically, and manual entry remains available on any lookup
+failure.
+
+---
+
+## [2026-08-14] Select supplier before S-Link PO draft
+
+**ไทย:** S-Link ต้องเลือกผู้ขายจากรายชื่อผู้ขายใน POS ก่อนบันทึกร่างใบสั่งซื้อ
+ระบบส่ง `supplierId` ที่เลือกไปยัง backend และ backend ตรวจสอบว่าเป็นผู้ขายจริงก่อน
+บันทึก จึงไม่ใช้ “ไม่ระบุผู้ขาย” โดยอัตโนมัติ และยังไม่รับสินค้าเข้าสต๊อก
+
+**English:** S-Link now requires selection of an existing POS supplier before
+creating a purchase-order draft. The selected `supplierId` is validated by the
+backend; no automatic unspecified supplier is used, and the draft never
+receives stock.
+
+---
+
+## [2026-08-14] Backend self-checks PO draft schema
+
+**ไทย:** Backend จะตรวจและเพิ่มคอลัมน์/ดัชนีที่จำเป็นสำหรับการสร้างร่างใบสั่งซื้อ
+จาก S-Link (`idempotencyKey`, hash และผู้ขายระบบ) ก่อนบันทึกร่างครั้งแรก จึงไม่
+เกิดข้อผิดพลาดเมื่อยังไม่ได้เปิด POS Desktop เพื่อรัน migration เดิม ทั้งหมดเกิดก่อน
+เริ่ม transaction ของใบสั่งซื้อ และยังไม่มีการปรับสต๊อกหรือราคา
+
+**English:** Before creating an S-Link purchase-order draft, the backend now
+ensures the required idempotency and system-supplier schema is present. This
+removes the dependency on first launching POS Desktop for its legacy migration;
+the check runs before the PO transaction and never changes stock or prices.
+
+---
+
 ## [2026-08-08] จำกัดลิงก์ติดตามเฉพาะรถที่มี GPS
 
 **ไทย:** ขณะนี้อนุญาตให้แนบลิงก์ติดตามลูกค้าเฉพาะรถเครน (`รถเครน`) ซึ่งเป็นรถที่
@@ -681,3 +842,165 @@ manual refresh completion before reporting success.
 
 - TH: รองรับรูปแบบผลส่งของ firmware A7670E คือ `+CIPSEND:<link>,<sent>,<requested>` โดยถือว่าการส่งสำเร็จเมื่อ link 0 รายงาน byte count; API ตอบ 204 แล้วปิด connection เอง จึงตัดการอ่าน body/ปิด socket ซ้ำที่ทำให้ log error ปลอม
 - EN: Added support for A7670E firmware's `+CIPSEND:<link>,<sent>,<requested>` result format, treating link-0 byte counts as success; because the API returns 204 and closes the connection itself, removed body reads/redundant socket close calls that produced false error logs.
+# 2026-08-08 — S-Link count sheets reviewed in POS / ใบตรวจนับ S-Link ยืนยันใน POS
+
+- TH: หน้าเช็คสต๊อก POS เปลี่ยนจากการดึง Firestore แบบเก่า เป็นการดึงใบตรวจนับ
+  ที่ S-Link ส่งเข้า MySQL ของ POS และแสดงยอดระบบ–ยอดจริง–ส่วนต่างก่อนกดยืนยัน
+- TH: หลังยืนยันปรับสต๊อกครบทุกสินค้าในใบเดียวกัน จึงทำเครื่องหมายใบตรวจนับว่า
+  ตรวจแล้ว พร้อมผู้ยืนยันและเวลา; ถ้ารายการใดล้มเหลว ใบจะยังคงรอตรวจเพื่อไม่ให้
+  ปรับซ้ำหรือทำข้อมูลหาย
+- EN: POS stock check now imports S-Link count sheets from MySQL and marks a
+  sheet reviewed only after every item has been confirmed successfully.
+- TH: ป้องกันการใช้หน้าจอที่ปิดไปแล้วหลังรอปิดใบตรวจนับ จึงไม่เกิดคำเตือน
+  `use_build_context_synchronously` จาก Dart analyzer
+
+# 2026-08-09 — Scratch query syntax repair
+
+- TH: ลบคำสั่ง build ที่เผลอติดอยู่หน้าบรรทัด import ใน `backend/scratch_query.dart`
+ทำให้ไฟล์กลับเป็น Dart syntax ที่ถูกต้อง
+
+# 2026-08-09 — S-Link stock-check import collation fix / แก้ collation ตอนดึงใบตรวจนับ S-Link
+
+- TH: แก้คำสั่งอ่านใบตรวจนับจาก S-Link ทั้งหน้า POS และ API ประวัติงานให้กำหนด
+  `utf8mb4`/collation ชัดเจน จึงไม่ชน MySQL error 1267 เมื่อคอลัมน์ HR เดิมใช้
+  collation ต่างจากตารางใบงาน; จับคู่ Firebase UID แบบตรงตัวก่อน แล้วค่อยรองรับ
+  รหัสพนักงานแบบเดิม และยังแสดงรหัสผู้ตรวจนับได้เมื่อไม่มี employee profile.
+- EN: Normalized the POS and work-log API read queries to explicit
+  `utf8mb4` collations, preventing MySQL 1267 errors across legacy HR table
+  collations. Firebase UID matching is exact with legacy-ID fallback, while
+  records without an employee profile still remain readable.
+
+# 2026-08-09 — Deterministic S-Link work-log employee match / เลือกพนักงานใบงาน S-Link แบบแน่นอน
+
+- TH: แก้ JOIN employee profile ของใบตรวจนับให้เลือกได้เพียงหนึ่งคนตามลำดับ
+  Firebase UID, user ID เดิม, แล้วจึง employee profile ID จึงไม่คูณรายการสินค้า
+  เมื่อตารางพนักงานมีข้อมูลรหัสซ้ำกัน
+- EN: Made the count-sheet employee lookup deterministic: Firebase UID, then
+  legacy user ID, then employee profile ID. This prevents duplicate item rows
+  when legacy employee identifiers overlap.
+
+# 2026-08-09 — Safe whitespace fallback for S-Link count sheets / รองรับช่องว่างในใบตรวจนับ S-Link อย่างปลอดภัย
+
+- TH: แก้ชื่อมาตรฐาน `ฝาวงบ่อ60ซม.รูเล็ก` ใน S-Link ให้ตรง POS และเพิ่มการหา
+  สินค้าสำรองเฉพาะเมื่อชื่อที่ตัดช่องว่าง ASCII, tab, CR และ LF ออกตรงกันเพียง
+  รายการเดียว; หากไม่พบหรือพบมากกว่าหนึ่ง จะไม่ยืนยันใบตรวจนับ
+- EN: Corrected the S-Link canonical product name and added a fallback that
+  ignores ASCII space, tab, CR, and LF only when it identifies exactly one
+  POS product. Zero or ambiguous matches keep the count sheet pending.
+
+# 2026-08-09 — Shared S-Link stock-check template / แบบตรวจนับ S-Link ส่วนกลาง
+
+- TH: เพิ่ม API เก็บแบบตรวจนับใน MySQL พร้อม revision ป้องกันบันทึกทับกัน และ
+  อนุญาตเฉพาะ ADMIN/HR แก้ไข; ไม่มีการแก้ใบงานที่ส่งแล้ว
+- EN: Added a MySQL-backed revisioned stock-check template API. Only ADMIN/HR
+  may edit it, and submitted work logs remain unchanged.
+
+# 2026-08-10 — Deterministic S-Link attendance identity / จับคู่ผู้ลงเวลา S-Link แบบแน่นอน
+
+- TH: แก้ API ลงเวลาให้จับคู่บัญชี S-Link (`user.id`/`employee_profile.user_id`),
+  ชื่อบัญชี และ Firebase UID ก่อนรหัส primary key ของพนักงาน จึงไม่ให้เลขบัญชี
+  เช่น 16 หรือ 17 ไปชนกับรหัสพนักงานของคนอื่นและลงเวลาผิดคน.
+- EN: Attendance API identity resolution now prioritizes the S-Link account
+  (`user.id`/`employee_profile.user_id`), username, and Firebase UID before a
+  legacy employee primary-key fallback, preventing account-ID collisions from
+  recording attendance for another employee.
+
+# 2026-08-13 — Goods receipt suggested price / ราคาแนะนำในใบรับสินค้า
+
+- TH: เพิ่มข้อความตัวเล็กใต้ช่องทุน/หน่วยในหน้าใบรับสินค้า แสดงราคาแนะนำที่
+  คำนวณจากทุน × 1.3 และอัปเดตทันทีเมื่อแก้ไขทุน เพื่อไม่ต้องคำนวณแยกเอง.
+- EN: Added a small suggested-price label below the unit-cost field on goods
+  receipts. It calculates cost × 1.3 and updates immediately when the cost changes.
+
+# 2026-08-13 — Stock-alert price visibility / แสดงราคาในรายการแจ้งของหมด
+
+- TH: เพิ่มป้ายราคาทุนและราคาขายปัจจุบันใต้ชื่อผู้แจ้งในรายการรอจัดการของหน้า
+  แจ้งของหมด/แจ้งซ่อม โดยใช้การค้นหาสินค้าเดิม จึงไม่เพิ่มจำนวนคำขอฐานข้อมูล.
+- EN: Added current cost and retail-price badges below the reporter on pending
+  stock-alert rows, reusing the existing product lookup without additional database requests.
+
+# 2026-08-13 — Editable goods receipt totals / กรอกราคารวมในใบรับสินค้า
+
+- TH: เปลี่ยนคอลัมน์ราคารวมในใบรับสินค้าเป็นช่องกรอกโดยตรง และเอาปุ่มเครื่องคิดเลข
+  ออก; แก้จำนวนหรือทุน/หน่วยจะคำนวณราคารวมใหม่ ส่วนการแก้ราคารวมจะคำนวณทุน/หน่วย
+  ย้อนกลับทันที โดยไม่หารเมื่อจำนวนเป็นศูนย์.
+- EN: Made the goods-receipt total column directly editable and removed the
+  calculator button. Quantity or unit-cost edits update the total; total edits
+  immediately derive the unit cost, while zero quantities are never divided.
+
+# 2026-08-14 — Goods receipt retail price and VAT-aware suggestion / ราคาปลีกและคำแนะนำตาม VAT ในใบรับสินค้า
+
+- TH: เพิ่มช่องราคาปลีกระหว่างทุน/หน่วยกับราคารวมในใบรับสินค้า โดยดึงราคาขายเดิม
+  มาให้แก้ไขได้ทันทีและบันทึกเป็นราคาขายหน้าร้านเมื่อรับสินค้า รวมถึงกรณีรับบางส่วน;
+  ปรับตารางให้กว้างพอดีกับคอลัมน์ใหม่ ตั้ง VAT เริ่มต้นเป็นไม่มีภาษี และคำนวณราคา
+  แนะนำจากทุน × 1.3 หรือ × 1.391 เมื่อใบมี VAT.
+- EN: Added an editable retail-price field between unit cost and total on goods
+  receipts. It starts with the current retail price and updates the POS selling
+  price on full or partial receipt. The wider table accommodates the new column,
+  VAT now defaults to none, and suggested prices use cost × 1.3 or × 1.391 for
+  VAT invoices.
+
+# 2026-08-14 — Goods receipt price-column alignment / จัดหัวคอลัมน์ราคาในใบรับสินค้า
+
+- TH: จัดหัวคอลัมน์ทุน/หน่วย ราคาปลีก และรวมให้อยู่กึ่งกลางตรงกับช่องกรอกราคาของ
+  แต่ละคอลัมน์ โดยคงตัวเลขในช่องไว้ชิดขวาเพื่ออ่านง่าย.
+- EN: Centered the unit-cost, retail-price, and total column headers over their
+  respective inputs while retaining right-aligned numeric entry for readability.
+
+- TH: เลื่อนส่วนทุน/หน่วยลงให้แนวกล่องกรอกตัวเลขตรงกับช่องราคาปลีกและราคารวม
+  แม้มีข้อความราคาแนะนำอยู่ด้านล่าง.
+- EN: Aligned the unit-cost input vertically with the retail-price and total
+  inputs while preserving the suggested-price label below it.
+
+- TH: จัดตัวเลขที่กรอกในช่องทุน/หน่วย ราคาปลีก และราคารวมให้อยู่กึ่งกลาง.
+- EN: Centered entered values in the unit-cost, retail-price, and total fields.
+
+# 2026-08-14 — S-Link purchase-order drafts / ร่างใบสั่งซื้อจาก S-Link
+
+- TH: เปลี่ยนหน้ารับสินค้าของ S-Link ให้สร้างร่างใบสั่งซื้อหลายรายการแทนการเพิ่มสต็อก
+  ทันที รองรับค้นหาสินค้าเดิมหรือพิมพ์ชื่อรายการใหม่ และให้จำนวน/ทุนต่อหน่วย/ยอดรวม
+  คำนวณย้อนกลับหากันได้ ร่างทั้งหมดใช้ผู้ขาย “ไม่ระบุผู้ขาย” และต้องตรวจ/รับจริงบน POS.
+  เพิ่ม API ที่ตรวจ JWT role (ADMIN/CASHIER), ใช้ UUID กันการส่งซ้ำ และทำ transaction
+  เดียวโดยไม่แก้สต็อก ราคา หรือ stock ledger; รายการที่ยังไม่จับคู่สินค้าจะรับเข้าจริงไม่ได้.
+- EN: Reworked S-Link receiving into a multi-item purchase-order draft flow.
+  Existing products can be searched while freeform names are retained for POS
+  correction; quantity, unit cost, and total calculate each other. Drafts use
+  the server-resolved “Unspecified supplier” and must be reviewed/received on
+  Desktop POS. The secured ADMIN/CASHIER API uses a stable UUID idempotency key
+  and one transaction without mutating stock, prices, or the stock ledger;
+  unresolved lines cannot be received.
+- TH: เพิ่ม hash ของข้อมูลแต่ละคำขอไว้คู่กับ UUID: retry ที่ข้อมูลเดิมจะคืนร่างเดิม
+  แต่ UUID เดิมกับข้อมูลต่างกันจะถูกปฏิเสธด้วย HTTP 409. ผู้ขายกลางใช้ system key
+  แบบ unique และ UPSERT เพื่อไม่ให้เกิดชื่อผู้ขายซ้ำจากคำขอแรกที่มาพร้อมกัน.
+- EN: Stored a request-payload hash with each UUID: identical retries return
+  the existing draft, while a reused UUID with different data receives HTTP 409.
+  The canonical supplier now has a unique system key and an UPSERT bootstrap to
+  prevent concurrent first requests from creating duplicates.
+
+# 2026-08-15 — GPS tracker local configuration / ตั้งค่า GPS Tracker เฉพาะเครื่อง
+
+- TH: ย้ายรหัส Wi-Fi และ GPS device key ออกจาก `GPS/GPS.ino` ไปไว้ที่
+  `GPS/gps_tracker_secrets.h` ซึ่งถูกละเว้นจาก Git พร้อมไฟล์ตัวอย่างสำหรับ
+  เตรียมเครื่องใหม่; คงค่า APN, รถเครน และการต่อ UART ไว้ใช้งานทันที. เพิ่ม
+  คำเตือนในโค้ดว่า A7670E ต้องรับไฟ 5V ที่ VCC/GND และยังไม่ให้ป้อนไฟเข้า VDD.
+- EN: Moved Wi-Fi credentials and the GPS device key out of `GPS/GPS.ino` into
+  the Git-ignored `GPS/gps_tracker_secrets.h`, with an example for new devices.
+  APN, crane identity, and UART mapping remain ready to use. Added an explicit
+  power note: feed A7670E at VCC/GND with regulated 5V and do not feed VDD.
+
+- TH: เมื่อ A7670E ไม่ตอบ AT ตอนเริ่มต้น จะไม่ยิงคำสั่งต่อ GPRS ทุกครั้งที่ GPS
+  ส่งพิกัดอีกต่อไป เพื่อให้ GPS ทำงานต่อและลด log ซ้ำ; firmware จะลองปลุกโมเด็มใหม่
+  ทุก 30 วินาที พร้อมระบุให้ตรวจ VCC 5V, GND ร่วม, PWR_EN และ UART ก่อน APN.
+- EN: If A7670E fails its initial AT response, the tracker no longer makes a
+  GPRS call for every GPS update. GPS keeps running while firmware retries a
+  controlled modem wake-up every 30 seconds and directs power/PWR_EN/UART
+  checks before APN troubleshooting.
+# 2026-08-18 — Advance/payroll deduction integrity / ความถูกต้องของการหักเงินเบิก
+
+- TH: แก้วงจรเงินเบิกล่วงหน้าให้คำขอใหม่เป็น `PENDING` เสมอ และอนุมัติ/ปฏิเสธได้เฉพาะจากสถานะนี้เท่านั้น; เมื่ออนุมัติจึงตั้งยอดคงเหลือเท่ากับยอดขอ. การยืนยัน payroll ทำใน MySQL transaction เดียว: ล็อก payroll ฉบับร่างและรายการเบิกตามลำดับ, บันทึก ledger, หักยอดคงเหลือแบบมีเงื่อนไข, เปลี่ยนสถานะ แล้วจึง commit; ผิดพลาดหรือยอดไม่พอจะ rollback ทั้งหมด. การมาร์คจ่ายและการจ่ายทั้งรอบจะไม่หักเงินเบิกซ้ำหรือข้ามฉบับร่างอีกต่อไป, และลบได้เฉพาะ draft ที่ไม่มี ledger.
+- EN: Made new advance requests always `PENDING`, with approval/rejection allowed only from that state; approval then initializes the remaining balance. Payroll confirmation now uses one MySQL transaction: it locks the DRAFT payroll and advances in deterministic order, writes the ledger, conditionally updates balances/statuses, confirms, and commits; any error or insufficient balance rolls back everything. Marking paid and bulk payment no longer deduct advances again or skip drafts, and deletion is limited to ledger-free drafts.
+- TH: เพิ่ม unique key ปลอดภัยสำหรับ `(advance_id, payroll_id)` โดยจะไม่ลบหรือแก้ข้อมูลเก่าที่ซ้ำ—หากพบข้อมูลซ้ำจะไม่เพิ่ม key เพื่อให้ตรวจสอบก่อน. เพิ่มรายงาน anomaly แบบอ่านอย่างเดียว และคำสั่งซ่อมด้วยมือเฉพาะ `DEDUCTED` ที่ไม่มี ledger จริงและยอดเป็นศูนย์; ไม่มีการซ่อมอัตโนมัติหรือแก้ข้อมูลกำกวม.
+- EN: Added a safe unique key for `(advance_id, payroll_id)` without deleting or altering historical duplicates—if duplicates exist, the key is not added pending review. Added a read-only anomaly report and a manual repair restricted to zero-balance `DEDUCTED` rows with no ledger; there is no automatic repair or mutation of ambiguous data.
+
+- TH: เพิ่ม cutoff ตามวันสิ้นสุดรอบ payroll ทั้งตอนคำนวณและตอนยืนยันใน transaction: จะหักได้เฉพาะรายการที่ยื่นและอนุมัติไม่เกินวันสิ้นสุดรอบเท่านั้น จึงไม่สามารถนำรายการเบิกใหม่ไปหักกับรอบเงินเดือนย้อนหลังได้. ไม่ได้ซ่อมหรือเปลี่ยนข้อมูลจริงเดิมอัตโนมัติ.
+- EN: Added a payroll-period-end cutoff both during calculation and during transactional confirmation: only advances requested and approved no later than the period end are eligible, so a new advance cannot reduce a historical payroll. No existing live data is repaired or changed automatically.

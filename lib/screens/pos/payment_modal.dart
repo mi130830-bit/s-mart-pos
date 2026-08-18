@@ -18,6 +18,7 @@ import 'payment_modal/controllers/payment_modal_controller.dart';
 
 import '../../services/settings_service.dart';
 import '../../state/payment/payment_session_notifier.dart';
+import '../../utils/snackbar_utils.dart';
 
 class PaymentModal extends ConsumerStatefulWidget {
   final VoidCallback onPaymentSuccess;
@@ -41,11 +42,17 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
         if (event.logicalKey == LogicalKeyboardKey.space) {
           final posState = ref.read(posProvider.notifier);
           final grandTotal = Decimal.parse(posState.paymentDue.toString());
-          ref.read(paymentSessionProvider.notifier).fillRemainingAmount(grandTotal);
+          ref
+              .read(paymentSessionProvider.notifier)
+              .fillRemainingAmount(grandTotal);
           final session = ref.read(paymentSessionProvider);
           if (session.receivedAmount > Decimal.zero) {
-            amountCtrl.text = session.receivedAmount.toDouble().toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
-            amountCtrl.selection = TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
+            amountCtrl.text = session.receivedAmount
+                .toDouble()
+                .toStringAsFixed(2)
+                .replaceAll(RegExp(r'\.00$'), '');
+            amountCtrl.selection = TextSelection(
+                baseOffset: 0, extentOffset: amountCtrl.text.length);
           }
           updateDisplayToCustomer(posState);
           return KeyEventResult.handled;
@@ -66,8 +73,12 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
       ref.read(paymentSessionProvider.notifier).fillRemainingAmount(grandTotal);
       final session = ref.read(paymentSessionProvider);
       if (session.receivedAmount > Decimal.zero) {
-        amountCtrl.text = session.receivedAmount.toDouble().toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '');
-        amountCtrl.selection = TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
+        amountCtrl.text = session.receivedAmount
+            .toDouble()
+            .toStringAsFixed(2)
+            .replaceAll(RegExp(r'\.00$'), '');
+        amountCtrl.selection =
+            TextSelection(baseOffset: 0, extentOffset: amountCtrl.text.length);
       }
       updateDisplayToCustomer(posState);
     });
@@ -145,8 +156,10 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                       children: [
                         PaymentSummarySection(
                           grandTotal: grandTotal,
-                          originalGrandTotal: Decimal.parse(posState.grandTotal.toString()),
-                          alreadyPaid: Decimal.parse(posState.editingOriginalReceived.toString()),
+                          originalGrandTotal:
+                              Decimal.parse(posState.grandTotal.toString()),
+                          alreadyPaid: Decimal.parse(
+                              posState.editingOriginalReceived.toString()),
                           isEditing: posState.editingOrderId != null,
                           totalPaid: totalCaptured,
                           remaining: remaining,
@@ -159,6 +172,11 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                           pointsToRedeem: posState.pointsToRedeem.toInt(),
                           pointDiscountAmount: posState.pointDiscountAmount,
                           onOpenRedemptionDialog: () {
+                            if (couponApplied) {
+                              clearCoupon(posState);
+                              SnackbarUtils.showLeft(context,
+                                  'ล้างคูปองแล้ว เพราะใช้ร่วมกับการแลกแต้มไม่ได้');
+                            }
                             final settings = SettingsService();
                             openPointRedemptionDialog(posState, settings);
                           },
@@ -169,14 +187,14 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                           isValidatingCoupon: isValidatingCoupon,
                           couponResult: couponResult,
                           onClearCoupon: () => clearCoupon(posState),
-                          onValidateCoupon: () => validateAndApplyCoupon(
-                              posState, () {
-                                final gt = Decimal.parse(posState.paymentDue.toString());
-                                sessionNotifier.fillRemainingAmount(gt);
-                                updateDisplayToCustomer(posState);
-                              }),
-                          onChanged: (v) =>
-                              setState(() => couponResult = null),
+                          onValidateCoupon: () =>
+                              validateAndApplyCoupon(posState, () {
+                            final gt =
+                                Decimal.parse(posState.paymentDue.toString());
+                            sessionNotifier.fillRemainingAmount(gt);
+                            updateDisplayToCustomer(posState);
+                          }),
+                          onChanged: (v) => setState(() => couponResult = null),
                         ),
                         PaymentMethodInputSection(
                           amountCtrl: amountCtrl,

@@ -10,22 +10,28 @@ class PayrollCalculationService {
   final LeaveRepository _leaveRepo = LeaveRepository();
   final AdvanceRepository _advanceRepo = AdvanceRepository();
 
-  Future<List<PayrollRecord>> calculateAllForPeriod(DateTime start, DateTime end, {String? payCycleFilter, bool skipAdvanceDeduction = false}) async {
+  Future<List<PayrollRecord>> calculateAllForPeriod(
+      DateTime start, DateTime end,
+      {String? payCycleFilter, bool skipAdvanceDeduction = false}) async {
     final employees = await _employeeRepo.getAll(activeOnly: true);
     List<PayrollRecord> records = [];
 
     for (var emp in employees) {
       // ✅ กรองเฉพาะคนที่ตรงกับรอบบิลที่เลือก
-      if (payCycleFilter != null && payCycleFilter != 'ALL' && emp.payCycle != payCycleFilter) {
+      if (payCycleFilter != null &&
+          payCycleFilter != 'ALL' &&
+          emp.payCycle != payCycleFilter) {
         continue;
       }
-      
+
       // ✅ ถ้ารวมทุกรอบจ่าย (ALL) ให้ดึงแค่ รายวัน กับ รายสัปดาห์ (ข้ามรายเดือน)
       if (payCycleFilter == 'ALL' && emp.payCycle == 'MONTHLY') {
         continue;
       }
 
-      final record = await calculatePayroll(emp.id, start, end, isAllCycle: payCycleFilter == 'ALL', skipAdvanceDeduction: skipAdvanceDeduction);
+      final record = await calculatePayroll(emp.id, start, end,
+          isAllCycle: payCycleFilter == 'ALL',
+          skipAdvanceDeduction: skipAdvanceDeduction);
       if (record != null) {
         records.add(record);
       }
@@ -33,7 +39,9 @@ class PayrollCalculationService {
     return records;
   }
 
-  Future<PayrollRecord?> calculatePayroll(int employeeId, DateTime periodStart, DateTime periodEnd, {bool isAllCycle = false, bool skipAdvanceDeduction = false}) async {
+  Future<PayrollRecord?> calculatePayroll(
+      int employeeId, DateTime periodStart, DateTime periodEnd,
+      {bool isAllCycle = false, bool skipAdvanceDeduction = false}) async {
     // 1. Get Employee Profile
     final emp = await _employeeRepo.getById(employeeId);
     if (emp == null) return null;
@@ -50,14 +58,16 @@ class PayrollCalculationService {
     }
 
     // 3. Count Work Days from Attendance
-    final workDays = await _attendanceRepo.countWorkDays(employeeId, calcStart, calcEnd);
-    
+    final workDays =
+        await _attendanceRepo.countWorkDays(employeeId, calcStart, calcEnd);
+
     // We'll skip absent/late calc for now to keep it simple unless needed.
-    final int absentDays = 0; 
+    final int absentDays = 0;
     final int lateCount = 0;
 
     // 4. Get Leave Days (Paid)
-    final leaves = await _leaveRepo.getApprovedInRange(employeeId, calcStart, calcEnd);
+    final leaves =
+        await _leaveRepo.getApprovedInRange(employeeId, calcStart, calcEnd);
     double leaveDays = 0;
     for (var l in leaves) {
       // In a real system, we'd calculate intersection of leave date range and period date range
@@ -72,7 +82,7 @@ class PayrollCalculationService {
     // 6. Calculate Gross Pay
     double dailyWageTotal = 0.0;
     double baseSalary = 0.0;
-    
+
     if (emp.wageType == 'DAILY') {
       // Paid for work days only
       dailyWageTotal = workDays * emp.dailyWage;
@@ -85,10 +95,12 @@ class PayrollCalculationService {
     double overtimePay = 0.0;
     double bonus = 0.0;
 
-    double grossPay = dailyWageTotal + baseSalary + tripTotalFee + overtimePay + bonus;
+    double grossPay =
+        dailyWageTotal + baseSalary + tripTotalFee + overtimePay + bonus;
 
     // 6. Get Outstanding Advances
-    final outstandingAdvances = await _advanceRepo.getOutstanding(employeeId);
+    final outstandingAdvances = await _advanceRepo.getOutstanding(employeeId,
+        eligibleThrough: periodEnd);
     // double remainingAdvancesToDeduct = grossPay * 0.8; // Allow max 80% deduction? Or total. Let's say we try to deduct as much as possible but leave some minimum, or just deduct all.
     double actualDeducted = 0.0;
 
@@ -96,24 +108,26 @@ class PayrollCalculationService {
     if (!skipAdvanceDeduction) {
       for (var adv in outstandingAdvances) {
         if (actualDeducted >= grossPay) break;
-        
+
         // If installmentAmount is set, we only deduct up to installmentAmount per period
         // Otherwise we try to deduct the full remainingAmount
         double targetDeduction = adv.installmentAmount ?? adv.remainingAmount;
         if (targetDeduction > adv.remainingAmount) {
           targetDeduction = adv.remainingAmount;
         }
-        
+
         double canDeduct = targetDeduction;
         if (actualDeducted + canDeduct > grossPay) {
-          canDeduct = grossPay - actualDeducted; // Only deduct what's left of salary
+          canDeduct =
+              grossPay - actualDeducted; // Only deduct what's left of salary
         }
-        
+
         actualDeducted += canDeduct;
       }
     }
 
-    double socialSecurity = 0.0; // Implement SS logic if needed (e.g. 5% max 750)
+    double socialSecurity =
+        0.0; // Implement SS logic if needed (e.g. 5% max 750)
     double otherDeductions = 0.0;
 
     double totalDeductions = actualDeducted + socialSecurity + otherDeductions;
@@ -124,7 +138,8 @@ class PayrollCalculationService {
       id: 0,
       employeeId: employeeId,
       payCycle: emp.payCycle,
-      periodStart: periodStart, // ใช้ periodStart เดิมเพื่อให้แสดงใน UI รวมทุกรอบจ่ายได้
+      periodStart:
+          periodStart, // ใช้ periodStart เดิมเพื่อให้แสดงใน UI รวมทุกรอบจ่ายได้
       periodEnd: periodEnd,
       workDays: workDays,
       absentDays: absentDays,
@@ -138,7 +153,8 @@ class PayrollCalculationService {
       overtimePay: overtimePay,
       bonus: bonus,
       grossPay: grossPay,
-      advanceDeductions: actualDeducted, // We will actually apply these deductions to DB when Payroll is 'CONFIRMED' or 'PAID'
+      advanceDeductions:
+          actualDeducted, // We will actually apply these deductions to DB when Payroll is 'CONFIRMED' or 'PAID'
       socialSecurity: socialSecurity,
       otherDeductions: otherDeductions,
       totalDeductions: totalDeductions,

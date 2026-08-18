@@ -383,14 +383,16 @@ class AttendanceController {
     final inputStr = userIdInput.toString().trim();
     if (inputStr.isEmpty) return null;
 
-    final empResult = await conn.execute(
+    // S-Link sends its authenticated account ID (or username), not a POS
+    // employee-profile primary key. Resolve those identities first so a
+    // numeric account ID cannot be mistaken for an unrelated employee ID.
+    final accountResult = await conn.execute(
       '''
-      SELECT e.id 
+      SELECT e.id
       FROM employee_profile e
       LEFT JOIN user u ON e.user_id = u.id
       WHERE (u.username = :val
         OR CAST(u.id AS CHAR) = :val
-        OR CAST(e.id AS CHAR) = :val
         OR CAST(e.user_id AS CHAR) = :val
         OR e.firebase_uid = :val)
       ORDER BY e.is_active DESC, e.id DESC
@@ -399,11 +401,31 @@ class AttendanceController {
       {'val': inputStr},
     );
 
-    if (empResult.rows.isNotEmpty) {
+    if (accountResult.rows.isNotEmpty) {
       return int.tryParse(
-        empResult.rows.first.colByName('id')?.toString() ?? '',
+        accountResult.rows.first.colByName('id')?.toString() ?? '',
       );
     }
+
+    // Keep direct POS employee-ID lookup only as a legacy fallback for
+    // trusted callers that explicitly supply an employee-profile ID.
+    final employeeResult = await conn.execute(
+      '''
+      SELECT e.id
+      FROM employee_profile e
+      WHERE CAST(e.id AS CHAR) = :val
+      ORDER BY e.is_active DESC, e.id DESC
+      LIMIT 1
+      ''',
+      {'val': inputStr},
+    );
+
+    if (employeeResult.rows.isNotEmpty) {
+      return int.tryParse(
+        employeeResult.rows.first.colByName('id')?.toString() ?? '',
+      );
+    }
+
     return null;
   }
 

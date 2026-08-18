@@ -3,9 +3,12 @@ import 'controllers/auth_controller.dart';
 import 'controllers/config_controller.dart';
 import 'controllers/product_controller.dart';
 import 'controllers/order_controller.dart';
+import 'controllers/mobile_checkout_controller.dart';
 import 'controllers/line_controller.dart';
 import 'controllers/payment_controller.dart';
 import 'controllers/stock_controller.dart';
+import 'controllers/purchase_order_controller.dart';
+import 'controllers/supplier_controller.dart';
 import 'controllers/customer_controller.dart';
 import 'controllers/shortage_controller.dart';
 import 'controllers/health_controller.dart';
@@ -50,9 +53,24 @@ class ApiRouter {
       '/orders',
       securedPipeline.addHandler(OrderController().router.call),
     );
+    // Deliberately separate from the legacy /orders contract. This endpoint
+    // recalculates values server-side and is the only mobile checkout path
+    // allowed to redeem loyalty benefits.
+    router.mount(
+      '/mobile-checkout',
+      securedPipeline.addHandler(MobileCheckoutController().router.call),
+    );
     router.mount(
       '/stock',
       securedPipeline.addHandler(StockController().router.call),
+    );
+    router.mount(
+      '/purchase-orders',
+      securedPipeline.addHandler(PurchaseOrderController().router.call),
+    );
+    router.mount(
+      '/suppliers',
+      securedPipeline.addHandler(SupplierController().router.call),
     );
     router.mount(
       '/shortages',

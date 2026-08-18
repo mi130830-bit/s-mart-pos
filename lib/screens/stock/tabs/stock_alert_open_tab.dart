@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../state/shortage_provider.dart';
 import '../../../models/shortage_log_model.dart';
 import '../../../services/alert_service.dart';
@@ -39,7 +40,8 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
   }
 
   Future<void> _copyToClipboard(ShortageLogModel alert) async {
-    final cleanName = alert.itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
+    final cleanName =
+        alert.itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
     await Clipboard.setData(ClipboardData(text: cleanName));
     if (mounted) {
       AlertService.show(
@@ -55,13 +57,15 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
   Widget build(BuildContext context) {
     final provider = ref.watch(shortageProvider);
     final q = _searchCtrl.text.trim().toLowerCase();
-    final lowStockNames = provider.lowStockProducts.map((p) => p.name.toLowerCase()).toSet();
+    final lowStockNames =
+        provider.lowStockProducts.map((p) => p.name.toLowerCase()).toSet();
 
     final allAlerts = provider.openShortages
         .where((a) => q.isEmpty || a.itemName.toLowerCase().contains(q))
         .toList();
     final totalItems = allAlerts.length;
-    final totalPages = totalItems == 0 ? 1 : (totalItems / _itemsPerPage).ceil();
+    final totalPages =
+        totalItems == 0 ? 1 : (totalItems / _itemsPerPage).ceil();
     if (_currentPage > totalPages) _currentPage = totalPages;
 
     final startIndex = (_currentPage - 1) * _itemsPerPage;
@@ -80,11 +84,15 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
               suffixIcon: q.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () => setState(() { _searchCtrl.clear(); _currentPage = 1; }),
+                      onPressed: () => setState(() {
+                        _searchCtrl.clear();
+                        _currentPage = 1;
+                      }),
                     )
                   : null,
               isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
             ),
             onChanged: (_) => setState(() => _currentPage = 1),
@@ -126,37 +134,50 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
                   itemBuilder: (ctx, i) {
                     final alert = currentDisplayAlerts[i];
                     final realIndex = startIndex + i + 1;
-                    final cleanName = alert.itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
-                    final isLowStock = lowStockNames.contains(cleanName.toLowerCase());
+                    final cleanName = alert.itemName
+                        .replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '')
+                        .trim();
+                    final isLowStock =
+                        lowStockNames.contains(cleanName.toLowerCase());
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.teal.shade50,
                         foregroundColor: Colors.teal,
                         radius: 16,
                         child: Text('$realIndex',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600)),
                       ),
                       title: Row(
                         children: [
-                          Flexible(child: Text(cleanName, style: const TextStyle(fontWeight: FontWeight.w500))),
+                          Flexible(
+                              child: Text(cleanName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w500))),
                           if (isLowStock) ...[
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
                                 color: Colors.orange.shade50,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.orange.shade300),
+                                border:
+                                    Border.all(color: Colors.orange.shade300),
                               ),
                               child: Text('⚠️ ถึงจุดสั่งของ',
-                                  style: TextStyle(fontSize: 10, color: Colors.orange.shade800, fontWeight: FontWeight.bold)),
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.orange.shade800,
+                                      fontWeight: FontWeight.bold)),
                             ),
                           ],
                           if (provider.stockQuantities.containsKey(alert.id) &&
                               provider.stockQuantities[alert.id] != null) ...[
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade50,
                                 borderRadius: BorderRadius.circular(8),
@@ -164,7 +185,10 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
                               ),
                               child: Text(
                                 '📦 ${(provider.stockQuantities[alert.id]!['stockQty'] as double).toStringAsFixed(0)}',
-                                style: TextStyle(fontSize: 10, color: Colors.blue.shade800, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.blue.shade800,
+                                    fontWeight: FontWeight.w500),
                               ),
                             ),
                           ],
@@ -173,33 +197,77 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('แจ้งโดย: ${alert.reportedBy ?? '-'} | เวลา: ${StockDateUtils.formatDate(alert.createdAt)}'),
-                          if (provider.priceSuggestions[alert.id] != null && provider.priceSuggestions[alert.id]!.isNotEmpty) ...[
+                          Text(
+                              'แจ้งโดย: ${alert.reportedBy ?? '-'} | เวลา: ${StockDateUtils.formatDate(alert.createdAt)}'),
+                          if (provider.stockQuantities[alert.id] != null) ...[
                             const SizedBox(height: 4),
                             Wrap(
-                              spacing: 8, runSpacing: 4,
-                              children: provider.priceSuggestions[alert.id]!.asMap().entries.map((entry) {
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                _PriceBadge(
+                                  label: 'ทุน',
+                                  price: provider.stockQuantities[alert.id]![
+                                      'costPrice'] as double,
+                                  color: Colors.orange,
+                                ),
+                                _PriceBadge(
+                                  label: 'ขาย',
+                                  price: provider.stockQuantities[alert.id]![
+                                      'retailPrice'] as double,
+                                  color: Colors.green,
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (provider.priceSuggestions[alert.id] != null &&
+                              provider
+                                  .priceSuggestions[alert.id]!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: provider.priceSuggestions[alert.id]!
+                                  .asMap()
+                                  .entries
+                                  .map((entry) {
                                 final index = entry.key + 1;
                                 final sug = entry.value;
-                                final cost = double.tryParse(sug['costPrice'].toString()) ?? 0;
+                                final cost = double.tryParse(
+                                        sug['costPrice'].toString()) ??
+                                    0;
                                 return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: index == 1 ? Colors.green.shade50 : Colors.orange.shade50,
+                                    color: index == 1
+                                        ? Colors.green.shade50
+                                        : Colors.orange.shade50,
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: index == 1 ? Colors.green.shade200 : Colors.orange.shade200),
+                                    border: Border.all(
+                                        color: index == 1
+                                            ? Colors.green.shade200
+                                            : Colors.orange.shade200),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(index == 1 ? Icons.emoji_events : Icons.local_shipping,
-                                          size: 14, color: index == 1 ? Colors.green.shade700 : Colors.orange.shade700),
+                                      Icon(
+                                          index == 1
+                                              ? Icons.emoji_events
+                                              : Icons.local_shipping,
+                                          size: 14,
+                                          color: index == 1
+                                              ? Colors.green.shade700
+                                              : Colors.orange.shade700),
                                       const SizedBox(width: 4),
                                       Text(
                                         'แนะนำ $index: ${sug['supplierName']} (${cost.toStringAsFixed(2)} ฿)',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: index == 1 ? Colors.green.shade800 : Colors.orange.shade900,
+                                          color: index == 1
+                                              ? Colors.green.shade800
+                                              : Colors.orange.shade900,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -216,18 +284,23 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
                         children: [
                           TextButton.icon(
                             onPressed: () => _markAsOrdered(alert.id),
-                            icon: const Icon(Icons.check_circle_outline, size: 18),
+                            icon: const Icon(Icons.check_circle_outline,
+                                size: 18),
                             label: const Text('สั่งซื้อ'),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.copy, color: Colors.teal, size: 20),
+                            icon: const Icon(Icons.copy,
+                                color: Colors.teal, size: 20),
                             tooltip: 'คัดลอก',
                             onPressed: () => _copyToClipboard(alert),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.red),
                             tooltip: 'ลบรายการ',
-                            onPressed: () => StockAlertConfirmDialog.showDeleteConfirm(context, alert.id, alert.itemName),
+                            onPressed: () =>
+                                StockAlertConfirmDialog.showDeleteConfirm(
+                                    context, alert.id, alert.itemName),
                           ),
                         ],
                       ),
@@ -242,6 +315,38 @@ class _StockAlertOpenTabState extends ConsumerState<StockAlertOpenTab> {
           onNext: () => setState(() => _currentPage++),
         ),
       ],
+    );
+  }
+}
+
+class _PriceBadge extends StatelessWidget {
+  final String label;
+  final double price;
+  final MaterialColor color;
+
+  const _PriceBadge({
+    required this.label,
+    required this.price,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Text(
+        '$label: ฿${NumberFormat('#,##0.00').format(price)}',
+        style: TextStyle(
+          fontSize: 12,
+          color: color.shade800,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 }

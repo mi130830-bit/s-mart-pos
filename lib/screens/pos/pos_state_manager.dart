@@ -29,7 +29,6 @@ import '../../services/sales/cart_service.dart';
 import '../../services/integration/delivery_integration_service.dart';
 import '../../services/system/hardware_service.dart';
 import '../../repositories/product_repository.dart';
-import '../../repositories/reward_repository.dart';
 import '../../utils/barcode_utils.dart';
 import '../../services/logger_service.dart';
 
@@ -105,7 +104,8 @@ class PosState {
   });
 }
 
-final posProvider = NotifierProvider.autoDispose<PosStateNotifier, PosState>(PosStateNotifier.new);
+final posProvider = NotifierProvider.autoDispose<PosStateNotifier, PosState>(
+    PosStateNotifier.new);
 
 class PosStateNotifier extends AutoDisposeNotifier<PosState> {
   // Internal helper for extension methods
@@ -141,7 +141,6 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
   final PriceCalculationService _priceCalcService = PriceCalculationService();
   final HardwareService _hardwareService = HardwareService();
   late DeliveryIntegrationService _deliveryService;
-
 
   Customer? _currentCustomer;
   CartNotifier get _cartService => ref.read(cartProvider.notifier);
@@ -236,13 +235,14 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
     });
 
     _init();
-    
+
     return PosState(promoDiscount: Decimal.zero);
   }
 
   Future<void> _init() async {
     if (!await MySQLService().hasConfig()) {
-      LoggerService.warning('POS_State', 'No Database Config found. Skipping DB Init.');
+      LoggerService.warning(
+          'POS_State', 'No Database Config found. Skipping DB Init.');
       return;
     }
 
@@ -313,6 +313,9 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
     _isPercentDiscount = false;
     _extraBillDiscount = 0.0;
     _promoDiscount = Decimal.zero;
+    _pointsToRedeem = 0;
+    _couponDiscountAmount = 0.0;
+    _appliedCouponCode = null;
     _cartService.clearCart();
   }
 
@@ -341,7 +344,8 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
       try {
         _currentCustomer = await _custRepo.getCustomerById(custId);
       } catch (e) {
-        LoggerService.warning('POS_State', '_loadCartFromPrefs customer error: $e');
+        LoggerService.warning(
+            'POS_State', '_loadCartFromPrefs customer error: $e');
         _currentCustomer = null;
       }
     } else {

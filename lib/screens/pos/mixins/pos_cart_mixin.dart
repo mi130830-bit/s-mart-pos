@@ -13,7 +13,8 @@ extension PosCartExtension on PosStateNotifier {
         final fetched = await _productRepo.getProductById(product.id);
         if (fetched != null) freshProduct = fetched;
       } catch (e, stackTrace) {
-        LoggerService.error('PosCart', 'Could not re-fetch stock for ${product.name}', e, stackTrace);
+        LoggerService.error('PosCart',
+            'Could not re-fetch stock for ${product.name}', e, stackTrace);
       }
     }
     await _cartService.addProduct(
@@ -54,6 +55,10 @@ extension PosCartExtension on PosStateNotifier {
     _isPercentDiscount = false;
     _promoDiscount = Decimal.zero;
     _pointsToRedeem = 0;
+    _couponDiscountAmount = 0.0;
+    _appliedCouponCode = null;
+    _invalidateCalcCache();
+    _notify();
   }
 
   Future<ScanResult> handleBarcode(String barcode,
@@ -79,13 +84,15 @@ extension PosCartExtension on PosStateNotifier {
             if (baseProduct != null) {
               final price = double.tryParse(match['price'].toString()) ?? 0.0;
               final unit = match['unitName'].toString();
-              final factor = double.tryParse(match['quantity'].toString()) ?? 1.0;
+              final factor =
+                  double.tryParse(match['quantity'].toString()) ?? 1.0;
               await addProductToCart(baseProduct,
                   quantity: quantity,
                   overridePrice: price,
                   overrideUnit: unit,
                   overrideConversionFactor: factor);
-              return ScanResult(status: ScanStatus.success, product: baseProduct);
+              return ScanResult(
+                  status: ScanStatus.success, product: baseProduct);
             }
           } catch (_) {}
         }
@@ -93,7 +100,8 @@ extension PosCartExtension on PosStateNotifier {
 
       if (exactMatch != null) {
         if (isWeighingProduct(exactMatch)) {
-          return ScanResult(status: ScanStatus.requiresWeight, product: exactMatch);
+          return ScanResult(
+              status: ScanStatus.requiresWeight, product: exactMatch);
         }
         await addProductToCart(exactMatch, quantity: quantity);
         return ScanResult(status: ScanStatus.success, product: exactMatch);
@@ -122,7 +130,9 @@ extension PosCartExtension on PosStateNotifier {
       await _productRepo.saveProduct(product);
 
   Future<void> addQuickSaleItem(
-      {required String name, required double price, double quantity = 1.0}) async {
+      {required String name,
+      required double price,
+      double quantity = 1.0}) async {
     final tempProduct = Product(
         id: -999,
         name: name,

@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/hr/payroll_record.dart';
 import '../../repositories/hr/payroll_repository.dart';
 import '../../services/hr/payroll_calculation_service.dart';
-import '../../services/hr/advance_service.dart';
 import '../../repositories/activity_repository.dart';
 import '../auth_provider.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +9,8 @@ import '../../repositories/expense_repository.dart';
 import '../../models/expense.dart';
 
 class PayrollState {
-  final List<PayrollRecord> records; // Currently loaded records (e.g. for a period)
+  final List<PayrollRecord>
+      records; // Currently loaded records (e.g. for a period)
   final List<PayrollRecord> historyRecords;
   final List<Map<String, dynamic>> periodSummaries;
   final bool isLoading;
@@ -41,7 +41,8 @@ class PayrollState {
   }
 }
 
-final payrollProvider = AutoDisposeNotifierProvider<PayrollNotifier, PayrollState>(
+final payrollProvider =
+    AutoDisposeNotifierProvider<PayrollNotifier, PayrollState>(
   () => PayrollNotifier(),
 );
 
@@ -69,18 +70,23 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
     return await _repo.hasConfirmedOrPaidInPeriod(start, end);
   }
 
-  Future<void> calculateForPeriod(DateTime start, DateTime end, {String? payCycleFilter, bool skipAdvanceDeduction = false}) async {
+  Future<void> calculateForPeriod(DateTime start, DateTime end,
+      {String? payCycleFilter, bool skipAdvanceDeduction = false}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       // 1. Calculate drafts
-      final calculatedDrafts = await _service.calculateAllForPeriod(start, end, payCycleFilter: payCycleFilter, skipAdvanceDeduction: skipAdvanceDeduction);
-      
+      final calculatedDrafts = await _service.calculateAllForPeriod(start, end,
+          payCycleFilter: payCycleFilter,
+          skipAdvanceDeduction: skipAdvanceDeduction);
+
       // 2. See if existing DRAFTs exist, update them or insert new
       final existingRecords = await _repo.getByPeriod(start, end);
-      
+
       for (var draft in calculatedDrafts) {
-        final existing = existingRecords.where((r) => r.employeeId == draft.employeeId).firstOrNull;
-        
+        final existing = existingRecords
+            .where((r) => r.employeeId == draft.employeeId)
+            .firstOrNull;
+
         if (existing == null) {
           await _repo.create(draft);
         } else if (existing.status == 'DRAFT') {
@@ -114,7 +120,7 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
           await _repo.update(updatedDraft);
         }
       }
-      
+
       // Reload
       await loadByPeriod(start, end);
     } catch (e) {
@@ -126,36 +132,45 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<void> confirm(int id, int confirmedBy) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final payrollRecord = state.records.firstWhere((r) => r.id == id);
+      await _repo.confirmWithAdvanceDeductions(id, confirmedBy);
 
-      // Record the advance_deduction in the advance repo
-      if (payrollRecord.advanceDeductions > 0) {
-        final advanceService = AdvanceService();
-        await advanceService.deductFromPayroll(
-          payrollRecord.employeeId,
-          id,
-          payrollRecord.advanceDeductions,
-        );
-      }
-
-      await _repo.confirm(id, confirmedBy);
-      
       // Reload state by finding the record and updating it locally (faster) or just leave it to caller to reload
       final updatedRecords = state.records.map((r) {
         if (r.id == id) {
           return PayrollRecord(
-            id: r.id, employeeId: r.employeeId, payCycle: r.payCycle, periodStart: r.periodStart, periodEnd: r.periodEnd,
-            workDays: r.workDays, absentDays: r.absentDays, lateCount: r.lateCount, leaveDays: r.leaveDays,
-            dailyWageTotal: r.dailyWageTotal, baseSalary: r.baseSalary, tripCount: r.tripCount, tripTotalFee: r.tripTotalFee,
-            overtimeHours: r.overtimeHours, overtimePay: r.overtimePay, bonus: r.bonus, grossPay: r.grossPay,
-            advanceDeductions: r.advanceDeductions, socialSecurity: r.socialSecurity, otherDeductions: r.otherDeductions,
-            totalDeductions: r.totalDeductions, netPay: r.netPay, status: 'CONFIRMED', confirmedBy: confirmedBy,
-            paidAt: r.paidAt, note: r.note, createdAt: r.createdAt, employeeName: r.employeeName,
+            id: r.id,
+            employeeId: r.employeeId,
+            payCycle: r.payCycle,
+            periodStart: r.periodStart,
+            periodEnd: r.periodEnd,
+            workDays: r.workDays,
+            absentDays: r.absentDays,
+            lateCount: r.lateCount,
+            leaveDays: r.leaveDays,
+            dailyWageTotal: r.dailyWageTotal,
+            baseSalary: r.baseSalary,
+            tripCount: r.tripCount,
+            tripTotalFee: r.tripTotalFee,
+            overtimeHours: r.overtimeHours,
+            overtimePay: r.overtimePay,
+            bonus: r.bonus,
+            grossPay: r.grossPay,
+            advanceDeductions: r.advanceDeductions,
+            socialSecurity: r.socialSecurity,
+            otherDeductions: r.otherDeductions,
+            totalDeductions: r.totalDeductions,
+            netPay: r.netPay,
+            status: 'CONFIRMED',
+            confirmedBy: confirmedBy,
+            paidAt: r.paidAt,
+            note: r.note,
+            createdAt: r.createdAt,
+            employeeName: r.employeeName,
           );
         }
         return r;
       }).toList();
-      
+
       state = state.copyWith(records: updatedRecords, isLoading: false);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
@@ -166,39 +181,50 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<void> markPaid(int id) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final payrollRecord = state.records.firstWhere((r) => r.id == id);
-      if (payrollRecord.status == 'DRAFT' && payrollRecord.advanceDeductions > 0) {
-        final advanceService = AdvanceService();
-        await advanceService.deductFromPayroll(
-          payrollRecord.employeeId,
-          id,
-          payrollRecord.advanceDeductions,
-        );
-      }
-
       await _repo.markPaid(id);
-      
+
       ActivityRepository().log(
         userId: ref.read(authProvider).currentUser?.id,
         action: 'PAY_PAYROLL',
         details: 'Marked payroll record ID $id as paid.',
       );
-      
+
       final updatedRecords = state.records.map((r) {
         if (r.id == id) {
           return PayrollRecord(
-            id: r.id, employeeId: r.employeeId, payCycle: r.payCycle, periodStart: r.periodStart, periodEnd: r.periodEnd,
-            workDays: r.workDays, absentDays: r.absentDays, lateCount: r.lateCount, leaveDays: r.leaveDays,
-            dailyWageTotal: r.dailyWageTotal, baseSalary: r.baseSalary, tripCount: r.tripCount, tripTotalFee: r.tripTotalFee,
-            overtimeHours: r.overtimeHours, overtimePay: r.overtimePay, bonus: r.bonus, grossPay: r.grossPay,
-            advanceDeductions: r.advanceDeductions, socialSecurity: r.socialSecurity, otherDeductions: r.otherDeductions,
-            totalDeductions: r.totalDeductions, netPay: r.netPay, status: 'PAID', confirmedBy: r.confirmedBy,
-            paidAt: DateTime.now(), note: r.note, createdAt: r.createdAt, employeeName: r.employeeName,
+            id: r.id,
+            employeeId: r.employeeId,
+            payCycle: r.payCycle,
+            periodStart: r.periodStart,
+            periodEnd: r.periodEnd,
+            workDays: r.workDays,
+            absentDays: r.absentDays,
+            lateCount: r.lateCount,
+            leaveDays: r.leaveDays,
+            dailyWageTotal: r.dailyWageTotal,
+            baseSalary: r.baseSalary,
+            tripCount: r.tripCount,
+            tripTotalFee: r.tripTotalFee,
+            overtimeHours: r.overtimeHours,
+            overtimePay: r.overtimePay,
+            bonus: r.bonus,
+            grossPay: r.grossPay,
+            advanceDeductions: r.advanceDeductions,
+            socialSecurity: r.socialSecurity,
+            otherDeductions: r.otherDeductions,
+            totalDeductions: r.totalDeductions,
+            netPay: r.netPay,
+            status: 'PAID',
+            confirmedBy: r.confirmedBy,
+            paidAt: DateTime.now(),
+            note: r.note,
+            createdAt: r.createdAt,
+            employeeName: r.employeeName,
           );
         }
         return r;
       }).toList();
-      
+
       state = state.copyWith(records: updatedRecords, isLoading: false);
     } catch (e) {
       state = state.copyWith(error: e.toString(), isLoading: false);
@@ -209,11 +235,8 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<void> deleteRecord(int id) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final advanceService = AdvanceService();
-      await advanceService.revertDeductionsForPayroll(id);
-
       await _repo.delete(id);
-      
+
       final updatedRecords = state.records.where((r) => r.id != id).toList();
       state = state.copyWith(records: updatedRecords, isLoading: false);
     } catch (e) {
@@ -227,7 +250,8 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
     try {
       final count = await _repo.deleteByPeriod(start, end);
       // Keep only non-DRAFT records in state
-      final updatedRecords = state.records.where((r) => r.status != 'DRAFT').toList();
+      final updatedRecords =
+          state.records.where((r) => r.status != 'DRAFT').toList();
       state = state.copyWith(records: updatedRecords, isLoading: false);
       return count;
     } catch (e) {
@@ -273,15 +297,6 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
   Future<int> markAllPaidForPeriod(DateTime start, DateTime end) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Find drafts that will be transitioned directly to PAID
-      final draftsToBePaid = state.records.where((r) => r.status == 'DRAFT' && r.advanceDeductions > 0).toList();
-      if (draftsToBePaid.isNotEmpty) {
-        final advanceService = AdvanceService();
-        for (var draft in draftsToBePaid) {
-          await advanceService.deductFromPayroll(draft.employeeId, draft.id, draft.advanceDeductions);
-        }
-      }
-
       final count = await _repo.markAllPaidForPeriod(start, end);
       // Update local state by reloading unpaid records
       await loadByPeriod(start, end);
@@ -292,14 +307,16 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
     }
   }
 
-  Future<void> saveTotalToExpense(DateTime start, DateTime end, double totalNetPay, int totalRecords) async {
+  Future<void> saveTotalToExpense(DateTime start, DateTime end,
+      double totalNetPay, int totalRecords) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final dateFormat = DateFormat('dd/MM/yyyy');
       final repo = ExpenseRepository();
       final expense = Expense(
         id: 0,
-        title: 'จ่ายเงินเดือนรอบ ${dateFormat.format(start)} - ${dateFormat.format(end)}',
+        title:
+            'จ่ายเงินเดือนรอบ ${dateFormat.format(start)} - ${dateFormat.format(end)}',
         amount: totalNetPay,
         category: 'เงินเดือน',
         date: DateTime.now(),
@@ -307,15 +324,6 @@ class PayrollNotifier extends AutoDisposeNotifier<PayrollState> {
         note: 'บันทึกอัตโนมัติจากระบบเงินเดือน ($totalRecords คน)',
       );
       await repo.saveExpense(expense);
-
-      // Find drafts that will be transitioned directly to PAID
-      final draftsToBePaid = state.records.where((r) => r.status == 'DRAFT' && r.advanceDeductions > 0).toList();
-      if (draftsToBePaid.isNotEmpty) {
-        final advanceService = AdvanceService();
-        for (var draft in draftsToBePaid) {
-          await advanceService.deductFromPayroll(draft.employeeId, draft.id, draft.advanceDeductions);
-        }
-      }
 
       await _repo.markAllPaidForPeriod(start, end);
       await loadByPeriod(start, end);

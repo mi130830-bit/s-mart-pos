@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Overlay widget แจ้งเตือนเมื่อเครื่องสแกนลายนิ้วมือหลุดการเชื่อมต่อ
 /// แสดงที่มุมบนขวาของหน้าจอพร้อมปุ่มค้นหาเชื่อมต่อซ้ำ
 class FingerprintDisconnectBanner extends StatefulWidget {
-  final VoidCallback onReconnect;
+  final Future<bool> Function() onReconnect;
   final VoidCallback onDismiss;
 
   const FingerprintDisconnectBanner({
@@ -124,7 +124,10 @@ class FingerprintDisconnectBannerState
                         ? null
                         : () async {
                             setState(() => _isReconnecting = true);
-                            widget.onReconnect();
+                            final connected = await widget.onReconnect();
+                            if (mounted && !connected) {
+                              setState(() => _isReconnecting = false);
+                            }
                           },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue.shade700,
@@ -145,7 +148,9 @@ class FingerprintDisconnectBannerState
                           )
                         : const Icon(Icons.wifi_find_rounded, size: 18),
                     label: Text(
-                      _isReconnecting ? 'กำลังค้นหา...' : 'ค้นหาและเชื่อมต่อซ้ำ',
+                      _isReconnecting
+                          ? 'กำลังค้นหา...'
+                          : 'ค้นหาและเชื่อมต่อซ้ำ',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),

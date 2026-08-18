@@ -5,7 +5,9 @@ import 'package:pos_desktop/screens/products/stock_in/models/stock_in_item.dart'
 import 'package:pos_desktop/screens/products/stock_in/pages/widgets/stock_in_table_row.dart';
 
 void main() {
-  testWidgets('StockInTableRow accepts controllers and triggers onChanged callbacks', (WidgetTester tester) async {
+  testWidgets(
+      'StockInTableRow accepts controllers and triggers onChanged callbacks',
+      (WidgetTester tester) async {
     // 1. Create mock model data
     final product = Product(
       id: 1,
@@ -26,9 +28,13 @@ void main() {
 
     final qtyCtrl = TextEditingController(text: "5");
     final costCtrl = TextEditingController(text: "10");
+    final retailCtrl = TextEditingController(text: "20");
+    final totalCtrl = TextEditingController(text: "50");
 
     String lastQtyChangedValue = '';
     String lastCostChangedValue = '';
+    String lastRetailChangedValue = '';
+    String lastTotalChangedValue = '';
 
     await tester.pumpWidget(
       MaterialApp(
@@ -40,14 +46,22 @@ void main() {
             poStatus: 'NEW',
             qtyCtrl: qtyCtrl,
             costCtrl: costCtrl,
+            retailCtrl: retailCtrl,
+            totalCtrl: totalCtrl,
+            vatType: 2,
             onEdit: () {},
-            onCalculate: () {},
             onDelete: () {},
             onQtyChanged: (val) {
               lastQtyChangedValue = val;
             },
             onCostChanged: (val) {
               lastCostChangedValue = val;
+            },
+            onRetailChanged: (val) {
+              lastRetailChangedValue = val;
+            },
+            onTotalChanged: (val) {
+              lastTotalChangedValue = val;
             },
           ),
         ),
@@ -79,8 +93,30 @@ void main() {
 
     expect(lastCostChangedValue, '15.5');
 
+    // Type a new retail price in the text field.
+    final retailField = find.byType(TextFormField).at(2);
+    await tester.tap(retailField);
+    await tester.pump();
+
+    await tester.enterText(retailField, '25');
+    await tester.pump();
+
+    expect(lastRetailChangedValue, '25');
+
+    // Type a new total in the text field.
+    final totalField = find.byType(TextFormField).at(3);
+    await tester.tap(totalField);
+    await tester.pump();
+
+    await tester.enterText(totalField, '186');
+    await tester.pump();
+
+    expect(lastTotalChangedValue, '186');
+
     // Clean up
     qtyCtrl.dispose();
     costCtrl.dispose();
+    retailCtrl.dispose();
+    totalCtrl.dispose();
   });
 }

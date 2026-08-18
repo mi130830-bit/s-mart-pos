@@ -33,20 +33,17 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
   final TextEditingController noteCtrl = TextEditingController();
   final FocusNode amountFocusNode = FocusNode();
 
-
-
   void disposePaymentController() {
     amountCtrl.dispose();
     noteCtrl.dispose();
     amountFocusNode.dispose();
   }
 
-
-
   Future<void> handlePaste(PosStateNotifier posState) async {
     if (isVerifyingSlip) return;
     final sessionNotifier = ref.read(paymentSessionProvider.notifier);
-    if (ref.read(paymentSessionProvider).selectedPaymentType != PaymentType.qr) {
+    if (ref.read(paymentSessionProvider).selectedPaymentType !=
+        PaymentType.qr) {
       sessionNotifier.setPaymentType(PaymentType.qr);
     }
 
@@ -73,7 +70,7 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
   void updateDisplayToCustomer(PosStateNotifier posState) {
     final session = ref.read(paymentSessionProvider);
     final sessionNotifier = ref.read(paymentSessionProvider.notifier);
-    
+
     final Decimal currentInput = session.receivedAmount;
     final Decimal totalPaidInList = sessionNotifier.totalPaid;
     final Decimal totalCaptured = totalPaidInList + currentInput;
@@ -98,14 +95,14 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
     }
   }
 
-
-
   void showError(String msg) {
-    final activeContext = mounted ? context : AlertService.navigatorKey.currentContext;
+    final activeContext =
+        mounted ? context : AlertService.navigatorKey.currentContext;
     if (activeContext != null) {
       AlertService.show(context: activeContext, message: msg, type: 'error');
     } else {
-      LoggerService.warning('PaymentModal', 'Cannot show error dialog (unmounted and no root context): $msg');
+      LoggerService.warning('PaymentModal',
+          'Cannot show error dialog (unmounted and no root context): $msg');
     }
   }
 
@@ -118,13 +115,14 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
       context: context,
       builder: (_) => PointRedemptionDialog(
         customer: posState.currentCustomer!,
-        grandTotal: posState.grandTotal,
+        grandTotal: posState.pointRedemptionBase,
         pointRedemptionRate: settings.pointRedemptionRate,
         currentPointsUsed: posState.pointsToRedeem.toInt(),
       ),
     );
 
     if (result != null && mounted) {
+      // The payment screen clears its own coupon input before opening this dialog.
       posState.applyPointDiscount(result);
       final gt = Decimal.parse(posState.grandTotal.toString());
       ref.read(paymentSessionProvider.notifier).fillRemainingAmount(gt);
@@ -222,7 +220,8 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
                   p.method == 'Credit') ??
               false);
 
-      LoggerService.info('PaymentModal', '📤 [Line] Capturing receipt/delivery image for #$orderId');
+      LoggerService.info('PaymentModal',
+          '📤 [Line] Capturing receipt/delivery image for #$orderId');
 
       Uint8List? imageBytes;
       if (isCreditOnly) {
@@ -247,8 +246,8 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
       }
 
       if (imageBytes == null) {
-        LoggerService.warning(
-            'PaymentModal', '⚠️ [Line] Receipt image capture returned null for #$orderId');
+        LoggerService.warning('PaymentModal',
+            '⚠️ [Line] Receipt image capture returned null for #$orderId');
         showError('ไม่สามารถสร้างรูปภาพสลิปเพื่อส่ง Line ได้');
         return;
       }
@@ -262,7 +261,8 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
       }
       final url = Uri.parse('$baseUrl/api/v1/line/push-receipt-image');
 
-      LoggerService.info('PaymentModal', '📤 [Line] Sending receipt image for #$orderId → $lineUserId');
+      LoggerService.info('PaymentModal',
+          '📤 [Line] Sending receipt image for #$orderId → $lineUserId');
       final result = await firebaseSvc.sendLineReceiptImageDirect(
         db: db,
         orderId: orderId,
@@ -271,10 +271,12 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
         base64Image: base64Image,
       );
       if (!result) {
-        showError('ส่งสลิปผ่าน Line ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
+        showError(
+            'ส่งสลิปผ่าน Line ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต');
       }
     } catch (e, stackTrace) {
-      LoggerService.error('PaymentModal', '❌ [Line] sendLineNotifications error: $e', e, stackTrace);
+      LoggerService.error('PaymentModal',
+          '❌ [Line] sendLineNotifications error: $e', e, stackTrace);
       showError('ไม่สามารถส่ง Line ใบเสร็จได้: $e');
     }
   }
@@ -368,13 +370,16 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
       // ✅ [NEW] โหมดแก้ไขบิล UNPAID — Flow แยกต่างหาก ไม่แตะ Flow เดิม
       if (posState.editingOrderId != null) {
         final previouslyReceived = posState.editingOriginalReceived;
-        final editedOrderId = await posState.saveOrderAsEdit(payments: finalPayments);
+        final editedOrderId =
+            await posState.saveOrderAsEdit(payments: finalPayments);
         if (mounted) {
           Navigator.of(context).pop(true);
-          SnackbarUtils.showLeft(context, '✅ บันทึกการแก้ไขบิล #$editedOrderId เรียบร้อย');
+          SnackbarUtils.showLeft(
+              context, '✅ บันทึกการแก้ไขบิล #$editedOrderId เรียบร้อย');
         }
         if (session.shouldPrint) {
-          final String cashierName = posState.currentUser?.displayName ?? 'Staff';
+          final String cashierName =
+              posState.currentUser?.displayName ?? 'Staff';
           await printReceipt(
             orderId: editedOrderId,
             items: snapshotItems,
@@ -383,7 +388,8 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
             discount: snapshotDiscount,
             grandTotal: grandTotalDouble,
             received: previouslyReceived +
-                finalPayments.where((p) => p.method.toUpperCase() != 'CREDIT')
+                finalPayments
+                    .where((p) => p.method.toUpperCase() != 'CREDIT')
                     .fold<double>(0, (sum, p) => sum + p.amount),
             change: change.toDouble(),
             payments: finalPayments,
@@ -441,7 +447,8 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
             hasLineId = true;
           }
         } catch (e, stackTrace) {
-          LoggerService.error('PaymentModal', '⚠️ Fetch DB Line ID Error: $e', e, stackTrace);
+          LoggerService.error(
+              'PaymentModal', '⚠️ Fetch DB Line ID Error: $e', e, stackTrace);
         }
       }
 
@@ -503,11 +510,12 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
           );
         }
       } else {
-        LoggerService.info('PaymentModal', 'ℹ️ [Reprint] isCreditOnlyReprint=true — ข้าม Reprint Dialog');
+        LoggerService.info('PaymentModal',
+            'ℹ️ [Reprint] isCreditOnlyReprint=true — ข้าม Reprint Dialog');
       }
-
     } catch (e, stackTrace) {
-      LoggerService.error('PaymentModal', 'เกิดข้อผิดพลาดในการบันทึกบิล: $e', e, stackTrace);
+      LoggerService.error(
+          'PaymentModal', 'เกิดข้อผิดพลาดในการบันทึกบิล: $e', e, stackTrace);
       showError('เกิดข้อผิดพลาด: $e');
       if (mounted) {
         sessionNotifier.setLoading(false);

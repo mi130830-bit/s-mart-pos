@@ -57,13 +57,14 @@ extension PurchaseOrderCommandExtension on StockRepository {
           final pId = int.tryParse(item['productId'].toString()) ?? 0;
           final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
           final cost = double.tryParse(item['costPrice'].toString()) ?? 0.0;
+          final retail = double.tryParse(item['retailPrice'].toString()) ?? 0.0;
           final doc = documentNo ?? '-';
           if (pId == 0) continue;
           await _adjustRecursive(pId, qty, 'PURCHASE_IN',
               'Ref: $doc | Cost: $cost | PO: #$poId', null);
           await _dbService.execute(
-            'UPDATE product SET costPrice = :cost WHERE id = :id',
-            {'cost': cost, 'id': pId},
+            'UPDATE product SET costPrice = :cost, retailPrice = :retail WHERE id = :id',
+            {'cost': cost, 'retail': retail, 'id': pId},
           );
         }
       }
@@ -92,7 +93,8 @@ extension PurchaseOrderCommandExtension on StockRepository {
 
     try {
       // Revert previous stock changes if PO was received or partially received
-      await _revertStockForPurchaseOrder(poId, note: 'Edit PO #$poId (Reversal)');
+      await _revertStockForPurchaseOrder(poId,
+          note: 'Edit PO #$poId (Reversal)');
 
       await _dbService.execute(
         '''
@@ -142,13 +144,14 @@ extension PurchaseOrderCommandExtension on StockRepository {
           final pId = int.tryParse(item['productId'].toString()) ?? 0;
           final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
           final cost = double.tryParse(item['costPrice'].toString()) ?? 0.0;
+          final retail = double.tryParse(item['retailPrice'].toString()) ?? 0.0;
           final doc = documentNo ?? '-';
           if (pId == 0) continue;
           await _adjustRecursive(pId, qty, 'PURCHASE_IN',
               'Ref: $doc | Cost: $cost | PO: #$poId', null);
           await _dbService.execute(
-            'UPDATE product SET costPrice = :cost WHERE id = :id',
-            {'cost': cost, 'id': pId},
+            'UPDATE product SET costPrice = :cost, retailPrice = :retail WHERE id = :id',
+            {'cost': cost, 'retail': retail, 'id': pId},
           );
         }
         for (var item in items) {

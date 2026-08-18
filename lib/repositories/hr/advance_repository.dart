@@ -22,9 +22,10 @@ class AdvanceRepository {
         FOREIGN KEY (employee_id) REFERENCES employee_profile(id)
       )
     ''');
-    
+
     // Auto-migrate
-    await _db.ensureColumn('advance_payment', 'installment_amount', 'DECIMAL(15,2) NULL AFTER remaining_amount');
+    await _db.ensureColumn('advance_payment', 'installment_amount',
+        'DECIMAL(15,2) NULL AFTER remaining_amount');
 
     await _db.execute('''
       CREATE TABLE IF NOT EXISTS advance_deduction (
@@ -37,6 +38,22 @@ class AdvanceRepository {
         -- payroll_id will reference payroll_record(id), but we create that separately
       )
     ''');
+
+    // A payroll may deduct a particular advance only once.  Do not try to
+    // "clean up" duplicates here: historical duplicates are an audit issue
+    // and must be reviewed before a unique key can safely be added.
+    final duplicatePairs = await _db.query('''
+      SELECT advance_id, payroll_id FROM advance_deduction
+      GROUP BY advance_id, payroll_id HAVING COUNT(*) > 1 LIMIT 1
+    ''');
+    if (duplicatePairs.isEmpty) {
+      try {
+        await _db.execute(
+            'ALTER TABLE advance_deduction ADD UNIQUE KEY uq_advance_deduction_payroll (advance_id, payroll_id)');
+      } catch (_) {
+        // Existing installations may already have the key.
+      }
+    }
   }
 
   Future<int> create(AdvancePayment advance) async {
@@ -50,28 +67,34 @@ class AdvanceRepository {
       'request_date': advance.requestDate.toIso8601String().split('T')[0],
       'reason': advance.reason,
       'installment': advance.installmentAmount,
-      'status': advance.status,
+      // Requests must never inherit a caller supplied terminal status.
+      'status': 'PENDING',
     });
     return result.lastInsertID.toInt();
   }
 
   Future<void> approve(int id, int approvedBy) async {
     // When approved, remaining_amount becomes the full amount requested
-    await _db.execute('''
+    final result = await _db.execute('''
       UPDATE advance_payment 
       SET status = 'APPROVED', 
           approved_by = :by, 
           approved_at = NOW(),
           remaining_amount = amount
-      WHERE id = :id
+      WHERE id = :id AND status = 'PENDING'
     ''', {'id': id, 'by': approvedBy});
+    if (result.affectedRows.toInt() != 1) {
+      throw StateError('อนุมัติได้เฉพาะคำขอที่รออนุมัติเท่านั้น');
+    }
   }
 
   Future<void> reject(int id) async {
-    await _db.execute(
-      "UPDATE advance_payment SET status = 'REJECTED' WHERE id = :id",
-      {'id': id}
-    );
+    final result = await _db.execute(
+        "UPDATE advance_payment SET status = 'REJECTED' WHERE id = :id AND status = 'PENDING'",
+        {'id': id});
+    if (result.affectedRows.toInt() != 1) {
+      throw StateError('ปฏิเสธได้เฉพาะคำขอที่รออนุมัติเท่านั้น');
+    }
   }
 
   Future<List<AdvancePayment>> getPending() async {
@@ -86,7 +109,21 @@ class AdvanceRepository {
     return results.map((row) => AdvancePayment.fromJson(row)).toList();
   }
 
-  Future<List<AdvancePayment>> getOutstanding(int employeeId) async {
+  /// When [eligibleThrough] is supplied, only advances requested and approved
+  /// on or before that payroll period end are eligible. This prevents a new
+  /// advance from being applied to an already-ended historical pay period.
+  Future<List<AdvancePayment>> getOutstanding(int employeeId,
+      {DateTime? eligibleThrough}) async {
+    final params = <String, dynamic>{'emp_id': employeeId};
+    var eligibilitySql = '';
+    if (eligibleThrough != null) {
+      final cutoff = eligibleThrough.toIso8601String().split('T')[0];
+      params['cutoff'] = cutoff;
+      eligibilitySql = '''
+        AND a.request_date <= :cutoff
+        AND a.approved_at < DATE_ADD(:cutoff, INTERVAL 1 DAY)
+      ''';
+    }
     final results = await _db.query('''
       SELECT a.*, COALESCE(e.display_name, u.displayName) as employeeName
       FROM advance_payment a
@@ -95,8 +132,9 @@ class AdvanceRepository {
       WHERE a.employee_id = :emp_id 
         AND a.remaining_amount > 0 
         AND a.status IN ('APPROVED', 'PARTIAL')
+        $eligibilitySql
       ORDER BY a.request_date ASC
-    ''', {'emp_id': employeeId});
+    ''', params);
     return results.map((row) => AdvancePayment.fromJson(row)).toList();
   }
 
@@ -107,32 +145,9 @@ class AdvanceRepository {
       WHERE employee_id = :emp_id 
         AND status IN ('APPROVED', 'PARTIAL')
     ''', {'emp_id': employeeId});
-    
+
     if (results.isEmpty || results.first['total'] == null) return 0.0;
     return double.tryParse(results.first['total'].toString()) ?? 0.0;
-  }
-
-  Future<void> recordDeduction(int advanceId, int payrollId, double amount) async {
-    // 1. Insert deduction record
-    await _db.execute('''
-      INSERT INTO advance_deduction (advance_id, payroll_id, deducted_amount)
-      VALUES (:adv_id, :pay_id, :amt)
-    ''', {
-      'adv_id': advanceId,
-      'pay_id': payrollId,
-      'amt': amount,
-    });
-
-    // 2. Update remaining amount and status
-    await _db.execute('''
-      UPDATE advance_payment 
-      SET remaining_amount = remaining_amount - :amt,
-          status = CASE 
-            WHEN remaining_amount - :amt <= 0 THEN 'DEDUCTED'
-            ELSE 'PARTIAL'
-          END
-      WHERE id = :adv_id
-    ''', {'adv_id': advanceId, 'amt': amount});
   }
 
   Future<List<AdvancePayment>> getHistory(int employeeId) async {
@@ -147,32 +162,8 @@ class AdvanceRepository {
     return results.map((row) => AdvancePayment.fromJson(row)).toList();
   }
 
-  Future<void> revertDeductionsForPayroll(int payrollId) async {
-    final deductions = await _db.query('''
-      SELECT * FROM advance_deduction WHERE payroll_id = :pay_id
-    ''', {'pay_id': payrollId});
-
-    for (var d in deductions) {
-      final advId = d['advance_id'];
-      final amt = d['deducted_amount'];
-      
-      await _db.execute('''
-        UPDATE advance_payment
-        SET remaining_amount = remaining_amount + :amt,
-            status = CASE 
-              WHEN remaining_amount + :amt >= amount THEN 'APPROVED'
-              ELSE 'PARTIAL'
-            END
-        WHERE id = :adv_id
-      ''', {'adv_id': advId, 'amt': amt});
-    }
-
-    await _db.execute('''
-      DELETE FROM advance_deduction WHERE payroll_id = :pay_id
-    ''', {'pay_id': payrollId});
-  }
-
-  Future<List<AdvancePayment>> getAllHistory({int limit = 100, int offset = 0}) async {
+  Future<List<AdvancePayment>> getAllHistory(
+      {int limit = 100, int offset = 0}) async {
     final results = await _db.query('''
       SELECT a.*, COALESCE(e.display_name, u.displayName) as employeeName
       FROM advance_payment a
@@ -184,7 +175,8 @@ class AdvanceRepository {
     return results.map((row) => AdvancePayment.fromJson(row)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getDeductionsForAdvance(int advanceId) async {
+  Future<List<Map<String, dynamic>>> getDeductionsForAdvance(
+      int advanceId) async {
     final results = await _db.query('''
       SELECT d.*, p.period_start, p.period_end, p.pay_cycle
       FROM advance_deduction d
@@ -193,5 +185,54 @@ class AdvanceRepository {
       ORDER BY d.deducted_at DESC
     ''', {'adv_id': advanceId});
     return results;
+  }
+
+  /// Read-only audit list. Nothing calls this automatically, so ambiguous
+  /// historical records stay visible for an administrator to investigate.
+  Future<List<Map<String, dynamic>>> getDeductedWithoutConfirmedPayroll() {
+    return _db.query('''
+      SELECT a.*
+      FROM advance_payment a
+      WHERE a.status = 'DEDUCTED'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM advance_deduction d
+          JOIN payroll_record p ON p.id = d.payroll_id
+          WHERE d.advance_id = a.id
+            AND p.status IN ('CONFIRMED', 'PAID')
+        )
+      ORDER BY a.created_at ASC
+    ''');
+  }
+
+  /// Repairs only the exact orphan pattern reported above.  It deliberately
+  /// refuses rows with any deduction ledger or a confirmed/paid payroll.
+  Future<void> repairExactOrphanDeducted(int advanceId) async {
+    await _db.execute('START TRANSACTION');
+    try {
+      final rows = await _db.query('''
+        SELECT a.id
+        FROM advance_payment a
+        WHERE a.id = :id AND a.status = 'DEDUCTED'
+          AND NOT EXISTS (SELECT 1 FROM advance_deduction d WHERE d.advance_id = a.id)
+        FOR UPDATE
+      ''', {'id': advanceId});
+      if (rows.length != 1) {
+        throw StateError(
+            'รายการนี้ไม่ใช่รายการหักครบที่ซ่อมอัตโนมัติได้อย่างปลอดภัย');
+      }
+      final changed = await _db.execute('''
+        UPDATE advance_payment
+        SET remaining_amount = amount, status = 'APPROVED'
+        WHERE id = :id AND status = 'DEDUCTED' AND remaining_amount = 0
+      ''', {'id': advanceId});
+      if (changed.affectedRows.toInt() != 1) {
+        throw StateError('รายการถูกแก้ไขระหว่างซ่อม');
+      }
+      await _db.execute('COMMIT');
+    } catch (_) {
+      await _db.execute('ROLLBACK');
+      rethrow;
+    }
   }
 }

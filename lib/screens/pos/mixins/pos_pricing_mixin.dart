@@ -17,6 +17,7 @@ extension PosPricingExtension on PosStateNotifier {
       promoDiscountVal: _promoDiscount.toDouble(),
       extraDiscountVal: _extraBillDiscount,
       pointDiscountAmount: pointDiscountAmount,
+      couponDiscountAmount: _couponDiscountAmount,
       vatType: _vatType,
       customer: _currentCustomer,
       tier: currentTier,
@@ -27,22 +28,25 @@ extension PosPricingExtension on PosStateNotifier {
 
   double get vatAmount => _calcResult.vatAmount.toDouble();
 
-  double get grandTotal {
-    final base = _calcResult.grandTotal.toDouble();
-    final afterCoupon = base - _couponDiscountAmount;
-    return afterCoupon < 0 ? 0 : afterCoupon;
-  }
+  double get grandTotal => _calcResult.grandTotal.toDouble();
+
+  /// Amount eligible for point-cap calculation: after normal/promo discounts,
+  /// before point redemption and VAT.
+  double get pointRedemptionBase => _calcResult.subtotalAfterPromo.toDouble();
 
   double get discountAmount =>
       _calcResult.billDiscountAmount.toDouble() +
       _calcResult.extraDiscountAmount.toDouble() +
       _promoDiscount.toDouble() +
       pointDiscountAmount +
-      _couponDiscountAmount;
+      _calcResult.couponDiscountAmount.toDouble();
 
   double get promoDiscount => _promoDiscount.toDouble();
 
   void applyPointDiscount(int points) {
+    // Points and a LINE OA coupon are mutually exclusive.
+    _couponDiscountAmount = 0.0;
+    _appliedCouponCode = null;
     _pointsToRedeem = points;
     _invalidateCalcCache();
     _notify();
@@ -55,6 +59,8 @@ extension PosPricingExtension on PosStateNotifier {
   }
 
   void applyCouponDiscount(double amount, String? couponCode) {
+    // Points and a LINE OA coupon are mutually exclusive.
+    _pointsToRedeem = 0;
     _couponDiscountAmount = amount;
     _appliedCouponCode = couponCode;
     _invalidateCalcCache();

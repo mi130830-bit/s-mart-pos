@@ -38,8 +38,7 @@ class ShortageRepository {
       await _mysqlService.execute(createSql);
       // Migration: add received_at if not exists
       await _mysqlService.execute(
-        "ALTER TABLE shortage_logs ADD COLUMN IF NOT EXISTS received_at DATETIME NULL"
-      );
+          "ALTER TABLE shortage_logs ADD COLUMN IF NOT EXISTS received_at DATETIME NULL");
     } catch (e) {
       debugPrint('Error initializing shortage_logs table: \$e');
     }
@@ -164,14 +163,19 @@ class ShortageRepository {
   // Returns {stockQty, unit} or null if product not found
   Future<Map<String, dynamic>?> getProductStockByName(String itemName) async {
     try {
-      final cleanName = itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
+      final cleanName =
+          itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
       final res = await _mysqlService.query(
-        'SELECT stockQuantity FROM product WHERE name LIKE :name ORDER BY (name = :exact) DESC LIMIT 1',
+        'SELECT stockQuantity, costPrice, retailPrice FROM product WHERE name LIKE :name ORDER BY (name = :exact) DESC LIMIT 1',
         {'name': '%$cleanName%', 'exact': cleanName},
       );
       if (res.isNotEmpty) {
         return {
-          'stockQty': double.tryParse(res.first['stockQuantity'].toString()) ?? 0,
+          'stockQty':
+              double.tryParse(res.first['stockQuantity'].toString()) ?? 0,
+          'costPrice': double.tryParse(res.first['costPrice'].toString()) ?? 0,
+          'retailPrice':
+              double.tryParse(res.first['retailPrice'].toString()) ?? 0,
           'unit': '',
         };
       }
@@ -182,10 +186,12 @@ class ShortageRepository {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getCheapestSupplierSuggestions(String itemName) async {
+  Future<List<Map<String, dynamic>>> getCheapestSupplierSuggestions(
+      String itemName) async {
     try {
       // Strip trailing "(คงเหลือ: ...)" or "(คงเหลือ: ...)" appended by UI
-      final cleanName = itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
+      final cleanName =
+          itemName.replaceAll(RegExp(r'\s*\(คงเหลือ:.*?\)'), '').trim();
 
       // 1. Find the product by name (exact + LIKE)
       final pRes = await _mysqlService.query(
@@ -196,7 +202,8 @@ class ShortageRepository {
       int? productId;
       if (pRes.isNotEmpty) {
         productId = int.tryParse(pRes.first['id'].toString());
-        debugPrint('🔎 [Suggestion] "$itemName" → product found: ${pRes.first['name']} (id=$productId)');
+        debugPrint(
+            '🔎 [Suggestion] "$itemName" → product found: ${pRes.first['name']} (id=$productId)');
       } else {
         debugPrint('🔎 [Suggestion] "$itemName" → no product match in DB');
       }
@@ -240,7 +247,8 @@ class ShortageRepository {
         // Fallback: match by product name in PO items
         whereClause = 'poi.productName LIKE :name';
         params = {'name': '%$itemName%'};
-        debugPrint('🔎 [Suggestion] "$itemName" → using name LIKE fallback in PO items');
+        debugPrint(
+            '🔎 [Suggestion] "$itemName" → using name LIKE fallback in PO items');
       }
 
       // 4. Query cheapest suppliers — use COALESCE to handle walk-in/freeform suppliers
@@ -260,10 +268,12 @@ class ShortageRepository {
         LIMIT 2;
       ''';
 
-      debugPrint('🔎 [Suggestion] "$itemName" → WHERE: $whereClause | params: $params');
+      debugPrint(
+          '🔎 [Suggestion] "$itemName" → WHERE: $whereClause | params: $params');
 
       final results = await _mysqlService.query(sql, params);
-      debugPrint('🔎 [Suggestion] "$itemName" → final results count: ${results.length}');
+      debugPrint(
+          '🔎 [Suggestion] "$itemName" → final results count: ${results.length}');
       return results;
     } catch (e) {
       debugPrint('❌ [Suggestion Error] "$itemName": $e');

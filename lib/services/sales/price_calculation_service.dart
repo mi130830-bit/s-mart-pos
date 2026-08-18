@@ -43,6 +43,7 @@ class PriceCalculationResult {
   final Decimal promoDiscountAmount;
   final Decimal subtotalAfterPromo;
   final Decimal pointDiscountAmount; // ✅ ส่วนลดแต้ม
+  final Decimal couponDiscountAmount; // ✅ ส่วนลดคูปอง ก่อน VAT
   final Decimal subtotalAfterPoints; // ✅ ยอดหลังหักแต้ม
   final Decimal vatAmount;
   final Decimal grandTotal;
@@ -56,6 +57,7 @@ class PriceCalculationResult {
     required this.promoDiscountAmount,
     required this.subtotalAfterPromo,
     required this.pointDiscountAmount,
+    required this.couponDiscountAmount,
     required this.subtotalAfterPoints,
     required this.vatAmount,
     required this.grandTotal,
@@ -135,7 +137,6 @@ class PriceCalculationService {
     return item.copyWith(total: netTotal);
   }
 
-
   /// ✅ คำนวณโปรโมชั่น — Priority-Only (apply แค่โปรอันดับสูงสุดที่ qualify)
   PromotionResult calculatePromotions(
       List<OrderItem> cart, List<Promotion> activePromotions) {
@@ -180,8 +181,7 @@ class PriceCalculationService {
         if (buyItems is List && buyItems.isNotEmpty) {
           final req = buyItems.first;
           final reqProdId = int.tryParse(req['product_id'].toString()) ?? 0;
-          final reqQty =
-              toDecimal(double.tryParse(req['qty'].toString()) ?? 0);
+          final reqQty = toDecimal(double.tryParse(req['qty'].toString()) ?? 0);
 
           Decimal foundQty = Decimal.zero;
           for (var item in cart) {
@@ -232,8 +232,7 @@ class PriceCalculationService {
       } else if (rewardType == 'discount_percent' ||
           rewards.containsKey('discount_percent')) {
         final pct = (toDecimal(
-                    double.tryParse(
-                            rewards['discount_percent'].toString()) ??
+                    double.tryParse(rewards['discount_percent'].toString()) ??
                         0) /
                 toDecimal(100))
             .toDecimal(scaleOnInfinitePrecision: 10);
@@ -262,8 +261,8 @@ class PriceCalculationService {
             final prodId = int.tryParse(gi['product_id'].toString()) ?? 0;
             final qty = double.tryParse(gi['qty'].toString()) ?? 1.0;
             if (prodId > 0) {
-              freeItems.add(FreeItemRequest(
-                  productId: prodId, quantity: qty * sets));
+              freeItems.add(
+                  FreeItemRequest(productId: prodId, quantity: qty * sets));
             }
           }
         }
@@ -288,6 +287,7 @@ class PriceCalculationService {
     required double promoDiscountVal,
     double extraDiscountVal = 0.0,
     double pointDiscountAmount = 0.0,
+    double couponDiscountAmount = 0.0,
     required VatType vatType,
     Customer? customer,
     MemberTier? tier,
@@ -352,23 +352,28 @@ class PriceCalculationService {
 
     Decimal subtotalAfterPromo = subtotalAfterBill - promoDiscount;
 
-    // 5. Point Redemption Discount (ก่อน VAT)
+    // 5. Point / coupon discount (ก่อน VAT). UI and checkout enforce either-or.
     Decimal pointDiscount = toDecimal(pointDiscountAmount);
     if (pointDiscount > subtotalAfterPromo) {
       pointDiscount = subtotalAfterPromo; // ไม่ให้ยอดติดลบ
     }
     Decimal subtotalAfterPts = subtotalAfterPromo - pointDiscount;
+    Decimal couponDiscount = toDecimal(couponDiscountAmount);
+    if (couponDiscount > subtotalAfterPts) {
+      couponDiscount = subtotalAfterPts;
+    }
+    final subtotalAfterDiscounts = subtotalAfterPts - couponDiscount;
 
     // 6. VAT Calculation
     Decimal vat = Decimal.zero;
-    Decimal grandTotal = subtotalAfterPts;
-    Decimal netTotal = subtotalAfterPts;
+    Decimal grandTotal = subtotalAfterDiscounts;
+    Decimal netTotal = subtotalAfterDiscounts;
 
     if (vatType == VatType.excluded) {
       final vatRateDecimal = (toDecimal(vatRate) / toDecimal(100))
           .toDecimal(scaleOnInfinitePrecision: 10);
-      vat = subtotalAfterPts * vatRateDecimal;
-      grandTotal = subtotalAfterPts + vat;
+      vat = subtotalAfterDiscounts * vatRateDecimal;
+      grandTotal = subtotalAfterDiscounts + vat;
     }
 
     // 7. Rounding Logic
@@ -397,17 +402,19 @@ class PriceCalculationService {
       vat = roundedGrandTotal * vatRatio;
       netTotal = roundedGrandTotal - vat;
     } else if (vatType == VatType.excluded) {
-      netTotal = subtotalAfterPts;
+      netTotal = subtotalAfterDiscounts;
     }
 
     return PriceCalculationResult(
       totalBeforeDiscount: sumTotal,
-      billDiscountAmount: billDiscountAmount + tierDiscountAmount, // existing API keeps tier inside billDiscount
+      billDiscountAmount: billDiscountAmount +
+          tierDiscountAmount, // existing API keeps tier inside billDiscount
       extraDiscountAmount: extraDiscountAmount,
       subtotalAfterBillDiscount: subtotalAfterBill,
       promoDiscountAmount: promoDiscount,
       subtotalAfterPromo: subtotalAfterPromo,
       pointDiscountAmount: pointDiscount,
+      couponDiscountAmount: couponDiscount,
       subtotalAfterPoints: subtotalAfterPts,
       vatAmount: vat,
       grandTotal: roundedGrandTotal,

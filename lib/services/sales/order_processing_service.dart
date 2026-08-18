@@ -55,14 +55,27 @@ class OrderProcessingService {
     int? userId,
     String? note,
     int pointsUsed = 0, // ✅ แต้มที่ใช้แลก
+    double pointRedemptionBase = 0.0,
+    String? couponCode,
+    double couponDiscountAmount = 0.0,
     List<Promotion>? activePromotions, // ✅ โปรโมชั่นที่กำลัง active
     MemberTier? currentTier, // ✅ ระดับสมาชิก สำหรับคูณแต้ม
   }) async {
     // ✅ Filter out items with 0 or negative quantity
-    final filteredCart = cart.where((item) => item.quantity > Decimal.zero).toList();
+    final filteredCart =
+        cart.where((item) => item.quantity > Decimal.zero).toList();
 
     if (filteredCart.isEmpty) {
       throw Exception('ตะกร้าว่างเปล่า (ไม่มีรายการที่มีจำนวนมากกว่า 0)');
+    }
+    if (pointsUsed > 0 && couponCode != null) {
+      throw ArgumentError('ไม่สามารถใช้แต้มและคูปองในบิลเดียวกันได้');
+    }
+    if (pointsUsed < 0 || couponDiscountAmount < 0) {
+      throw ArgumentError('ส่วนลดหรือแต้มไม่ถูกต้อง');
+    }
+    if (couponCode != null && couponDiscountAmount > pointRedemptionBase) {
+      throw ArgumentError('มูลค่าคูปองเกินยอดสินค้าหลังส่วนลด');
     }
     if (!_dbService.isConnected()) {
       await _dbService.connect();
@@ -91,6 +104,21 @@ class OrderProcessingService {
     await _dbService.execute('START TRANSACTION;');
 
     try {
+      // Checkout is authoritative: do not accept an arbitrary point amount
+      // from a POS/S-Link client. The cap uses the pre-VAT base after ordinary
+      // discounts and promotions, as agreed for this shop.
+      if (pointsUsed > 0) {
+        if (currentCustomer == null || currentCustomer.id <= 0) {
+          throw StateError('ต้องเลือกลูกค้าก่อนใช้แต้ม');
+        }
+        final redemptionRate = _settings.pointRedemptionRate;
+        final maxPoints = redemptionRate > 0
+            ? (pointRedemptionBase * 0.75 * redemptionRate).floor()
+            : 0;
+        if (pointsUsed > maxPoints) {
+          throw StateError('จำนวนแต้มเกินเพดาน 75% ของยอดขาย');
+        }
+      }
       // Status ขึ้นกับยอดรับเงิน ไม่ขึ้นกับ deliveryType
       String status = (received < grandTotal - 0.01) ? 'UNPAID' : 'COMPLETED';
       double debtAmt = (grandTotal - received).clamp(0.0, double.infinity);
@@ -101,7 +129,8 @@ class OrderProcessingService {
         final checkSql = "SHOW COLUMNS FROM `order` LIKE 'note'";
         final res = await _dbService.query(checkSql);
         if (res.isEmpty) {
-          await _dbService.execute('ALTER TABLE `order` ADD COLUMN note TEXT NULL');
+          await _dbService
+              .execute('ALTER TABLE `order` ADD COLUMN note TEXT NULL');
         }
       } catch (e) {
         debugPrint('Failed to ensure note column: $e');
@@ -149,6 +178,38 @@ class OrderProcessingService {
       });
 
       final orderId = resOrder.lastInsertID.toInt();
+
+      // Consume the coupon in this same transaction. The status, owner,
+      // expiry and stored discount are all checked again at checkout time.
+      if (couponCode != null) {
+        if (currentCustomer == null || currentCustomer.id <= 0) {
+          throw StateError('ต้องเลือกลูกค้าที่เป็นเจ้าของคูปอง');
+        }
+        final couponResult = await _dbService.execute('''
+          UPDATE reward_coupon
+          SET status = 'USED', used_at = NOW(), order_id = :orderId
+          WHERE coupon_code = :code
+            AND customer_id = :customerId
+            AND status = 'ACTIVE'
+            AND expires_at > NOW()
+            AND discount_value = :discount
+        ''', {
+          'orderId': orderId,
+          'code': couponCode.toUpperCase(),
+          'customerId': currentCustomer.id,
+          'discount': couponDiscountAmount,
+        });
+        if (couponResult.affectedRows != BigInt.one) {
+          throw StateError(
+              'คูปองใช้ไม่ได้ ถูกใช้แล้ว หมดอายุ หรือส่วนลดไม่ตรงกัน');
+        }
+        await _dbService.execute('''
+          UPDATE reward_redemption rr
+          JOIN reward_coupon rc ON rc.redemption_id = rr.id
+          SET rr.status = 'FULFILLED'
+          WHERE rc.coupon_code = :code
+        ''', {'code': couponCode.toUpperCase()});
+      }
 
       // 4. Insert Items & Cut Stock
       final sqlItem = '''
@@ -228,8 +289,7 @@ class OrderProcessingService {
 
         // ✅ Check if Point System is Enabled
         final bool isPointEnabled = _settings.pointEnabled;
-        int pointsEarned =
-            isPointEnabled ? (grandTotal / rate).floor() : 0;
+        int pointsEarned = isPointEnabled ? (grandTotal / rate).floor() : 0;
 
         if (isPointEnabled) {
           int bonusPoints = 0;
@@ -256,19 +316,25 @@ class OrderProcessingService {
               }
             }
           }
-          
+
           // 3. Campaign (Active Promotions) Multiplier & Bonus
           if (activePromotions != null) {
             for (var promo in activePromotions) {
               final conditions = promo.conditions;
-              final minSpend = double.tryParse(conditions['min_spend']?.toString() ?? '0') ?? 0.0;
-              
+              final minSpend =
+                  double.tryParse(conditions['min_spend']?.toString() ?? '0') ??
+                      0.0;
+
               if (grandTotal >= minSpend) {
                 final rewards = promo.rewards;
-                final b = int.tryParse(rewards['bonus_points']?.toString() ?? '0') ?? 0;
+                final b =
+                    int.tryParse(rewards['bonus_points']?.toString() ?? '0') ??
+                        0;
                 bonusPoints += b;
-                
-                final m = double.tryParse(rewards['points_multiplier']?.toString() ?? '1.0') ?? 1.0;
+
+                final m = double.tryParse(
+                        rewards['points_multiplier']?.toString() ?? '1.0') ??
+                    1.0;
                 if (m > multiplier) multiplier = m; // Take the highest
               }
             }
@@ -278,7 +344,7 @@ class OrderProcessingService {
             pointsEarned = (pointsEarned * multiplier).floor() + bonusPoints;
           }
         }
-        
+
         finalEarnedPoints = pointsEarned;
 
         try {
@@ -295,17 +361,22 @@ class OrderProcessingService {
               'cid': currentCustomer.id,
             },
           );
+          // Redeem the balance that existed before this sale earns new points.
+          // This avoids letting a customer spend points that this same bill has
+          // only just generated.
+          if (pointsUsed > 0) {
+            await _customerRepo.redeemPoints(currentCustomer.id, pointsUsed,
+                useTransaction: false);
+            debugPrint(
+                '✅ [Points] Redeemed $pointsUsed pts for order #$orderId');
+          }
           if (pointsEarned > 0) {
             await _customerRepo.addPoints(currentCustomer.id, pointsEarned,
                 orderId: orderId);
           }
-          // ✅ หักแต้มที่ใช้แลกก่อน COMMIT — atomic
-          if (pointsUsed > 0) {
-            await _customerRepo.redeemPoints(currentCustomer.id, pointsUsed);
-            debugPrint('✅ [Points] Redeemed $pointsUsed pts for order #$orderId');
-          }
-          
-          newTotalPoints = (currentCustomer.currentPoints + finalEarnedPoints) - pointsUsed;
+
+          newTotalPoints =
+              (currentCustomer.currentPoints + finalEarnedPoints) - pointsUsed;
         } catch (e) {
           // Self-Healing: Add missing column if not exists
           if (e.toString().contains("Unknown column 'lastActivity'")) {

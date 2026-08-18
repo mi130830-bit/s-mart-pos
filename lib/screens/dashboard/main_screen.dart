@@ -35,8 +35,7 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen>
-    with WindowListener {
+class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
   Key _refreshKey = UniqueKey(); // ✅ Key สำหรับบังคับ Rebuild
 
   // Fingerprint overlay controller (แยก logic ออกจาก UI)
@@ -47,9 +46,11 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   // Fingerprint disconnect banner
   OverlayEntry? _fingerprintDisconnectOverlay;
+  bool _fingerprintOutageSnoozed = false;
 
   // ✅ Task 5: สร้าง Delivery Service (ใช้ Singleton Pattern เดียวกับส่วนอื่นใน app)
-  final DeliveryIntegrationService _deliveryService = DeliveryIntegrationService(
+  final DeliveryIntegrationService _deliveryService =
+      DeliveryIntegrationService(
     MySQLService(),
     FirebaseService(),
   );
@@ -70,6 +71,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
       onActionRequired: _showFingerprintActionOverlay,
       onConnectionChanged: (isConn, address) {
         if (isConn) {
+          _fingerprintOutageSnoozed = false;
           _dismissFingerprintDisconnectBanner();
         } else {
           _showFingerprintDisconnectedBanner();
@@ -78,13 +80,12 @@ class _MainScreenState extends ConsumerState<MainScreen>
     );
   }
 
-
-
   @override
   void dispose() {
     windowManager.removeListener(this); // ✅ Remove Listener
     _deliveryService.dispose(); // ✅ Task 5: ยกเลิก Timer
-    _fingerprintController.dispose(); // ✅ ยกเลิก Fingerprint Listeners ผ่าน Controller
+    _fingerprintController
+        .dispose(); // ✅ ยกเลิก Fingerprint Listeners ผ่าน Controller
     _fingerprintActionOverlay?.remove();
     _fingerprintActionOverlay = null;
     _fingerprintDisconnectOverlay?.remove();
@@ -98,6 +99,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
   /// แสดง banner แจ้งเตือนที่มุมบนขวา เมื่อการเชื่อมต่อเครื่องสแกนหลุด
   void _showFingerprintDisconnectedBanner() {
+    if (_fingerprintOutageSnoozed) return;
     if (_fingerprintDisconnectOverlay != null) return; // มีอยู่แล้ว ไม่ซ้ำ
 
     _fingerprintDisconnectOverlay = OverlayEntry(
@@ -108,19 +110,16 @@ class _MainScreenState extends ConsumerState<MainScreen>
           color: Colors.transparent,
           child: FingerprintDisconnectBanner(
             onReconnect: () async {
-              _dismissFingerprintDisconnectBanner();
-              // เริ่ม auto-discovery ใหม่ — จะต่อกลับทันทีเมื่อ ESP32 ตอบ
-              FingerprintNetworkService().startAutoDiscovery();
-              if (mounted) {
-                AlertService.show(
-                  context: context,
-                  message: '🔍 กำลังค้นหาเครื่องสแกนลายนิ้วมือในวง LAN...',
-                  type: 'info',
-                  duration: const Duration(seconds: 3),
-                );
-              }
+              final network = FingerprintNetworkService();
+              network.startAutoDiscovery();
+              final connected = await network.retryConnection();
+              if (connected) _dismissFingerprintDisconnectBanner();
+              return connected;
             },
-            onDismiss: _dismissFingerprintDisconnectBanner,
+            onDismiss: () {
+              _fingerprintOutageSnoozed = true;
+              _dismissFingerprintDisconnectBanner();
+            },
           ),
         ),
       ),
@@ -155,7 +154,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
     _fingerprintActionOverlay = null;
 
     // Toast แจ้งเตือนเล็กๆ ด้านซ้ายล่างว่ามีคนสแกน
-    final statusText = currentStatus == 'CLOCK_IN' ? 'กำลังทำงานอยู่' : 'ออกชั่วคราวอยู่';
+    final statusText =
+        currentStatus == 'CLOCK_IN' ? 'กำลังทำงานอยู่' : 'ออกชั่วคราวอยู่';
     AlertService.show(
       context: context,
       message: '👆 $name สแกนนิ้วแล้ว ($statusText)',
@@ -323,10 +323,10 @@ class _MainScreenState extends ConsumerState<MainScreen>
 
     final bool canAccessSettings =
         isUserAdmin || authState.hasPermission('access_settings_menu');
-    
+
     final bool canViewDeliveryReport =
         isUserAdmin || authState.hasPermission('view_delivery_report');
-    
+
     final bool canAccessHR = isUserAdmin || isUserHR;
 
     // ✅ Payday Alert Check (แจ้งเตือนวันจ่ายเงิน)
@@ -340,14 +340,13 @@ class _MainScreenState extends ConsumerState<MainScreen>
       const PosCheckoutScreen(), // 1. จุดขาย
       if (showProductStock) const ProductManagementScreen(), // 2. สินค้า/คลัง
       const CustomerManagementScreen(), // 3. ลูกค้า
-      if (showDashboard)
-        const DashboardScreen(), // 4. ประวัติการขาย
+      if (showDashboard) const DashboardScreen(), // 4. ประวัติการขาย
       if (isUserAdmin) const SupplierListView(), // 5. จัดการผู้ขาย
       if (canViewDeliveryReport)
-        LogisticsMenuScreen(deliveryService: _deliveryService), // 6. ขนส่ง (Logistics)
+        LogisticsMenuScreen(
+            deliveryService: _deliveryService), // 6. ขนส่ง (Logistics)
       if (canAccessHR) const HrScreen(), // 8. บุคคล (HR)
-      if (canAccessSettings)
-        const SettingsScreen(), // 9. ตั้งค่า
+      if (canAccessSettings) const SettingsScreen(), // 9. ตั้งค่า
     ];
 
     // ✅ 2. เรียงลำดับเมนู (Destinations) ให้ตรงกับ Screens
@@ -382,11 +381,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
         ),
       if (canAccessHR)
         NavigationRailDestination(
-          icon: hasPaydayAlert 
-              ? const Badge(
-                  label: Text('!'), 
-                  child: Icon(Icons.badge)
-                ) 
+          icon: hasPaydayAlert
+              ? const Badge(label: Text('!'), child: Icon(Icons.badge))
               : const Icon(Icons.badge),
           label: const Text('บุคคล'),
         ),
@@ -400,7 +396,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
     final int selectedIndex = ref.watch(mainNavigationProvider);
     // ป้องกัน Error กรณีสิทธิ์เปลี่ยนแล้ว Index เกิน
     if (selectedIndex >= screens.length) {
-      Future.microtask(() => ref.read(mainNavigationProvider.notifier).state = 0);
+      Future.microtask(
+          () => ref.read(mainNavigationProvider.notifier).state = 0);
     }
 
     final posState = ref.watch(posProvider);
@@ -417,7 +414,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
                     child: NavigationRail(
                       // ปรับความกว้างเมนูซ้ายให้ไม่อึดอัด (ตามที่เคยคุยกันไว้)
                       minWidth: 110,
-                      selectedIndex: selectedIndex < screens.length ? selectedIndex : 0,
+                      selectedIndex:
+                          selectedIndex < screens.length ? selectedIndex : 0,
                       onDestinationSelected: (index) {
                         if (selectedIndex == index) {
                           // ✅ กดเมนูเดิม -> Force Rebuild หน้าจอ
@@ -426,7 +424,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
                           });
                         } else {
                           // ✅ กดเปลี่ยนเมนู -> เปลี่ยน Index
-                          ref.read(mainNavigationProvider.notifier).state = index;
+                          ref.read(mainNavigationProvider.notifier).state =
+                              index;
                         }
                       },
                       labelType: NavigationRailLabelType.all,
@@ -461,7 +460,8 @@ class _MainScreenState extends ConsumerState<MainScreen>
           Expanded(
             child: KeyedSubtree(
               key: _refreshKey, // ✅ Force Rebuild Here
-              child: screens[selectedIndex < screens.length ? selectedIndex : 0],
+              child:
+                  screens[selectedIndex < screens.length ? selectedIndex : 0],
             ),
           ),
         ],

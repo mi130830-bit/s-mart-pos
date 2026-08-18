@@ -78,13 +78,31 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                             widget.product!.barcode!.isNotEmpty)
                         ? Colors.grey[200]
                         : null,
+                    onSubmitted: (barcode) {
+                      _warnIfBarcodeIsAlreadyUsed(barcode);
+                    },
                   ),
                   const SizedBox(height: 12),
-                  CustomTextField(
-                    controller: _nameCtrl,
-                    label: 'ชื่อสินค้า *',
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'กรุณากรอกชื่อ' : null,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CustomTextField(
+                          controller: _nameCtrl,
+                          label: 'ชื่อสินค้า *',
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'กรุณากรอกชื่อ' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: 'ค้นหาชื่อจากบาร์โค้ด',
+                        child: IconButton.filledTonal(
+                          onPressed: _showMagicSearch,
+                          icon: const Icon(Icons.auto_awesome),
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   CustomTextField(
@@ -108,7 +126,8 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                           },
                           onChanged: (val) {
                             final match = _productTypes
-                                .where((t) => t.name.toLowerCase() == val.toLowerCase())
+                                .where((t) =>
+                                    t.name.toLowerCase() == val.toLowerCase())
                                 .toList();
                             if (match.isNotEmpty) {
                               setState(() {
@@ -143,7 +162,8 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                           },
                           onChanged: (val) {
                             final match = _units
-                                .where((u) => u.name.toLowerCase() == val.toLowerCase())
+                                .where((u) =>
+                                    u.name.toLowerCase() == val.toLowerCase())
                                 .toList();
                             if (match.isNotEmpty) {
                               setState(() {
@@ -293,14 +313,18 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
         // Stock Quantity Field (Restored/Added)
         CustomTextField(
           controller: _stockCtrl,
-          readOnly: _components.isNotEmpty || widget.disableStockInput, // Lock if linked to components or disabled by PO
+          readOnly: _components.isNotEmpty ||
+              widget
+                  .disableStockInput, // Lock if linked to components or disabled by PO
           label: _components.isNotEmpty
               ? 'จำนวนสต๊อก (อ้างอิงจากส่วนประกอบ)'
               : widget.disableStockInput
                   ? 'สต๊อก (จัดการผ่าน PO)'
                   : 'จำนวนสต๊อก',
           filled: _components.isNotEmpty || widget.disableStockInput,
-          fillColor: (_components.isNotEmpty || widget.disableStockInput) ? Colors.grey[200] : null,
+          fillColor: (_components.isNotEmpty || widget.disableStockInput)
+              ? Colors.grey[200]
+              : null,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           selectAllOnFocus: true, // ✅ Auto-select
         ),

@@ -10,11 +10,15 @@ class StockInTableRow extends StatefulWidget {
   final String poStatus;
   final TextEditingController qtyCtrl;
   final TextEditingController costCtrl;
+  final TextEditingController retailCtrl;
+  final TextEditingController totalCtrl;
+  final int vatType;
   final VoidCallback onEdit;
-  final VoidCallback onCalculate;
   final VoidCallback onDelete;
   final ValueChanged<String> onQtyChanged;
   final ValueChanged<String> onCostChanged;
+  final ValueChanged<String> onRetailChanged;
+  final ValueChanged<String> onTotalChanged;
 
   const StockInTableRow({
     super.key,
@@ -24,11 +28,15 @@ class StockInTableRow extends StatefulWidget {
     required this.poStatus,
     required this.qtyCtrl,
     required this.costCtrl,
+    required this.retailCtrl,
+    required this.totalCtrl,
+    required this.vatType,
     required this.onEdit,
-    required this.onCalculate,
     required this.onDelete,
     required this.onQtyChanged,
     required this.onCostChanged,
+    required this.onRetailChanged,
+    required this.onTotalChanged,
   });
 
   @override
@@ -38,18 +46,21 @@ class StockInTableRow extends StatefulWidget {
 class _StockInTableRowState extends State<StockInTableRow> {
   late FocusNode _qtyFocusNode;
   late FocusNode _costFocusNode;
+  late FocusNode _retailFocusNode;
 
   @override
   void initState() {
     super.initState();
     _qtyFocusNode = FocusNode();
     _costFocusNode = FocusNode();
+    _retailFocusNode = FocusNode();
   }
 
   @override
   void dispose() {
     _qtyFocusNode.dispose();
     _costFocusNode.dispose();
+    _retailFocusNode.dispose();
     super.dispose();
   }
 
@@ -95,8 +106,8 @@ class _StockInTableRowState extends State<StockInTableRow> {
                     Flexible(
                       child: Text(
                         widget.item.product.barcode ?? '-',
-                        style: const TextStyle(
-                            fontSize: 13, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 13, color: Colors.grey),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -117,7 +128,8 @@ class _StockInTableRowState extends State<StockInTableRow> {
             flex: 1,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: (widget.item.receivedQuantity > 0 && widget.poStatus != 'RECEIVED')
+              child: (widget.item.receivedQuantity > 0 &&
+                      widget.poStatus != 'RECEIVED')
                   ? Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -135,13 +147,14 @@ class _StockInTableRowState extends State<StockInTableRow> {
                   : CustomTextField(
                       controller: widget.qtyCtrl,
                       focusNode: _qtyFocusNode,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                       onChanged: (val) {
                         setState(() {
-                          widget.item.quantity = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
+                          widget.item.quantity =
+                              double.tryParse(val.replaceAll(',', '')) ?? 0.0;
                         });
                         widget.onQtyChanged(val);
                       },
@@ -151,51 +164,98 @@ class _StockInTableRowState extends State<StockInTableRow> {
                       selectAllOnFocus: true,
                       enabled: widget.poStatus == 'NEW' ||
                           widget.poStatus == 'DRAFT' ||
-                          widget.poStatus == 'RECEIVED', // Enable edit if NEW, DRAFT, or RECEIVED (editing mode)
+                          widget.poStatus ==
+                              'RECEIVED', // Enable edit if NEW, DRAFT, or RECEIVED (editing mode)
                     ),
             ),
           ),
-          Expanded(flex: 1, child: Text(widget.unitName, textAlign: TextAlign.center)),
+          Expanded(
+              flex: 1,
+              child: Text(widget.unitName, textAlign: TextAlign.center)),
           Expanded(
             flex: 2,
-            child: Row(
-              children: [
-                Expanded(
-                  child: CustomTextField(
-                    controller: widget.costCtrl,
-                    focusNode: _costFocusNode,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    onChanged: (val) {
-                      setState(() {
-                        widget.item.costPrice = double.tryParse(val.replaceAll(',', '')) ?? 0.0;
-                      });
-                      widget.onCostChanged(val);
-                    },
-                    onSubmitted: (_) {
-                      widget.onCostChanged(widget.costCtrl.text);
-                    },
-                    selectAllOnFocus: true,
+            child: Transform.translate(
+              offset: const Offset(0, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CustomTextField(
+                          controller: widget.costCtrl,
+                          focusNode: _costFocusNode,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          onChanged: (val) {
+                            setState(() {
+                              widget.item.costPrice =
+                                  double.tryParse(val.replaceAll(',', '')) ??
+                                      0.0;
+                            });
+                            widget.onCostChanged(val);
+                          },
+                          onSubmitted: (_) {
+                            widget.onCostChanged(widget.costCtrl.text);
+                          },
+                          selectAllOnFocus: true,
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'ราคาแนะนำ: ${NumberFormat('#,##0.00').format(widget.item.costPrice * (widget.vatType == 2 ? 1.3 : 1.391))} (ทุน × ${widget.vatType == 2 ? '1.3' : '1.391'})',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: CustomTextField(
+                controller: widget.retailCtrl,
+                focusNode: _retailFocusNode,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.calculate,
-                      color: Colors.blue, size: 24),
-                  onPressed: widget.onCalculate,
-                ),
-              ],
+                onChanged: widget.onRetailChanged,
+                onSubmitted: (_) =>
+                    widget.onRetailChanged(widget.retailCtrl.text),
+                selectAllOnFocus: true,
+              ),
             ),
           ),
           Expanded(
             flex: 1,
-            child: Text(NumberFormat('#,##0.00').format(widget.item.total),
-                textAlign: TextAlign.right,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: CustomTextField(
+                controller: widget.totalCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.center,
                 style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.indigo)),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Colors.indigo,
+                ),
+                onChanged: widget.onTotalChanged,
+                onSubmitted: (_) =>
+                    widget.onTotalChanged(widget.totalCtrl.text),
+                selectAllOnFocus: true,
+              ),
+            ),
           ),
           SizedBox(
             width: 50,

@@ -75,7 +75,8 @@ class MySQLService {
   Future<IResultSet> execute(String sql, [Map<String, dynamic>? params]) =>
       _executor.execute(sql, params);
   // 3. Query (สำหรับ SELECT)
-  Future<List<Map<String, dynamic>>> query(String sql, [Map<String, dynamic>? params]) =>
+  Future<List<Map<String, dynamic>>> query(String sql,
+          [Map<String, dynamic>? params]) =>
       _executor.query(sql, params);
 
   // Database Initialization Methods
@@ -199,11 +200,14 @@ class MySQLService {
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         isPaid TINYINT(1) DEFAULT 0,
+        idempotencyKey VARCHAR(64) NULL,
+        idempotencyPayloadHash CHAR(64) NULL,
         INDEX(supplierId),
         INDEX(branchId),
         INDEX(status),
         INDEX(documentNo),
-        INDEX(isPaid)
+        INDEX(isPaid),
+        UNIQUE KEY idx_purchase_order_idempotency (idempotencyKey)
       ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     ''';
     await execute(sqlHeader);
@@ -212,7 +216,7 @@ class MySQLService {
       CREATE TABLE IF NOT EXISTS purchase_order_item (
         id INT AUTO_INCREMENT PRIMARY KEY,
         poId INT NOT NULL,
-        productId INT NOT NULL,
+        productId INT NOT NULL DEFAULT 0,
         productName VARCHAR(255) NOT NULL,
         quantity DECIMAL(10,2) NOT NULL,
         costPrice DECIMAL(10,2) NOT NULL,
@@ -268,8 +272,26 @@ class MySQLService {
             "ALTER TABLE purchase_order ADD COLUMN isPaid TINYINT(1) DEFAULT 0 AFTER vatType;");
         await execute("ALTER TABLE purchase_order ADD INDEX (isPaid);");
       }
+      await ensureColumn(
+          'purchase_order', 'idempotencyKey', 'VARCHAR(64) NULL');
+      await ensureColumn(
+          'purchase_order', 'idempotencyPayloadHash', 'CHAR(64) NULL');
+      try {
+        await execute(
+            'ALTER TABLE purchase_order ADD UNIQUE KEY idx_purchase_order_idempotency (idempotencyKey)');
+      } catch (_) {
+        // Existing installations may already have the key.
+      }
+      await ensureColumn('supplier', 'systemKey', 'VARCHAR(64) NULL');
+      try {
+        await execute(
+            'ALTER TABLE supplier ADD UNIQUE KEY idx_supplier_system_key (systemKey)');
+      } catch (_) {
+        // Existing installations may already have the key.
+      }
     } catch (e) {
-      LoggerService.error('MySQLService', 'Error ensuring purchase_order columns', e);
+      LoggerService.error(
+          'MySQLService', 'Error ensuring purchase_order columns', e);
     }
   }
 
@@ -281,17 +303,21 @@ class MySQLService {
   }
 
   /// Utility to safely add a column without triggering 1060 MySQL errors in logs
-  Future<void> ensureColumn(String table, String columnName, String columnType) async {
+  Future<void> ensureColumn(
+      String table, String columnName, String columnType) async {
     try {
       final safeTable = table == 'order' ? '`order`' : table;
       final checkSql = "SHOW COLUMNS FROM $safeTable LIKE '$columnName'";
       final res = await query(checkSql);
       if (res.isEmpty) {
-        await execute('ALTER TABLE $safeTable ADD COLUMN $columnName $columnType');
-        LoggerService.info('MySQLService', 'Added column: $columnName to $safeTable');
+        await execute(
+            'ALTER TABLE $safeTable ADD COLUMN $columnName $columnType');
+        LoggerService.info(
+            'MySQLService', 'Added column: $columnName to $safeTable');
       }
     } catch (e) {
-      LoggerService.warning('MySQLService', 'Failed to ensure column $columnName in $table: $e');
+      LoggerService.warning(
+          'MySQLService', 'Failed to ensure column $columnName in $table: $e');
     }
   }
 
@@ -321,7 +347,8 @@ class MySQLService {
       final count = int.tryParse(res.first['IndexIsThere'].toString()) ?? 0;
 
       if (count == 0) {
-        LoggerService.info('MySQLService', 'Adding missing UNIQUE KEY to user_permission...');
+        LoggerService.info(
+            'MySQLService', 'Adding missing UNIQUE KEY to user_permission...');
         // ลบ row ที่ซ้ำกันออกก่อน (เก็บแค่ id ต่ำสุดของแต่ละ userId+permissionKey)
         await execute('''
           DELETE t1 FROM user_permission t1
@@ -335,7 +362,8 @@ class MySQLService {
             'ALTER TABLE user_permission ADD UNIQUE KEY idx_user_perm (userId, permissionKey);');
       }
     } catch (e) {
-      LoggerService.warning('MySQLService', 'ensureUserPermissionUniqueKey error: $e');
+      LoggerService.warning(
+          'MySQLService', 'ensureUserPermissionUniqueKey error: $e');
     }
   }
 
@@ -369,16 +397,17 @@ class MySQLService {
             (res.first['DATA_TYPE'] ?? '').toString().toLowerCase();
         // ถ้ายังเป็น TEXT (เก็บได้แค่ ~65KB) ให้ ALTER เป็น MEDIUMTEXT (~16MB)
         if (dataType == 'tinytext' || dataType == 'text') {
-          LoggerService.info(
-              'MySQLService', 'Upgrading system_settings.setting_value: $dataType → MEDIUMTEXT');
+          LoggerService.info('MySQLService',
+              'Upgrading system_settings.setting_value: $dataType → MEDIUMTEXT');
           await execute(
               'ALTER TABLE system_settings MODIFY COLUMN setting_value MEDIUMTEXT');
-          LoggerService.info(
-              'MySQLService', 'system_settings.setting_value upgraded to MEDIUMTEXT');
+          LoggerService.info('MySQLService',
+              'system_settings.setting_value upgraded to MEDIUMTEXT');
         }
       }
     } catch (e) {
-      LoggerService.warning('MySQLService', 'ensureSettingsColumnSize error: $e');
+      LoggerService.warning(
+          'MySQLService', 'ensureSettingsColumnSize error: $e');
     }
   }
 
@@ -396,13 +425,15 @@ class MySQLService {
         final res = await query(checkSql);
         if (res.isNotEmpty &&
             (int.tryParse(res.first['count'].toString()) ?? 0) == 0) {
-          LoggerService.info('MySQLService', 'Adding $col column to debtor_transaction...');
+          LoggerService.info(
+              'MySQLService', 'Adding $col column to debtor_transaction...');
           await execute(
               'ALTER TABLE debtor_transaction ADD COLUMN $col DECIMAL(10,2) DEFAULT 0.0;');
         }
       }
     } catch (e) {
-      LoggerService.error('MySQLService', 'Error ensuring debtor_transaction columns', e);
+      LoggerService.error(
+          'MySQLService', 'Error ensuring debtor_transaction columns', e);
     }
   }
 

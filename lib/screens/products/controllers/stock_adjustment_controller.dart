@@ -8,6 +8,7 @@ import '../../../services/alert_service.dart';
 import '../../../services/logger_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/telegram_service.dart';
+import '../../../state/auth_provider.dart';
 import '../../../widgets/dialogs/admin_pin_dialog.dart';
 import '../cloud_stock_import_dialog.dart';
 
@@ -16,12 +17,18 @@ class AdjustmentItem {
   final double systemQty;
   final double countedQty;
   final String note;
+  final Set<String> sourceWorkLogIds;
+  final int sourceWorkLogItemCount;
+  final int completedSourceWorkLogItemCount;
 
   AdjustmentItem({
     required this.product,
     required this.systemQty,
     required this.countedQty,
     this.note = '',
+    this.sourceWorkLogIds = const {},
+    this.sourceWorkLogItemCount = 0,
+    this.completedSourceWorkLogItemCount = 0,
   });
 
   double get diff => countedQty - systemQty;
@@ -31,6 +38,18 @@ class AdjustmentItem {
     if (diff < 0) return 'SHORT';
     return 'MATCH';
   }
+
+  AdjustmentItem copyWith({int? completedSourceWorkLogItemCount}) =>
+      AdjustmentItem(
+        product: product,
+        systemQty: systemQty,
+        countedQty: countedQty,
+        note: note,
+        sourceWorkLogIds: sourceWorkLogIds,
+        sourceWorkLogItemCount: sourceWorkLogItemCount,
+        completedSourceWorkLogItemCount: completedSourceWorkLogItemCount ??
+            this.completedSourceWorkLogItemCount,
+      );
 }
 
 class StockAdjustmentState {
@@ -47,11 +66,13 @@ class StockAdjustmentState {
   }
 }
 
-final stockAdjustmentProvider = AutoDisposeNotifierProvider<StockAdjustmentController, StockAdjustmentState>(
+final stockAdjustmentProvider = AutoDisposeNotifierProvider<
+    StockAdjustmentController, StockAdjustmentState>(
   () => StockAdjustmentController(),
 );
 
-class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState> {
+class StockAdjustmentController
+    extends AutoDisposeNotifier<StockAdjustmentState> {
   final ProductRepository productRepo = ProductRepository();
   final StockRepository _stockRepo = StockRepository();
   bool _mounted = true;
@@ -82,7 +103,12 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
   Future<void> openCloudImportDialog(BuildContext context) async {
     final List<Map<String, dynamic>>? importedItems = await showDialog(
       context: context,
-      builder: (context) => const CloudStockImportDialog(),
+      builder: (context) => CloudStockImportDialog(
+        pendingWorkLogIds:
+            state.pendingItems.expand((item) => item.sourceWorkLogIds).toSet(),
+        pendingProductIds:
+            state.pendingItems.map((item) => item.product.id).toSet(),
+      ),
     );
 
     if (importedItems != null && importedItems.isNotEmpty) {
@@ -93,7 +119,7 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
           final prodMap = item['product'] as Map<String, dynamic>;
           prodMap['stockQuantity'] =
               double.tryParse(prodMap['stockQuantity'].toString()) ?? 0.0;
-          
+
           final product = Product.fromJson(prodMap);
 
           newItems.add(AdjustmentItem(
@@ -101,10 +127,16 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
             systemQty: double.tryParse(item['systemQty'].toString()) ?? 0.0,
             countedQty: double.tryParse(item['actualQty'].toString()) ?? 0.0,
             note: 'Import from Cloud',
+            sourceWorkLogIds: Set<String>.from(
+              item['sourceWorkLogIds'] as Set? ?? const <String>{},
+            ),
+            sourceWorkLogItemCount:
+                int.tryParse(item['sourceWorkLogItemCount'].toString()) ?? 0,
           ));
           addedCount++;
         } catch (e, stackTrace) {
-          LoggerService.error('StockAdjust', 'Product Map Error: $e', e, stackTrace);
+          LoggerService.error(
+              'StockAdjust', 'Product Map Error: $e', e, stackTrace);
         }
       }
 
@@ -114,18 +146,16 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
         }
         if (context.mounted) {
           AlertService.show(
-            context: context,
-            message: 'นำเข้า $addedCount รายการแล้ว กรุณากดบันทึกอีกครั้ง',
-            type: 'info'
-          );
+              context: context,
+              message: 'นำเข้า $addedCount รายการแล้ว กรุณากดบันทึกอีกครั้ง',
+              type: 'info');
         }
       } else {
         if (context.mounted) {
           AlertService.show(
-            context: context, 
-            message: 'เกิดข้อผิดพลาดในการโหลดข้อมูลสินค้า', 
-            type: 'error'
-          );
+              context: context,
+              message: 'เกิดข้อผิดพลาดในการโหลดข้อมูลสินค้า',
+              type: 'error');
         }
       }
     }
@@ -159,8 +189,17 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
     if (state.pendingItems.isEmpty) return;
 
     final itemsToAdjust = List<AdjustmentItem>.from(state.pendingItems);
+    final importedItems = itemsToAdjust
+        .where((item) => item.sourceWorkLogIds.isNotEmpty)
+        .toList();
+    final manualItems =
+        itemsToAdjust.where((item) => item.sourceWorkLogIds.isEmpty).toList();
 
-    if (SettingsService().requireAdminForStockAdjust) {
+    // S-Link count sheets are already attributable to the driver and are
+    // atomically protected against duplicate use.  The optional PIN remains
+    // for ad-hoc/manual adjustments only.
+    if (manualItems.isNotEmpty &&
+        SettingsService().requireAdminForStockAdjust) {
       final authorized = await AdminPinDialog.show(
         context,
         title: 'ยืนยันสิทธิ์',
@@ -172,6 +211,7 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
     if (!context.mounted) return;
 
     int successCount = 0;
+    final successfulItems = <AdjustmentItem>{};
 
     showDialog(
       context: context,
@@ -179,7 +219,43 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    for (var item in itemsToAdjust) {
+    if (importedItems.isNotEmpty) {
+      try {
+        await _stockRepo.applySLinkStockCheckAdjustments(
+          importedItems
+              .map(
+                (item) => SLinkStockCheckAdjustment(
+                  productId: item.product.id,
+                  countedQty: item.countedQty,
+                  note:
+                      item.note.isNotEmpty ? item.note : 'ผลตรวจนับจาก S-Link',
+                  sourceWorkLogIds: item.sourceWorkLogIds,
+                ),
+              )
+              .toList(),
+          checkedBy: ref.read(authProvider).currentUser?.id,
+        );
+        successCount += importedItems.length;
+        successfulItems.addAll(importedItems);
+      } catch (e, stackTrace) {
+        LoggerService.error(
+          'StockAdjust',
+          'S-Link stock sheet was not applied',
+          e,
+          stackTrace,
+        );
+        if (context.mounted) {
+          AlertService.show(
+            context: context,
+            message:
+                'ใบตรวจนับ S-Link ถูกใช้แล้วหรือบันทึกไม่สำเร็จ: ไม่มีรายการใดถูกปรับ',
+            type: 'warning',
+          );
+        }
+      }
+    }
+
+    for (final item in manualItems) {
       try {
         bool success = await _stockRepo.updateStockToExact(
           item.product.id,
@@ -191,22 +267,31 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
 
         if (success) {
           successCount++;
+          successfulItems.add(item);
         } else {
           if (context.mounted) {
-            AlertService.show(context: context, message: 'บันทึกสต็อก ${item.product.name} ไม่สำเร็จ', type: 'warning');
+            AlertService.show(
+                context: context,
+                message: 'บันทึกสต็อก ${item.product.name} ไม่สำเร็จ',
+                type: 'warning');
           }
         }
       } catch (e, stackTrace) {
-        LoggerService.error('StockAdjust', 'Failed to update stock for ${item.product.name}', e, stackTrace);
+        LoggerService.error('StockAdjust',
+            'Failed to update stock for ${item.product.name}', e, stackTrace);
         if (context.mounted) {
-          AlertService.show(context: context, message: 'เกิดข้อผิดพลาดในการอัปเดตสต็อก', type: 'error');
+          AlertService.show(
+              context: context,
+              message: 'เกิดข้อผิดพลาดในการอัปเดตสต็อก',
+              type: 'error');
         }
       }
     }
 
     if (!context.mounted) return;
     Navigator.pop(context); // close loading dialog
-    
+
+    if (!context.mounted) return;
     AlertService.show(
       context: context,
       message: 'บันทึกสำเร็จ $successCount รายการ',
@@ -221,7 +306,9 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
             '━━━━━━━━━━━━━━━━━━\n'
             '📅 รายการที่ตรวจนับ: $successCount รายการ\n';
 
-        for (var i = 0; i < (itemsToAdjust.length > 5 ? 5 : itemsToAdjust.length); i++) {
+        for (var i = 0;
+            i < (itemsToAdjust.length > 5 ? 5 : itemsToAdjust.length);
+            i++) {
           final item = itemsToAdjust[i];
           final diff = item.diff;
           final isPos = diff > 0;
@@ -231,7 +318,8 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
               ? "✅ Verified"
               : "${isPos ? "+" : ""}${diff.toStringAsFixed(0)}";
 
-          msg += '📦 ${item.product.name}: $changeText (Sys:${item.systemQty.toStringAsFixed(0)}->Cnt:${item.countedQty.toStringAsFixed(0)})\n';
+          msg +=
+              '📦 ${item.product.name}: $changeText (Sys:${item.systemQty.toStringAsFixed(0)}->Cnt:${item.countedQty.toStringAsFixed(0)})\n';
         }
         if (itemsToAdjust.length > 5) {
           msg += '... และรายการอื่นอีก ${itemsToAdjust.length - 5} รายการ\n';
@@ -240,11 +328,18 @@ class StockAdjustmentController extends AutoDisposeNotifier<StockAdjustmentState
         TelegramService().sendMessage(msg);
       }
     } catch (e, stackTrace) {
-      LoggerService.error('StockAdjust', 'Telegram Stock Adjust Error: $e', e, stackTrace);
+      LoggerService.error(
+          'StockAdjust', 'Telegram Stock Adjust Error: $e', e, stackTrace);
     }
 
     if (_mounted) {
-      state = state.copyWith(pendingItems: []);
+      // Keep only failed rows on screen for a deliberate retry. An imported
+      // sheet leaves the list only after stock and its closed status commit.
+      state = state.copyWith(
+        pendingItems: state.pendingItems
+            .where((item) => !successfulItems.contains(item))
+            .toList(),
+      );
     }
   }
 }

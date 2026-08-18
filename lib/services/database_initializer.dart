@@ -56,7 +56,15 @@ class DatabaseInitializer {
           .initActivityLogTable(); // ✅ Added: Fixes the crash when logging activity
       await _db.initSystemSettingsTable(); // ✅ Global Settings Sync
       await _db.initPosCommandsTable(); // ✅ POS Commands (Local Polling)
-      await _db.initShopWorkLogTables(); // ✅ Shop Work Logs (Offline-First Migration)
+      await _db
+          .initShopWorkLogTables(); // ✅ Shop Work Logs (Offline-First Migration)
+
+      await _safeInit('Shop work-log stock review columns', () async {
+        await _ensureColumn(
+            'shop_work_logs', 'stock_checked_at', 'DATETIME NULL');
+        await _ensureColumn('shop_work_logs', 'stock_checked_by', 'INT NULL');
+        await _ensureColumn('shop_work_logs', 'stock_check_note', 'TEXT NULL');
+      });
 
       // ------------------------------------------------------------------
       // ✅ [AUTO-FIX] ตรวจสอบและเพิ่มคอลัมน์ที่ขาดในตาราง Order
@@ -122,6 +130,12 @@ class DatabaseInitializer {
       await _safeInit('PO Items Schema', () async {
         await _ensureColumn('purchase_order_item', 'receivedQuantity',
             'DECIMAL(15,2) DEFAULT 0.00');
+        await _db.execute(
+            'ALTER TABLE purchase_order_item MODIFY COLUMN quantity DECIMAL(15,4) NOT NULL');
+        await _db.execute(
+            'ALTER TABLE purchase_order_item MODIFY COLUMN costPrice DECIMAL(15,4) NOT NULL');
+        await _db.execute(
+            'ALTER TABLE purchase_order_item MODIFY COLUMN total DECIMAL(15,2) NOT NULL');
       });
 
       // ✅ [Partial Receive] Update Status ENUM
@@ -142,30 +156,38 @@ class DatabaseInitializer {
       // Sales & Billing
       await _safeInit('Sales (Schema)', () => SalesRepository().initTable());
       await _safeInit('Billing Notes', () => BillingRepository().initTable());
-      await _safeInit('Delivery History', () => DeliveryHistoryRepository().initTable());
+      await _safeInit(
+          'Delivery History', () => DeliveryHistoryRepository().initTable());
       await _safeInit('Delivery History Schema', () async {
         // Ensure new columns exist for existing installs
-        await _ensureColumn('delivery_history', 'customerPhone', 'VARCHAR(50) NULL');
+        await _ensureColumn(
+            'delivery_history', 'customerPhone', 'VARCHAR(50) NULL');
         await _ensureColumn('delivery_history', 'locationUrl', 'TEXT NULL');
         await _ensureColumn('delivery_history', 'receiptUrl', 'TEXT NULL');
-        await _ensureIndex('delivery_history', 'idx_delivery_history_vehicle', 'vehiclePlate');
-        await _ensureIndex('delivery_history', 'idx_delivery_history_firebase', 'firebaseJobId');
+        await _ensureIndex(
+            'delivery_history', 'idx_delivery_history_vehicle', 'vehiclePlate');
+        await _ensureIndex('delivery_history', 'idx_delivery_history_firebase',
+            'firebaseJobId');
       });
 
       // ⛽ Fuel Management Tables
       await _safeInit('Fuel Prices', () => FuelPriceRepository().initTable());
-      await _safeInit('Vehicle Settings', () => VehicleSettingsRepository().initTable());
+      await _safeInit(
+          'Vehicle Settings', () => VehicleSettingsRepository().initTable());
 
       // Others
       await _safeInit('Expenses', () => ExpenseRepository().initTable());
       await _safeInit('Promotions', () => PromotionRepository().initTable());
       await _safeInit('Rewards', () => RewardRepository().initTable());
-      
+
       // 🧑‍💼 HR & Payroll Tables
-      await _safeInit('Employee Profiles', () => EmployeeRepository().initTable());
-      await _safeInit('Attendance Logs', () => AttendanceRepository().initTable());
+      await _safeInit(
+          'Employee Profiles', () => EmployeeRepository().initTable());
+      await _safeInit(
+          'Attendance Logs', () => AttendanceRepository().initTable());
       await _safeInit('Leave Requests', () => LeaveRepository().initTable());
-      await _safeInit('Advance Payments', () => AdvanceRepository().initTable());
+      await _safeInit(
+          'Advance Payments', () => AdvanceRepository().initTable());
       await _safeInit('Payroll Records', () => PayrollRepository().initTable());
 
       await _safeInit('Shift Summary', () async {
@@ -193,9 +215,11 @@ class DatabaseInitializer {
       // ✅ Upgrade shift_summary.closedBy from INT to VARCHAR(100) in case it was already created
       await _safeInit('Shift Summary (Schema Upgrade)', () async {
         try {
-          await _db.execute('ALTER TABLE shift_summary MODIFY COLUMN closedBy VARCHAR(100) NULL');
+          await _db.execute(
+              'ALTER TABLE shift_summary MODIFY COLUMN closedBy VARCHAR(100) NULL');
         } catch (e) {
-          debugPrint('Notice: shift_summary.closedBy modify skipped or not needed: \$e');
+          debugPrint(
+              'Notice: shift_summary.closedBy modify skipped or not needed: \$e');
         }
       });
 

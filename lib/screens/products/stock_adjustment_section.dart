@@ -114,7 +114,7 @@ class _CheckStockPage extends ConsumerWidget {
                   CustomButton(
                     onPressed: () => controller.openCloudImportDialog(context),
                     icon: Icons.cloud_download,
-                    label: 'ดึงใบงาน S_MartPOS',
+                    label: 'ดึงใบตรวจนับ S-Link',
                     backgroundColor: Colors.teal,
                     type: ButtonType.primary,
                   ),

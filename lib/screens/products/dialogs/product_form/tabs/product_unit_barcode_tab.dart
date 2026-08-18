@@ -107,12 +107,19 @@ extension ProductUnitBarcodeTabExtension on _ProductFormDialogState {
           ),
           CustomButton(
             label: 'เพิ่ม',
-            onPressed: () {
+            onPressed: () async {
               if (barcodeCtrl.text.isEmpty || unitCtrl.text.isEmpty) return;
+              final barcode = barcodeCtrl.text.trim();
+              final isDuplicateInDraft = barcode == _barcodeCtrl.text.trim() ||
+                  _extraBarcodes.any((item) => item.barcode.trim() == barcode);
+              if (isDuplicateInDraft ||
+                  await _warnIfBarcodeIsAlreadyUsed(barcode)) {
+                return;
+              }
               setState(() {
                 _extraBarcodes.add(ProductBarcode(
                   productId: widget.product?.id ?? 0,
-                  barcode: barcodeCtrl.text,
+                  barcode: barcode,
                   unitName: unitCtrl.text,
                   price: double.tryParse(priceCtrl.text) ?? 0,
                   quantity: double.tryParse(qtyCtrl.text) ?? 1,

@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "name": "ESP32 Arduino",
+      "compilerPath": "C:/Users/msiri/AppData/Local/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32-elf-g++.exe",
+      "includePath": [
+        "${workspaceFolder}/GPS/**",
+        "C:/Users/msiri/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32",
+        "C:/Users/msiri/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.11/variants/esp32",
+        "C:/Users/msiri/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/WiFi/src",
+        "C:/Users/msiri/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/HTTPClient/src",
+        "C:/Users/msiri/AppData/Local/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/NetworkClientSecure/src",
+        "C:/Users/msiri/OneDrive/เอกสาร/Arduino/libraries/TinyGPSPlus/src",
+        "C:/Users/msiri/OneDrive/เอกสาร/Arduino/libraries/ArduinoJson/src",
+        "C:/Users/msiri/OneDrive/เอกสาร/Arduino/libraries/TinyGSM/src",
+        "C:/Users/msiri/OneDrive/เอกสาร/Arduino/libraries/ArduinoHttpClient/src"
+      ],
+      "defines": [
+        "ARDUINO=10819",
+        "ARDUINO_ARCH_ESP32",
+        "ESP32",
+        "ARDUINO_ESP32_DEV"
+      ],
+      "cStandard": "gnu17",
+      "cppStandard": "gnu++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}

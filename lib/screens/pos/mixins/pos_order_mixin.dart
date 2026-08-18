@@ -5,9 +5,11 @@ extension PosOrderExtension on PosStateNotifier {
     final localSettings = LocalSettingsService();
     final pm = lastPaymentMethod.toUpperCase();
     if (pm.contains('CASH') || pm.contains('TRANSFER') || pm.contains('QR')) {
-      return await localSettings.getBool('auto_print_receipt', defaultValue: false);
+      return await localSettings.getBool('auto_print_receipt',
+          defaultValue: false);
     }
-    return await localSettings.getBool('auto_print_delivery_note', defaultValue: false);
+    return await localSettings.getBool('auto_print_delivery_note',
+        defaultValue: false);
   }
 
   void _updateDisplay() {
@@ -20,7 +22,10 @@ extension PosOrderExtension on PosStateNotifier {
 
   void updateCustomerDisplay({double received = 0.0, double change = 0.0}) {
     _hardwareService.updateCart(
-        grandTotal: grandTotal, items: cart, received: received, change: change);
+        grandTotal: grandTotal,
+        items: cart,
+        received: received,
+        change: change);
   }
 
   Future<void> showPaymentQr(double amount) async {
@@ -55,6 +60,9 @@ extension PosOrderExtension on PosStateNotifier {
         deliveryType: deliveryType,
         note: note,
         pointsUsed: _pointsToRedeem,
+        pointRedemptionBase: pointRedemptionBase,
+        couponCode: _appliedCouponCode,
+        couponDiscountAmount: _couponDiscountAmount,
         activePromotions: _activePromotions,
         currentTier: currentTier,
       );
@@ -65,14 +73,6 @@ extension PosOrderExtension on PosStateNotifier {
       final received = payments.fold(0.0, (sum, p) => sum + p.amount);
       final currentChange = (received - grandTotal).clamp(0.0, double.infinity);
       final paymentMethodStr = payments.map((p) => p.method).join(',');
-
-      if (_appliedCouponCode != null) {
-        try {
-          await RewardRepository().useCoupon(_appliedCouponCode!, orderId);
-        } catch (e) {
-          debugPrint('⚠️ Error marking coupon as used: $e');
-        }
-      }
 
       _lastOrder = LastOrderInfo(
         orderId: orderId,
@@ -90,13 +90,22 @@ extension PosOrderExtension on PosStateNotifier {
       if (deliveryType == DeliveryType.delivery ||
           deliveryType == DeliveryType.pickup) {
         _processDeliveryJobInBackground(
-          orderId, deliveryType, currentCust, currentItems,
-          grandTotal, received, discountAmount, vatAmount, payments,
+          orderId,
+          deliveryType,
+          currentCust,
+          currentItems,
+          grandTotal,
+          received,
+          discountAmount,
+          vatAmount,
+          payments,
           manualNote: note,
         );
       }
 
-      _hardwareService.openDrawer().catchError((e) => debugPrint('Drawer Error: $e'));
+      _hardwareService
+          .openDrawer()
+          .catchError((e) => debugPrint('Drawer Error: $e'));
       _hardwareService.setSuppressDisplay(true);
 
       await clearCart(returnStock: false);

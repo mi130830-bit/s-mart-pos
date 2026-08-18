@@ -6,7 +6,9 @@ import '../../models/customer.dart';
 /// Dialog ให้แคชเชียร์เลือกจำนวนแต้มที่จะแลกเป็นส่วนลด
 class PointRedemptionDialog extends StatefulWidget {
   final Customer customer;
-  final double grandTotal; // ยอดก่อนหักแต้ม
+
+  /// ยอดหลังส่วนลดปกติ/โปรโมชั่น และก่อนใช้แต้ม (ฐานก่อน VAT)
+  final double grandTotal;
   final double pointRedemptionRate; // กี่แต้ม = 1 บาท (เช่น 10)
   final int currentPointsUsed; // แต้มที่เลือกไว้แล้ว (0 ถ้าเพิ่งเปิด)
 
@@ -26,17 +28,19 @@ class _PointRedemptionDialogState extends State<PointRedemptionDialog> {
   late TextEditingController _pointsCtrl;
   int _pointsToUse = 0;
 
-  // จำนวนแต้มสูงสุดที่ใช้ได้ — ไม่เกิน currentPoints และไม่เกิน grandTotal*rate
+  // จำนวนแต้มสูงสุดที่ใช้ได้ — ไม่เกิน 75% ของฐานขายและแต้มที่มีอยู่
   int get _maxRedeemable {
     if (widget.pointRedemptionRate <= 0) return 0;
-    final maxByAmount = (widget.grandTotal * widget.pointRedemptionRate).floor();
+    final maxByAmount =
+        (widget.grandTotal * 0.75 * widget.pointRedemptionRate).floor();
     return widget.customer.currentPoints < maxByAmount
         ? widget.customer.currentPoints
         : maxByAmount;
   }
 
-  double get _discountAmount =>
-      widget.pointRedemptionRate > 0 ? _pointsToUse / widget.pointRedemptionRate : 0;
+  double get _discountAmount => widget.pointRedemptionRate > 0
+      ? _pointsToUse / widget.pointRedemptionRate
+      : 0;
 
   @override
   void initState() {
@@ -158,7 +162,8 @@ class _PointRedemptionDialogState extends State<PointRedemptionDialog> {
                 Expanded(
                   child: _InfoTile(
                     label: 'อัตราแลก',
-                    value: '${fmt.format(widget.pointRedemptionRate.toInt())} แต้ม / 1 ฿',
+                    value:
+                        '${fmt.format(widget.pointRedemptionRate.toInt())} แต้ม / 1 ฿',
                     icon: Icons.swap_horiz,
                     color: Colors.purple,
                   ),
@@ -275,8 +280,7 @@ class _PointRedemptionDialogState extends State<PointRedemptionDialog> {
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color:
-                            _pointsToUse > 0 ? Colors.green : Colors.grey,
+                        color: _pointsToUse > 0 ? Colors.green : Colors.grey,
                       ),
                     ),
                   ],
@@ -349,7 +353,8 @@ class _InfoTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                 Text(value,
                     style: TextStyle(
                         fontSize: 13,

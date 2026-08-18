@@ -11,6 +11,92 @@ part 'stock/purchase_order_receiving_extension.dart';
 class StockRepository {
   final MySQLService _dbService = MySQLService();
 
+  /// Applies rows imported from S-Link only.  It deliberately owns one
+  /// transaction for the full sheet: the sheet is locked and verified open
+  /// before a single product or ledger row can change, then marked checked in
+  /// that same transaction.  Manual stock adjustments continue to use
+  /// [updateStockToExact].
+  Future<void> applySLinkStockCheckAdjustments(
+    List<SLinkStockCheckAdjustment> adjustments, {
+    int? checkedBy,
+  }) async {
+    if (adjustments.isEmpty) return;
+    if (!_dbService.isConnected()) await _dbService.connect();
+    if (!_dbService.isConnected()) {
+      throw StateError('ไม่สามารถเชื่อมต่อฐานข้อมูลเพื่อปรับใบตรวจนับได้');
+    }
+
+    final sheetIds =
+        adjustments.expand((adjustment) => adjustment.sourceWorkLogIds).toSet();
+    if (sheetIds.isEmpty) {
+      throw ArgumentError('S-Link stock adjustments require a source sheet');
+    }
+
+    await _dbService.execute('START TRANSACTION');
+    try {
+      // Lock every source sheet first.  This makes a concurrent POS session
+      // wait and then fail here after the first session has closed the sheet.
+      for (final sheetId in sheetIds) {
+        final sheet = await _dbService.query(
+          '''SELECT stock_checked_at FROM shop_work_logs
+             WHERE sync_id = :syncId FOR UPDATE''',
+          {'syncId': sheetId},
+        );
+        if (sheet.length != 1 || sheet.first['stock_checked_at'] != null) {
+          throw StateError('ใบตรวจนับถูกยืนยันไปแล้วหรือไม่พบ: $sheetId');
+        }
+      }
+
+      for (final adjustment in adjustments) {
+        final product = await _dbService.query(
+          'SELECT stockQuantity FROM product WHERE id = :id FOR UPDATE',
+          {'id': adjustment.productId},
+        );
+        if (product.isEmpty) {
+          throw StateError(
+              'ไม่พบสินค้าสำหรับใบตรวจนับ: ${adjustment.productId}');
+        }
+        final current =
+            double.tryParse(product.first['stockQuantity'].toString()) ?? 0.0;
+        final difference = adjustment.countedQty - current;
+        if (difference == 0) {
+          await _dbService.execute(
+            '''INSERT INTO stockledger
+                 (productId, transactionType, quantityChange, note, createdAt)
+               VALUES (:pid, 'ADJUST_FIX', 0, :note, NOW())''',
+            {'pid': adjustment.productId, 'note': adjustment.note},
+          );
+        } else {
+          await _adjustRecursive(
+            adjustment.productId,
+            difference,
+            'ADJUST_FIX',
+            adjustment.note,
+            null,
+            maxDepth: 10,
+          );
+        }
+      }
+
+      for (final sheetId in sheetIds) {
+        final closed = await _dbService.execute(
+          '''UPDATE shop_work_logs
+             SET stock_checked_at = NOW(), stock_checked_by = :checkedBy,
+                 stock_check_note = 'ปรับสต๊อกจากผลตรวจนับ S-Link'
+             WHERE sync_id = :syncId AND stock_checked_at IS NULL''',
+          {'checkedBy': checkedBy, 'syncId': sheetId},
+        );
+        if (closed.affectedRows.toInt() != 1) {
+          throw StateError('ไม่สามารถปิดใบตรวจนับ: $sheetId');
+        }
+      }
+      await _dbService.execute('COMMIT');
+    } catch (e) {
+      await _dbService.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
   // ... (ฟังก์ชัน adjustStock ของเดิม ห้ามลบ เก็บไว้เหมือนเดิม) ...
   Future<bool> adjustStock({
     required int productId,
@@ -39,10 +125,11 @@ class StockRepository {
       // --- Notification Logic (Fire & Forget) ---
       // ✅ ย้ายออกนอก transaction เพื่อไม่ให้ block
       _checkAndNotify(productId, quantityChange, type, note);
-      
+
       ActivityRepository().log(
         action: 'ADJUST_STOCK',
-        details: 'Product ID: $productId, Change: $quantityChange, Type: $type, Note: ${note ?? "-"}',
+        details:
+            'Product ID: $productId, Change: $quantityChange, Type: $type, Note: ${note ?? "-"}',
       );
 
       return true;
@@ -55,6 +142,52 @@ class StockRepository {
         rethrow;
       }
     }
+  }
+
+  /// Marks S-Link count sheets as reviewed only after every item in the sheet
+  /// has been applied successfully. This keeps unreviewed sheets available
+  /// for retry and prevents a second stock adjustment for the same sheet.
+  Future<Set<String>> markShopWorkLogsStockChecked(
+    Set<String> syncIds, {
+    int? checkedBy,
+  }) async {
+    if (syncIds.isEmpty) return <String>{};
+    if (!_dbService.isConnected()) await _dbService.connect();
+    if (!_dbService.isConnected()) {
+      throw StateError('ไม่สามารถเชื่อมต่อฐานข้อมูลเพื่อปิดใบตรวจนับได้');
+    }
+
+    final closed = <String>{};
+    for (final syncId in syncIds) {
+      final result = await _dbService.execute(
+        '''
+        UPDATE shop_work_logs
+        SET stock_checked_at = NOW(),
+            stock_checked_by = :checkedBy,
+            stock_check_note = 'ปรับสต๊อกจากผลตรวจนับ S-Link'
+        WHERE sync_id = :syncId AND stock_checked_at IS NULL
+        ''',
+        {'checkedBy': checkedBy, 'syncId': syncId},
+      );
+      if (result.affectedRows.toInt() == 1) {
+        closed.add(syncId);
+        continue;
+      }
+
+      // A zero-row update is safe only when this exact sheet was already
+      // closed earlier (for example, after an interrupted UI retry).
+      final verification = await _dbService.query(
+        '''SELECT stock_checked_at FROM shop_work_logs
+           WHERE sync_id = :syncId AND stock_checked_at IS NOT NULL''',
+        {'syncId': syncId},
+      );
+      if (verification.isNotEmpty) {
+        closed.add(syncId);
+      } else {
+        throw StateError('ไม่พบใบตรวจนับที่รอปิด: $syncId');
+      }
+    }
+    return closed;
   }
 
   // Helper สำหรับแจ้งเตือน
@@ -171,7 +304,8 @@ class StockRepository {
                 : (type == 'CART_OUT' ? 'USAGE' : type),
             'Linked from Product #$pId',
             oId,
-            visited: Set.from(visited), // ✅ Copy per branch — ป้องกัน false-positive cycle detection
+            visited: Set.from(
+                visited), // ✅ Copy per branch — ป้องกัน false-positive cycle detection
             maxDepth: maxDepth - 1,
           );
         }
@@ -240,10 +374,11 @@ class StockRepository {
       await _dbService.execute('COMMIT;');
 
       _checkAndNotify(productId, diff, 'ADJUST_FIX', note);
-      
+
       ActivityRepository().log(
         action: 'ADJUST_STOCK_EXACT',
-        details: 'Product ID: $productId, Set to: $actualQty (Diff: $diff), Note: ${note ?? "-"}',
+        details:
+            'Product ID: $productId, Set to: $actualQty (Diff: $diff), Note: ${note ?? "-"}',
       );
 
       return true;
@@ -290,7 +425,8 @@ class StockRepository {
   }
 
   // Private helper to revert stock of a purchase order (used during edit/deletion/qty update)
-  Future<void> _revertStockForPurchaseOrder(int poId, {required String note}) async {
+  Future<void> _revertStockForPurchaseOrder(int poId,
+      {required String note}) async {
     final oldPoRes = await _dbService.query(
       'SELECT status FROM purchase_order WHERE id = :id FOR UPDATE',
       {'id': poId},
@@ -309,7 +445,8 @@ class StockRepository {
         if (oldStatus == 'RECEIVED') {
           revertQty = double.tryParse(item['quantity'].toString()) ?? 0.0;
         } else if (oldStatus == 'PARTIAL') {
-          revertQty = double.tryParse(item['receivedQuantity'].toString()) ?? 0.0;
+          revertQty =
+              double.tryParse(item['receivedQuantity'].toString()) ?? 0.0;
         }
         if (pId > 0 && revertQty > 0) {
           await _adjustRecursive(
@@ -324,4 +461,18 @@ class StockRepository {
       }
     }
   }
+}
+
+class SLinkStockCheckAdjustment {
+  const SLinkStockCheckAdjustment({
+    required this.productId,
+    required this.countedQty,
+    required this.note,
+    required this.sourceWorkLogIds,
+  });
+
+  final int productId;
+  final double countedQty;
+  final String note;
+  final Set<String> sourceWorkLogIds;
 }

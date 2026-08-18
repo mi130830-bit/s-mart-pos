@@ -2,6 +2,57 @@
 part of '../product_form_dialog.dart';
 
 extension ProductFormActionsExtension on _ProductFormDialogState {
+  Future<bool> _warnIfBarcodeIsAlreadyUsed(String rawBarcode) async {
+    final barcode = rawBarcode.trim();
+    if (barcode.isEmpty) return false;
+    try {
+      final conflict = await widget.repo.findBarcodeConflict(
+        barcode,
+        excludingProductId: widget.product?.id,
+      );
+      if (conflict == null || !mounted) return false;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('บาร์โค้ดถูกใช้งานแล้ว'),
+          content: Text(
+            'บาร์โค้ด $barcode ถูกใช้กับสินค้า ${conflict['name'] ?? ''} แล้ว\nกรุณาตรวจสอบก่อนบันทึก',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ตกลง'),
+            ),
+          ],
+        ),
+      );
+      return true;
+    } catch (_) {
+      // Save-time validation still protects this case when the lookup fails.
+      return false;
+    }
+  }
+
+  Future<String?> _validateBarcodesForSave(String primaryBarcode) async {
+    final codes = <String>[];
+    if (primaryBarcode.isNotEmpty) codes.add(primaryBarcode);
+    codes.addAll(_extraBarcodes.map((item) => item.barcode.trim()));
+    final seen = <String>{};
+    for (final code in codes) {
+      if (code.isEmpty || !seen.add(code)) {
+        return 'มีบาร์โค้ดซ้ำในสินค้านี้: $code';
+      }
+      final conflict = await widget.repo.findBarcodeConflict(
+        code,
+        excludingProductId: widget.product?.id,
+      );
+      if (conflict != null) {
+        return 'บาร์โค้ด $code ถูกใช้กับสินค้า ${conflict['name'] ?? ''} แล้ว';
+      }
+    }
+    return null;
+  }
+
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     // Pick an image.
@@ -332,6 +383,22 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
 
     // Pass Validation
     {
+      // Generate before validating so the save-time guard covers every code.
+      String barcode = _barcodeCtrl.text.trim();
+      if (barcode.isEmpty) {
+        barcode = (DateTime.now().millisecondsSinceEpoch % 100000000)
+            .toString()
+            .padLeft(8, '0');
+      }
+      final barcodeError = await _validateBarcodesForSave(barcode);
+      if (barcodeError != null) {
+        if (mounted) {
+          AlertService.show(
+              context: context, message: barcodeError, type: 'error');
+        }
+        return;
+      }
+
       // Show Loading
       showDialog(
         context: context,
@@ -341,15 +408,9 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
 
       try {
         // Auto-generate barcode if empty (Always, even if delayedSave)
-        String? barcode = _barcodeCtrl.text.trim();
-        if (barcode.isEmpty) {
-          // Generate 8-digit barcode
-          barcode = (DateTime.now().millisecondsSinceEpoch % 100000000)
-              .toString()
-              .padLeft(8, '0');
-        }
-
-        final newStock = widget.disableStockInput ? 0.0 : (double.tryParse(_stockCtrl.text) ?? 0.0);
+        final newStock = widget.disableStockInput
+            ? 0.0
+            : (double.tryParse(_stockCtrl.text) ?? 0.0);
         final oldStock = widget.product?.stockQuantity ?? 0.0;
 
         // ✅ Security Check: If stock changed
@@ -384,7 +445,7 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
         final newProduct = Product(
           id: widget.product?.id ?? 0,
           name: _nameCtrl.text,
-          barcode: barcode.isEmpty ? null : barcode, // Allow null if empty
+          barcode: barcode, // Generated above when a primary barcode is empty
           alias: _aliasCtrl.text.isEmpty ? null : _aliasCtrl.text,
           productType: _selectedTypeId ?? 0, // Dynamic Type
           costPrice: double.tryParse(_costCtrl.text) ?? 0.0,

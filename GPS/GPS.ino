@@ -16,6 +16,13 @@
 // ------------------------------------------------------------------
 // 📋 ตั้งค่าหลัก (แก้ได้ที่นี่จุดเดียว)
 // ------------------------------------------------------------------
+//
+// ค่าลับ (Wi-Fi password / GPS device key) อยู่ใน
+// gps_tracker_secrets.h ซึ่งเป็นไฟล์เฉพาะเครื่องและไม่ถูกเก็บใน Git.
+// ถ้าย้ายไปเครื่องใหม่ ให้คัดลอก gps_tracker_secrets.h.example
+// เป็น gps_tracker_secrets.h แล้วกรอกค่าของเครื่องนั้นก่อนอัปโหลด.
+#include "gps_tracker_secrets.h"
+
 // Vehicle-specific sketches can override this before including this firmware.
 // Keep the identifier identical to the vehicle name used by the GPS web map.
 #ifndef GPS_VEHICLE_NAME
@@ -25,14 +32,8 @@ const char* VEHICLE_NAME = GPS_VEHICLE_NAME;       // ชื่อรถ (แส
 const char* SERVER_URL   = "https://api.namecheap.work/api/v1/gps";
 const unsigned long SEND_INTERVAL_MS = 5000;       // ส่งพิกัดทุก 5 วินาที
 
-// -- WiFi (โหมดทดสอบ) --
-const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-
 // -- 4G SIM (AIS) --
-const char* APN = "internet";  // APN ของ AIS
-// ต้องตรงกับ GPS_DEVICE_KEY ใน backend/.env
-const char* GPS_DEVICE_KEY = "s-mart-gps-a7670e-2026";
+const char* APN = GPS_APN;  // ค่า APN ของซิมที่ใช้งานจริง
 
 // ------------------------------------------------------------------
 // 📌 Pin Mapping (ตรวจสอบให้ตรงกับการต่อสายจริง)
@@ -46,6 +47,9 @@ const char* GPS_DEVICE_KEY = "s-mart-gps-a7670e-2026";
 #define GSM_RX_PIN  26   // ต่อสาย TX จาก A7670E เข้า GPIO 26 (ESP32 RX1)
 #define GSM_TX_PIN  25   // ต่อสาย RX จาก A7670E เข้า GPIO 25 (ESP32 TX1)
 #define GSM_BAUD    115200
+// Power: supply VCC/GND directly from a regulated 5V source rated >= 2A peak.
+// VDD is an output/rail to measure, not a 3.3V supply input. PWR_EN is left
+// physically controlled until the replacement board's pinout is confirmed.
 
 // ------------------------------------------------------------------
 // 📦 Libraries
@@ -76,6 +80,13 @@ unsigned long lastCheckGpsTime = 0;
 bool          isConnected       = false;
 
 #ifdef USE_4G
+// A dead/unpowered modem cannot answer AT commands. Keep GPS processing alive
+// and probe the modem at a measured interval instead of issuing network calls
+// on every location update.
+const unsigned long MODEM_RETRY_INTERVAL_MS = 30000;
+unsigned long lastModemStartAttempt = 0;
+bool modemIsResponsive = false;
+
 // TinyGSM's A7672X localIP() parser can report 0.0.0.0 even though the
 // modem's PDP context has an address. Read the documented PDP query directly.
 String getDataIpFromModem() {
@@ -395,11 +406,15 @@ bool sendHttpPostViaA7670(const char* host, const char* path,
 #ifdef USE_4G
 bool connect4G(bool restartModem) {
   if (restartModem) {
+    lastModemStartAttempt = millis();
     Serial.println("[4G] กำลัง Restart โมดูล A7670E...");
     if (!modem.restart()) {
+      modemIsResponsive = false;
       Serial.println("[4G] ❌ โมเด็มไม่ตอบสนอง");
+      Serial.println("[4G]    หยุดลองต่อเครือข่ายชั่วคราว; ตรวจ VCC=5V, GND ร่วม, PWR_EN และ TX/RX");
       return false;
     }
+    modemIsResponsive = true;
   }
 
   Serial.print("[4G] IMEI: ");
@@ -454,6 +469,23 @@ bool connect4G(bool restartModem) {
   Serial.println(getDataIpFromModem());
   return true;
 }
+
+bool ensure4GConnection() {
+  if (!modemIsResponsive) {
+    if (millis() - lastModemStartAttempt < MODEM_RETRY_INTERVAL_MS) {
+      return false;
+    }
+    Serial.println("[4G] ลองปลุกโมเด็มใหม่หลังรอ 30 วินาที...");
+    isConnected = connect4G(true);
+    return isConnected;
+  }
+
+  if (!modem.isGprsConnected() || !hasUsableDataIp()) {
+    Serial.println("[4G] ⚠️ GPRS หลุด! กำลัง Reconnect...");
+    isConnected = connect4G(false);
+  }
+  return isConnected;
+}
 #endif
 
 // ------------------------------------------------------------------
@@ -474,11 +506,7 @@ void sendGpsData(double lat, double lng, double speed) {
 
 #ifdef USE_4G
   // --- โหมด 4G ---
-  if (!modem.isGprsConnected() || !hasUsableDataIp()) {
-    Serial.println("[4G] ⚠️ GPRS หลุด! กำลัง Reconnect...");
-    isConnected = connect4G(false);
-    if (!isConnected) return;
-  }
+  if (!ensure4GConnection()) return;
 
   // Temporary compatibility path: A7670E cannot complete TLS negotiation
   // with this Cloudflare edge. The API still requires GPS_DEVICE_KEY.

@@ -140,6 +140,21 @@ void main() {
       expect(result.vatAmount.toDouble(), closeTo(12.6, 0.01));
       expect(result.grandTotal.toDouble(), closeTo(192.6, 0.01));
     });
+
+    test('Coupon discount is applied before VAT', () {
+      final result = calcService.calculateTotals(
+        cart: [createItem(100.0, 1.0)],
+        billDiscountVal: 0,
+        isPercentDiscount: false,
+        promoDiscountVal: 0,
+        couponDiscountAmount: 5.0,
+        vatType: VatType.excluded,
+      );
+
+      expect(result.couponDiscountAmount.toDouble(), 5.0);
+      expect(result.vatAmount.toDouble(), closeTo(6.65, 0.001));
+      expect(result.grandTotal.toDouble(), closeTo(101.65, 0.001));
+    });
   });
 
   group('PriceCalculationService - Edge Cases', () {

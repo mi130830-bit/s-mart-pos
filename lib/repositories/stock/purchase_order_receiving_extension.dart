@@ -3,12 +3,18 @@ part of '../stock_repository.dart';
 extension PurchaseOrderReceivingExtension on StockRepository {
   Future<void> receivePurchaseOrder(int poId) async {
     if (!_dbService.isConnected()) await _dbService.connect();
-    final items = await _dbService
-        .query('SELECT * FROM purchase_order_item WHERE poId = :id', {'id': poId});
+    final items = await _dbService.query(
+        'SELECT * FROM purchase_order_item WHERE poId = :id', {'id': poId});
     final header = await _dbService
         .query('SELECT * FROM purchase_order WHERE id = :id', {'id': poId});
 
     if (items.isEmpty || header.isEmpty) throw Exception('PO not found');
+
+    if (items.any(
+        (item) => (int.tryParse(item['productId'].toString()) ?? 0) <= 0)) {
+      throw Exception(
+          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
+    }
 
     final docNo = header.first['documentNo'] ?? '-';
     final List<Map<String, dynamic>> notifyQueue = [];
@@ -28,8 +34,12 @@ extension PurchaseOrderReceivingExtension on StockRepository {
           'UPDATE product SET costPrice = :cost WHERE id = :id',
           {'cost': cost, 'id': pId},
         );
-        notifyQueue
-            .add({'id': pId, 'qty': qty, 'type': 'PURCHASE_IN', 'note': 'PO #$poId'});
+        notifyQueue.add({
+          'id': pId,
+          'qty': qty,
+          'type': 'PURCHASE_IN',
+          'note': 'PO #$poId'
+        });
       }
 
       await _dbService.execute(
@@ -54,6 +64,8 @@ extension PurchaseOrderReceivingExtension on StockRepository {
     if (!_dbService.isConnected()) await _dbService.connect();
     if (receivedItems.isEmpty) throw Exception('No items to receive');
 
+    await _ensureNoUnresolvedPurchaseOrderLines(originalPoId);
+
     await _dbService.execute('START TRANSACTION;');
 
     try {
@@ -67,6 +79,8 @@ extension PurchaseOrderReceivingExtension on StockRepository {
         final double qtyReceivedNow =
             double.tryParse(item['quantity'].toString()) ?? 0;
         final double cost = double.tryParse(item['costPrice'].toString()) ?? 0;
+        final double retail =
+            double.tryParse(item['retailPrice'].toString()) ?? 0;
         if (pId == 0 || qtyReceivedNow <= 0) continue;
 
         await _dbService.execute(
@@ -77,13 +91,18 @@ extension PurchaseOrderReceivingExtension on StockRepository {
               total = quantity * :cost 
           WHERE poId = :poId AND productId = :pId
           ''',
-          {'qty': qtyReceivedNow, 'cost': cost, 'poId': originalPoId, 'pId': pId},
+          {
+            'qty': qtyReceivedNow,
+            'cost': cost,
+            'poId': originalPoId,
+            'pId': pId
+          },
         );
         await _adjustRecursive(pId, qtyReceivedNow, 'PURCHASE_IN',
             'Ref: $docNo | Cost: $cost | PO: #$originalPoId (Partial)', null);
         await _dbService.execute(
-          'UPDATE product SET costPrice = :cost WHERE id = :id',
-          {'cost': cost, 'id': pId},
+          'UPDATE product SET costPrice = :cost, retailPrice = :retail WHERE id = :id',
+          {'cost': cost, 'retail': retail, 'id': pId},
         );
       }
 
@@ -114,11 +133,13 @@ extension PurchaseOrderReceivingExtension on StockRepository {
       );
       double newTotal = 0.0;
       if (totalRes.isNotEmpty && totalRes.first['newTotal'] != null) {
-        newTotal = double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
+        newTotal =
+            double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
       }
 
       final vatRes = await _dbService.query(
-          'SELECT vatType FROM purchase_order WHERE id = :id', {'id': originalPoId});
+          'SELECT vatType FROM purchase_order WHERE id = :id',
+          {'id': originalPoId});
       int vatType = 0;
       if (vatRes.isNotEmpty) {
         vatType = int.tryParse(vatRes.first['vatType'].toString()) ?? 0;
@@ -169,7 +190,8 @@ extension PurchaseOrderReceivingExtension on StockRepository {
       );
       double newTotal = 0.0;
       if (totalRes.isNotEmpty && totalRes.first['newTotal'] != null) {
-        newTotal = double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
+        newTotal =
+            double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
       }
 
       final vatRes = await _dbService.query(
@@ -202,11 +224,17 @@ extension PurchaseOrderReceivingExtension on StockRepository {
     bool isPaid = false,
   }) async {
     if (!_dbService.isConnected()) await _dbService.connect();
+    if (newItems.any((item) =>
+        (int.tryParse(item['productId']?.toString() ?? '') ?? 0) <= 0)) {
+      throw Exception(
+          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
+    }
     await _dbService.execute('START TRANSACTION;');
 
     try {
       // Revert previous stock changes if PO was received or partially received
-      await _revertStockForPurchaseOrder(poId, note: 'Edit PO #$poId (Revert Old)');
+      await _revertStockForPurchaseOrder(poId,
+          note: 'Edit PO #$poId (Revert Old)');
 
       await _dbService.execute(
         'DELETE FROM purchase_order_item WHERE poId = :id',
@@ -284,6 +312,17 @@ extension PurchaseOrderReceivingExtension on StockRepository {
       await _dbService.execute('ROLLBACK;');
       debugPrint('Error updating received PO qty: $e');
       rethrow;
+    }
+  }
+
+  Future<void> _ensureNoUnresolvedPurchaseOrderLines(int poId) async {
+    final unresolved = await _dbService.query(
+      'SELECT id FROM purchase_order_item WHERE poId = :id AND productId <= 0 LIMIT 1',
+      {'id': poId},
+    );
+    if (unresolved.isNotEmpty) {
+      throw Exception(
+          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
     }
   }
 }

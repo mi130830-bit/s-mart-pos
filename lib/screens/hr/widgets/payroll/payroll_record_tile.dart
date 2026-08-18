@@ -46,7 +46,10 @@ class PayrollRecordTile extends ConsumerWidget {
             ),
             child: Text(
               HrStatusUtils.formatStatus(req.status, HrItemType.payroll),
-              style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: statusColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -57,42 +60,56 @@ class PayrollRecordTile extends ConsumerWidget {
           const SizedBox(height: 4),
           Row(
             children: [
-              Text('รับ: ฿${currencyFormat.format(req.grossPay)}', style: const TextStyle(color: Colors.green)),
+              Text('รับ: ฿${currencyFormat.format(req.grossPay)}',
+                  style: const TextStyle(color: Colors.green)),
               const SizedBox(width: 16),
-              Text('หัก: ฿${currencyFormat.format(req.totalDeductions)}', style: const TextStyle(color: Colors.red)),
+              Text('หัก: ฿${currencyFormat.format(req.totalDeductions)}',
+                  style: const TextStyle(color: Colors.red)),
               const SizedBox(width: 16),
               Text('สุทธิ: ฿${currencyFormat.format(req.netPay)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.blue)),
             ],
           ),
-          Text('รอบจ่าย: ${req.payCycle} | ทำงาน: ${req.workDays} วัน | ลา: ${req.leaveDays} วัน'),
+          Text(
+              'รอบจ่าย: ${req.payCycle} | ทำงาน: ${req.workDays} วัน | ลา: ${req.leaveDays} วัน'),
         ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-            onPressed: () async {
-              final confirm = await HrConfirmDialog.show(
-                context,
-                title: 'ยืนยันการลบและคืนค่ายอดเบิก',
-                content: 'ต้องการลบรายการเงินเดือนนี้ใช่หรือไม่?\n\n*หากมีการหักยอดเงินเบิกล่วงหน้าไปแล้ว ระบบจะทำการคืนยอดเงินเบิกกลับให้อัตโนมัติ เพื่อให้สามารถนำมาหักใหม่ได้ (สำหรับใช้ทดสอบ)',
-                actionLabel: 'ลบรายการ',
-                actionColor: Colors.red,
-                actionIcon: Icons.delete,
-              );
-              if (confirm) {
-                if (!context.mounted) return;
-                try {
-                  await ref.read(payrollProvider.notifier).deleteRecord(req.id);
-                  if (context.mounted) SnackbarUtils.showLeft(context, 'ลบรายการสำเร็จ');
-                } catch (e) {
-                  if (context.mounted) SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e', isError: true);
+          if (req.status == 'DRAFT')
+            IconButton(
+              icon:
+                  const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+              onPressed: () async {
+                final confirm = await HrConfirmDialog.show(
+                  context,
+                  title: 'ยืนยันการลบฉบับร่าง',
+                  content:
+                      'ต้องการลบรายการเงินเดือนฉบับร่างนี้ใช่หรือไม่?\n\nรายการที่ยืนยันแล้วหรือจ่ายแล้วจะลบไม่ได้ เพื่อคงหลักฐานการหักเงินเบิกล่วงหน้าไว้ครบถ้วน',
+                  actionLabel: 'ลบรายการ',
+                  actionColor: Colors.red,
+                  actionIcon: Icons.delete,
+                );
+                if (confirm) {
+                  if (!context.mounted) return;
+                  try {
+                    await ref
+                        .read(payrollProvider.notifier)
+                        .deleteRecord(req.id);
+                    if (context.mounted) {
+                      SnackbarUtils.showLeft(context, 'ลบรายการสำเร็จ');
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      SnackbarUtils.showLeft(context, 'เกิดข้อผิดพลาด: $e',
+                          isError: true);
+                    }
+                  }
                 }
-              }
-            },
-          ),
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios, size: 16),
             onPressed: () => showDialog(
