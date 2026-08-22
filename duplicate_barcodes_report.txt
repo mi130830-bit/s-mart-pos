@@ -1,0 +1,14 @@
+Duplicate Barcode Audit Report
+Generated: 2026-08-22T16:44:02.766596
+Mode: READ-ONLY — no database data or schema was changed.
+
+Summary
+- Primary product barcode rows scanned: 6490
+- Extra/unit barcode rows scanned: 4
+- Distinct colliding barcodes: 0
+- Primary-only duplicate groups: 0
+- Extra/unit-only duplicate groups: 0
+- Primary ↔ extra/unit collision groups: 0
+
+Details
+No duplicate or cross-table barcode collisions were found.

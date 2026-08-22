@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart'; // [NEW]
+import 'package:uuid/uuid.dart';
 import '../../repositories/purchase_repository.dart';
 import 'create_purchase_order_screen.dart';
 import '../../services/alert_service.dart';
@@ -18,6 +19,7 @@ class PurchaseOrderListScreen extends StatefulWidget {
 class _PurchaseOrderListScreenState extends State<PurchaseOrderListScreen> {
   final PurchaseRepository _purchaseRepo = PurchaseRepository();
   List<Map<String, dynamic>> _pos = [];
+  final Map<int, String> _receiveOperationKeys = {};
   bool _isLoading = true;
 
   @override
@@ -266,14 +268,29 @@ class _PurchaseOrderListScreenState extends State<PurchaseOrderListScreen> {
                   child: CustomButton(
                     onPressed: () async {
                       final navigator = Navigator.of(sheetCtx);
-                      final ok = await _purchaseRepo.receivePO(poId);
+                      final operationKey = _receiveOperationKeys.putIfAbsent(
+                        poId,
+                        () => const Uuid().v4(),
+                      );
+                      final ok = await _purchaseRepo.receivePO(
+                        poId,
+                        operationKey: operationKey,
+                      );
                       if (ok && mounted) {
+                        _receiveOperationKeys.remove(poId);
                         navigator.pop();
                         _loadData();
                         AlertService.show(
                           context: context, // Use State context
                           message: 'รับสินค้าเข้าสต็อกเรียบร้อย',
                           type: 'success',
+                        );
+                      } else if (mounted) {
+                        AlertService.show(
+                          context: context,
+                          message:
+                              'รับสินค้าไม่สำเร็จ กรุณาลองอีกครั้ง ระบบจะไม่เพิ่มสต็อกซ้ำ',
+                          type: 'error',
                         );
                       }
                     },

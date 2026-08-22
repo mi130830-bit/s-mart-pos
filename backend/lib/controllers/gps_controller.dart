@@ -35,19 +35,20 @@ class GpsController {
   static Timer? _purgeTimer;
 
   static const String telegramToken =
-      '7839145001:AAGYNOWwm1qCZBGpVxXpGza_RhF6pvBtdy8';
-  static const String telegramChatId = '5637538985';
+      '8410912861:AAEQ0npuTRFYkl4z5StarMY5Vjvxlx0T82c';
+  static const String telegramChatId = '-5507041706';
 
   GpsController() {
     _startPurgeTimer();
   }
 
-  /// ตรวจสอบรถแต่ละคันทุก 30 วินาที:
-  /// - ถ้าขาดสัญญาณเกิน 2 นาที → เปลี่ยนเป็น OFFLINE + แจ้ง Telegram
-  /// - ถ้า offline เกิน 5 นาที → ลบออกจาก Memory (Purge)
+  /// ตรวจสอบรถแต่ละคันทุก 10 วินาที:
+  /// - ถ้าขาดสัญญาณเกิน 120 วินาที (2 นาที) → เปลี่ยนเป็น OFFLINE + แจ้ง Telegram
+  /// - ถ้า offline เกิน 600 วินาที (10 นาที) → ลบออกจาก Memory (Purge)
+  ///   (เพิ่มเป็น 10 นาทีเพื่อให้รถยังแสดงบนแผนที่ระหว่างขับกลับร้านได้)
   void _startPurgeTimer() {
     if (_purgeTimer != null) return;
-    _purgeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _purgeTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       final now = DateTime.now().millisecondsSinceEpoch;
       final toRemove = <String>[];
 
@@ -55,7 +56,7 @@ class GpsController {
         final lastPing = _lastPingTimes[vehicleName] ?? 0;
         final secondsAgo = (now - lastPing) / 1000;
 
-        // เกิน 2 นาที → OFFLINE
+        // ขาดสัญญาณเกิน 120 วินาที (2 นาที) → แจ้งเตือน OFFLINE ดับเครื่อง
         if (secondsAgo > 120 && loc['status'] == 'ONLINE') {
           loc['status'] = 'OFFLINE';
           _sendTelegramAlert('🛑 $vehicleName ดับเครื่อง! สัญญาณ GPS ขาดหาย');
@@ -65,8 +66,8 @@ class GpsController {
           );
         }
 
-        // เกิน 5 นาที → Purge ออกจาก Memory
-        if (secondsAgo > 300) {
+        // ขาดสัญญาณเกิน 10 นาที (600 วินาที) → Purge ออกจาก Memory
+        if (secondsAgo > 600) {
           toRemove.add(vehicleName);
         }
       });
@@ -117,6 +118,15 @@ class GpsController {
     return configuredKey.isNotEmpty && suppliedKey == configuredKey;
   }
 
+  static String normalizeVehicleKey(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (trimmed.contains('เครน')) return 'รถเครน';
+    if (trimmed.contains('ดั้มเล็ก')) return 'ดั้มเล็ก';
+    if (trimmed.contains('ดั้มใหญ่')) return 'ดั้มใหญ่';
+    return trimmed;
+  }
+
   Router get publicRouter {
     final router = Router();
 
@@ -133,10 +143,11 @@ class GpsController {
         final data = jsonDecode(payload) as Map<String, dynamic>;
 
         // ── Validate ──
-        final String vehicleName = (data['vehicle']?.toString() ?? '').trim();
-        if (vehicleName.isEmpty) {
+        final String rawVehicleName = (data['vehicle']?.toString() ?? '').trim();
+        if (rawVehicleName.isEmpty) {
           return Response.badRequest(body: 'Missing vehicle name');
         }
+        final String vehicleName = normalizeVehicleKey(rawVehicleName);
         final double lat = (data['lat'] ?? 0).toDouble();
         final double lng = (data['lng'] ?? 0).toDouble();
         if (lat == 0 && lng == 0) {
@@ -154,11 +165,14 @@ class GpsController {
         _lastPingTimes[vehicleName] = now;
 
         // ── จัดการสถานะงาน ──
-        String currentJob = _vehicleJobs[vehicleName] ?? 'กำลังเตรียมของ';
+        String currentJob = _vehicleJobs[vehicleName] ??
+            _vehicleJobs[rawVehicleName] ??
+            'กำลังเตรียมของ';
         if (currentJob == 'กำลังกลับร้าน') {
           final distKm = _haversineDistance(lat, lng, 16.160136, 100.802407);
           if (distKm <= 0.200) {
             _vehicleJobs.remove(vehicleName);
+            _vehicleJobs.remove(rawVehicleName);
             currentJob = 'กำลังเตรียมของ';
           }
         }
@@ -258,7 +272,8 @@ class GpsController {
         final payload = await req.readAsString();
         final data = jsonDecode(payload) as Map<String, dynamic>;
 
-        final String vehicle = (data['vehicle']?.toString() ?? '').trim();
+        final String rawVehicle = (data['vehicle']?.toString() ?? '').trim();
+        final String vehicle = normalizeVehicleKey(rawVehicle);
         final String jobStatus = (data['jobStatus']?.toString() ?? '').trim();
 
         if (vehicle.isEmpty) {
@@ -267,16 +282,20 @@ class GpsController {
 
         if (jobStatus.isEmpty || jobStatus == 'ไม่มีงาน') {
           _vehicleJobs.remove(vehicle);
+          _vehicleJobs.remove(rawVehicle);
         } else {
           _vehicleJobs[vehicle] = jobStatus;
+          if (rawVehicle != vehicle) _vehicleJobs[rawVehicle] = jobStatus;
         }
 
         // อัปเดต SSE ให้หน้าเว็บเห็นสถานะงานใหม่ทันที
-        if (_vehicles.containsKey(vehicle)) {
-          _vehicles[vehicle]!['job'] = jobStatus.isEmpty
-              ? 'ไม่มีงาน'
-              : jobStatus;
-          _sseController.add(jsonEncode(_vehicles[vehicle]));
+        final targetKey = _vehicles.containsKey(vehicle)
+            ? vehicle
+            : (_vehicles.containsKey(rawVehicle) ? rawVehicle : null);
+        if (targetKey != null) {
+          _vehicles[targetKey]!['job'] =
+              jobStatus.isEmpty ? 'ไม่มีงาน' : jobStatus;
+          _sseController.add(jsonEncode(_vehicles[targetKey]));
         }
 
         return Response.ok(

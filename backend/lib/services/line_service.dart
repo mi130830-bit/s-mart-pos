@@ -115,6 +115,46 @@ class LineService {
     }
   }
 
+  /// Send a rich interactive Flex Message (card with buttons, etc.)
+  Future<bool> pushFlexMessage(
+    String userId,
+    String altText,
+    Map<String, dynamic> contents,
+  ) async {
+    final token = await getAccessToken();
+    if (token.isEmpty) return false;
+
+    final url = Uri.parse('https://api.line.me/v2/bot/message/push');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+    final body = jsonEncode({
+      'to': userId,
+      'messages': [
+        {
+          'type': 'flex',
+          'altText': altText,
+          'contents': contents,
+        },
+      ],
+    });
+
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+      if (response.statusCode != 200) {
+        stderr.writeln('❌ [LINE] Push Flex Failed: HTTP ${response.statusCode}');
+        stderr.writeln('❌ [LINE] Response Body: ${response.body}');
+      } else {
+        stdout.writeln('✅ [LINE] Push Flex Message OK → $userId');
+      }
+      return response.statusCode == 200;
+    } catch (e) {
+      stderr.writeln('Line Push Flex Error: $e');
+      return false;
+    }
+  }
+
   // Reply Message (Generalized)
   Future<bool> reply(
     String replyToken,

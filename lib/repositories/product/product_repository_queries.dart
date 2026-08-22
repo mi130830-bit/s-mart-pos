@@ -35,8 +35,21 @@ extension ProductRepositoryQueries on ProductRepository {
           toPut.add(p);
         }
 
+        // Fetch barcodes for offline mode
+        final bcRows = await _dbService.query('SELECT * FROM product_barcode');
+        final bcToPut = bcRows.map((r) {
+           return ProductBarcodeCollection()
+             ..barcode = r['barcode']?.toString() ?? ''
+             ..productId = int.tryParse(r['productId']?.toString() ?? '0') ?? 0
+             ..unitName = r['unitName']?.toString() ?? ''
+             ..price = double.tryParse(r['price']?.toString() ?? '0') ?? 0.0
+             ..quantity = double.tryParse(r['quantity']?.toString() ?? '1') ?? 1.0;
+        }).toList();
+
         await _isar.writeTxn(() async {
           await _isar.productCollections.putAll(toPut);
+          await _isar.productBarcodeCollections.clear();
+          await _isar.productBarcodeCollections.putAll(bcToPut);
         });
 
         return products;

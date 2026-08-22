@@ -76,6 +76,7 @@ extension ProductUnitBarcodeTabExtension on _ProductFormDialogState {
           children: [
             CustomTextField(
               controller: barcodeCtrl,
+              autofocus: true, // ✅ Autofocus for fast scanning
               label: 'บาร์โค้ด (เช่น บาร์โค้ดแพ็ค)',
             ),
             const SizedBox(height: 12),
@@ -109,7 +110,9 @@ extension ProductUnitBarcodeTabExtension on _ProductFormDialogState {
             label: 'เพิ่ม',
             onPressed: () async {
               if (barcodeCtrl.text.isEmpty || unitCtrl.text.isEmpty) return;
-              final barcode = barcodeCtrl.text.trim();
+              final rawBarcode = barcodeCtrl.text.trim();
+              final barcode = BarcodeUtils.fixThaiInput(rawBarcode); // ✅ Apply same normalization
+              if (rawBarcode != barcode) barcodeCtrl.text = barcode;
               final isDuplicateInDraft = barcode == _barcodeCtrl.text.trim() ||
                   _extraBarcodes.any((item) => item.barcode.trim() == barcode);
               if (isDuplicateInDraft ||

@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import '../services/mysql_service.dart';
+import '../services/idempotency_payload.dart';
 import '../services/telegram_service.dart';
 import './activity_repository.dart';
 
@@ -421,44 +424,6 @@ class StockRepository {
         'UPDATE product SET stockQuantity = :qty WHERE id = :pid',
         {'qty': maxPossible, 'pid': parentId},
       );
-    }
-  }
-
-  // Private helper to revert stock of a purchase order (used during edit/deletion/qty update)
-  Future<void> _revertStockForPurchaseOrder(int poId,
-      {required String note}) async {
-    final oldPoRes = await _dbService.query(
-      'SELECT status FROM purchase_order WHERE id = :id FOR UPDATE',
-      {'id': poId},
-    );
-    if (oldPoRes.isEmpty) return;
-
-    final oldStatus = oldPoRes.first['status'];
-    if (oldStatus == 'RECEIVED' || oldStatus == 'PARTIAL') {
-      final oldItems = await _dbService.query(
-        'SELECT productId, quantity, receivedQuantity FROM purchase_order_item WHERE poId = :id',
-        {'id': poId},
-      );
-      for (var item in oldItems) {
-        final pId = int.tryParse(item['productId'].toString()) ?? 0;
-        double revertQty = 0.0;
-        if (oldStatus == 'RECEIVED') {
-          revertQty = double.tryParse(item['quantity'].toString()) ?? 0.0;
-        } else if (oldStatus == 'PARTIAL') {
-          revertQty =
-              double.tryParse(item['receivedQuantity'].toString()) ?? 0.0;
-        }
-        if (pId > 0 && revertQty > 0) {
-          await _adjustRecursive(
-            pId,
-            -revertQty,
-            'ADJUST_CORRECT',
-            note,
-            null,
-            maxDepth: 10,
-          );
-        }
-      }
     }
   }
 }

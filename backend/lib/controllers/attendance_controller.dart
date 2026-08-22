@@ -167,6 +167,22 @@ class AttendanceController {
 
       final data = jsonDecode(payload);
       final List<dynamic> logs = data['logs'] ?? [];
+      final contextUser = request.context['user'];
+      final authenticatedEmployeeId = contextUser is Map
+          ? int.tryParse(contextUser['employee_id']?.toString() ?? '')
+          : null;
+      final authenticatedUserId = contextUser is Map
+          ? contextUser['id']?.toString()
+          : null;
+
+      if (authenticatedEmployeeId == null ||
+          authenticatedUserId == null ||
+          authenticatedUserId.isEmpty) {
+        return Response.forbidden(
+          jsonEncode({'error': 'Authenticated employee profile is required'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
 
       if (logs.isEmpty) {
         return Response.ok(
@@ -175,27 +191,52 @@ class AttendanceController {
       }
 
       final conn = await DbConfig().connection;
+      // Validate the entire batch before starting a transaction. This keeps a
+      // rejected impersonation attempt from leaving an open transaction and
+      // ensures all records belong to the JWT's employee profile.
+      for (final logData in logs) {
+        if (logData is! Map) {
+          return Response.badRequest(
+            body: jsonEncode({'error': 'Invalid attendance log'}),
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        final userId = logData['user_id'];
+        final dateStr = logData['date'];
+        final syncId = logData['sync_id']?.toString();
+        if (userId == null ||
+            dateStr == null ||
+            syncId == null ||
+            syncId.isEmpty) {
+          return Response.badRequest(
+            body: jsonEncode({
+              'error': 'Attendance log is missing user_id, date, or sync_id',
+            }),
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        final suppliedEmployeeId = await _resolveEmployeeId(conn, userId);
+        if (suppliedEmployeeId != authenticatedEmployeeId) {
+          return Response.forbidden(
+            jsonEncode({
+              'error': 'Attendance user_id conflicts with authenticated user',
+            }),
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      }
       await conn.execute('START TRANSACTION');
 
       try {
+        final syncedIds = <String>[];
         for (var logData in logs) {
-          final userId = logData['user_id'];
           final dateStr = logData['date'];
+          final syncId = logData['sync_id'].toString();
 
-          if (userId == null || dateStr == null) {
-            throw StateError('Attendance log is missing user_id or date');
-          }
-
-          // Find employee_id from user_id or username (prioritize active profile)
-          final empId = await _resolveEmployeeId(
-            conn,
-            logData['user_id'] ?? logData['username'],
-          );
-          if (empId == null) {
-            throw StateError(
-              'Employee mapping not found for user_id=${logData['user_id']}',
-            );
-          }
+          // Attendance always belongs to the signed-in employee. The body is
+          // retained for client compatibility but may not impersonate another
+          // account or employee profile.
+          final empId = authenticatedEmployeeId;
 
           // Check if we already have an attendance record for this day
           final existResult = await conn.execute(
@@ -349,10 +390,15 @@ class AttendanceController {
               await conn.execute(updateSql, updateParams);
             }
           }
+          syncedIds.add(syncId);
         }
         await conn.execute('COMMIT');
         return Response.ok(
-          jsonEncode({'status': 'success', 'synced_count': logs.length}),
+          jsonEncode({
+            'status': 'success',
+            'synced_count': syncedIds.length,
+            'synced_ids': syncedIds,
+          }),
         );
       } catch (e) {
         await conn.execute('ROLLBACK');

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,7 @@ import '../../../../repositories/product_component_repository.dart';
 import '../../../../repositories/product_price_tier_repository.dart';
 import '../../../../services/alert_service.dart';
 import '../../../../services/barcode_product_lookup_service.dart';
+import '../../../../utils/barcode_utils.dart';
 import '../../widgets/product_search_dialog_for_select.dart';
 import '../../widgets/supplier_search_dialog.dart';
 import '../../widgets/component_row.dart';
@@ -65,6 +67,10 @@ class ProductFormDialog extends ConsumerStatefulWidget {
 class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _barcodeLookup = BarcodeProductLookupService();
+  Timer? _barcodeDuplicateCheckTimer;
+  int _barcodeDuplicateCheckRequest = 0;
+  bool _barcodeDuplicateDialogVisible = false;
+  String? _lastDuplicatePrimaryBarcode;
 
   // Controllers
   late TextEditingController _nameCtrl;
@@ -169,6 +175,7 @@ class _ProductFormDialogState extends ConsumerState<ProductFormDialog> {
 
   @override
   void dispose() {
+    _barcodeDuplicateCheckTimer?.cancel();
     _nameCtrl.dispose();
     _barcodeCtrl.dispose();
     _aliasCtrl.dispose();

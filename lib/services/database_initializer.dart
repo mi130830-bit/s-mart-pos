@@ -76,6 +76,7 @@ class DatabaseInitializer {
         await _ensureColumn(
             '`order`', 'deliveryType', "VARCHAR(50) DEFAULT 'none'");
         await _ensureColumn('`order`', 'userId', 'INT NULL');
+        await _db.ensureOrderIdempotencySchema();
         // เพิ่ม conversionFactor ใน orderitem (สำหรับหน่วยนับ)
         await _ensureColumn(
             'orderitem', 'conversionFactor', 'DECIMAL(15,4) DEFAULT 1.000');

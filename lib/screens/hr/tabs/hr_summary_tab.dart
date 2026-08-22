@@ -1,23 +1,46 @@
-import 'package:pos_desktop/utils/snackbar_utils.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../state/hr/employee_provider.dart';
 import '../../../state/hr/advance_provider.dart';
 import '../../../state/hr/dashboard_attendance_provider.dart';
-import '../../../services/hr/attendance_sync_service.dart';
 import '../widgets/summary/hr_stat_card.dart';
 import '../widgets/summary/hr_attendance_table.dart';
 
-class HrSummaryTab extends ConsumerWidget {
+class HrSummaryTab extends ConsumerStatefulWidget {
   const HrSummaryTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HrSummaryTab> createState() => _HrSummaryTabState();
+}
+
+class _HrSummaryTabState extends ConsumerState<HrSummaryTab> {
+  Timer? _attendanceRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _attendanceRefreshTimer = Timer.periodic(
+      const Duration(seconds: 12),
+      (_) => ref.invalidate(dashboardAttendanceProvider),
+    );
+  }
+
+  @override
+  void dispose() {
+    _attendanceRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final empState = ref.watch(employeeProvider);
     final advanceState = ref.watch(advanceProvider);
 
     final totalEmployees = empState.employees.where((e) => e.isActive).length;
-    final totalDrivers = empState.employees.where((e) => e.isActive && e.roleType == 'DRIVER').length;
+    final totalDrivers = empState.employees
+        .where((e) => e.isActive && e.roleType == 'DRIVER')
+        .length;
     final pendingAdvances = advanceState.pending.length;
 
     return Padding(
@@ -71,18 +94,25 @@ class HrSummaryTab extends ConsumerWidget {
                   const SizedBox(width: 16),
                   Consumer(
                     builder: (context, ref, child) {
-                      final currentFilter = ref.watch(dashboardAttendanceFilterProvider);
+                      final currentFilter =
+                          ref.watch(dashboardAttendanceFilterProvider);
                       return DropdownButton<String>(
                         value: currentFilter,
                         underline: const SizedBox(),
                         items: const [
-                          DropdownMenuItem(value: 'DAY', child: Text('รายวัน (วันนี้)')),
-                          DropdownMenuItem(value: 'WEEK', child: Text('รายสัปดาห์')),
-                          DropdownMenuItem(value: 'MONTH', child: Text('รายเดือน')),
+                          DropdownMenuItem(
+                              value: 'DAY', child: Text('รายวัน (วันนี้)')),
+                          DropdownMenuItem(
+                              value: 'WEEK', child: Text('รายสัปดาห์')),
+                          DropdownMenuItem(
+                              value: 'MONTH', child: Text('รายเดือน')),
                         ],
                         onChanged: (val) {
                           if (val != null) {
-                            ref.read(dashboardAttendanceFilterProvider.notifier).state = val;
+                            ref
+                                .read(
+                                    dashboardAttendanceFilterProvider.notifier)
+                                .state = val;
                           }
                         },
                       );
@@ -93,12 +123,8 @@ class HrSummaryTab extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'รีเฟรชข้อมูล',
-                onPressed: () async {
-                  SnackbarUtils.showLeft(context, 'กำลังซิงค์ข้อมูลจากคลาวด์...');
-                  await AttendanceSyncService().syncAttendanceFromCloud(force: true);
-                  if (context.mounted) {
-                    ref.invalidate(dashboardAttendanceProvider);
-                  }
+                onPressed: () {
+                  ref.invalidate(dashboardAttendanceProvider);
                 },
               ),
             ],

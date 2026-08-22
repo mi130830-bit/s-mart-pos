@@ -1,6 +1,7 @@
 // ============================================================
 //  ร้านส.บริการ ท่าข้าม - GPS Tracker (Wi-Fi Edition)
 //  Hardware : ESP32 + LM2596 Buck + NEO-M8N + Pocket Wi-Fi
+//  Vehicle  : รถดั้มใหญ่ (ดั้มใหญ่)
 //  Author   : Bob (Antigravity AI) - POS System
 // ============================================================
 

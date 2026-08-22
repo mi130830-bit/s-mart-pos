@@ -3,7 +3,7 @@
 
 ; --- กำหนดชื่อแอปและเวอร์ชัน ---
 #define MyAppName "S_Mart POS"
-#define MyAppVersion "1.8.5" 
+#define MyAppVersion "1.8.7" 
 #define MyAppPublisher "S_Mart"
 #define MyAppExeName "pos_desktop.exe"
 

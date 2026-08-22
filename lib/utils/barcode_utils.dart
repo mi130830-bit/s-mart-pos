@@ -78,13 +78,16 @@ class BarcodeUtils {
 
   static Map<String, String> _activeMapping = {};
   static bool _isEnabled = true;
+  static String _scannerSuffix = 'Enter'; // ✅ Added scannerSuffix
 
   static bool get isEnabled => _isEnabled;
+  static String get scannerSuffix => _scannerSuffix; // ✅ Added getter
 
   /// Initialize and load settings from SharedPreferences
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _isEnabled = prefs.getBool(_prefKeyEnabled) ?? true;
+    _scannerSuffix = prefs.getString('scanner_suffix') ?? 'Enter'; // ✅ Load suffix
 
     // Load custom mapping if exists, else use default
     final jsonString = prefs.getString(_prefKeyMapping);
@@ -101,19 +104,28 @@ class BarcodeUtils {
   }
 
   /// Save current mapping to SharedPreferences
-  static Future<void> saveSettings(
-      {required bool enabled, required Map<String, String> mapping}) async {
+  static Future<void> saveSettings({
+    required bool enabled,
+    required Map<String, String> mapping,
+    String suffix = 'Enter',
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefKeyEnabled, enabled);
     await prefs.setString(_prefKeyMapping, jsonEncode(mapping));
+    await prefs.setString('scanner_suffix', suffix);
 
     _isEnabled = enabled;
     _activeMapping = Map.from(mapping);
+    _scannerSuffix = suffix;
   }
 
   /// Reset to default mapping
   static Future<void> resetToDefault() async {
-    await saveSettings(enabled: true, mapping: _defaultThaiToEng);
+    await saveSettings(
+      enabled: _isEnabled,
+      mapping: _defaultThaiToEng,
+      suffix: _scannerSuffix,
+    );
   }
 
   static Map<String, String> getCurrentMapping() =>
@@ -122,6 +134,7 @@ class BarcodeUtils {
   /// Convert Thai input string to English based on active mapping
   static String fixThaiInput(String input) {
     if (!_isEnabled) return input;
+    if (!isThaiInput(input)) return input; // ✅ ONLY convert if there are Thai chars
 
     // If not initialized yet (shouldn't happen if init called in main), fallback to default
     final map = _activeMapping.isNotEmpty ? _activeMapping : _defaultThaiToEng;

@@ -1,6 +1,70 @@
 # บันทึกการแก้ไข (Fixes & Modifications Log)
 
+## [2026-08-22] Server Migration Playbook & Guide / จัดทำคู่มือและสคริปต์ย้ายระบบขึ้น Mini PC Proxmox VE
+
+**ไทย:** สร้างเอกสารคู่มือและขั้นตอนการย้ายระบบเซิร์ฟเวอร์สู่ Mini PC (`MIGRATION_GUIDE.md`) เพื่อเตรียมความพร้อมสำหรับเครื่อง Beelink Mini S12 Pro (Intel N100, 32GB RAM, 500GB SSD) ที่รัน Proxmox VE 9.x โดยรวบรวมพิมพ์เขียวสถาปัตยกรรมระบบ, การจัดสรรทรัพยากร LXC Container (MySQL Database 8GB, Backend API 4GB, Cloudflare Tunnel 1GB), สคริปต์คำสั่งติดตั้งและปรับแต่ง MySQL 8.0, Systemd Auto-Restart Service สำหรับ Dart Shelf Backend, ระบบ Auto-Shutdown ร่วมกับ UPS (`apcupsd`), และแผนสำรอง/กู้คืนระบบแบบ 2 ภาษา (ไทย-อังกฤษ)
+
+**English:** Created the comprehensive server migration playbook and deployment guide (`MIGRATION_GUIDE.md`) preparing for the Beelink Mini S12 Pro (Intel N100, 32GB RAM, 500GB SSD) running Proxmox VE 9.x. The guide details the containerized architecture, LXC resource allocations (MySQL 8GB, Backend API 4GB, Cloudflare Tunnel 1GB), MySQL 8.0 high-performance tuning configs, Dart Shelf Backend Systemd auto-restart service units, UPS auto-shutdown integration (`apcupsd`), and disaster recovery/rollback plans bilingually (Thai & English).
+
+## [2026-08-22] Customer Tracking Page Resilient UX / ปรับปรุงหน้าจอติดตามรถพร้อมปุ่มโทรติดต่อร้าน
+
+**ไทย:** ปรับปรุงหน้าเว็บติดตามรถของลูกค้า (`customer_tracking.html`) ให้มีความยืดหยุ่นและเป็นมิตรกับผู้ใช้ยิ่งขึ้น เพิ่มปุ่มโทรด่วน `[ 📞 โทรสอบถามร้าน (085-1377402) ]` รองรับการแตะเพื่อโทรออกทันที, ปรับข้อความแจ้งเตือนเมื่อสัญญาณขาดหายเป็น "⏳ รถกำลังเดินทาง (สัญญาณขาดหายชั่วคราว)", และปรับหน้าจอเมื่อปิดงานแล้วให้แสดงข้อความขอบคุณอย่างสุภาพพร้อมปุ่มติดต่อร้าน.
+
+**English:** Enhanced the customer delivery tracking page (`customer_tracking.html`) with resilient fail-safe UX, including a direct click-to-call store button (`tel:0851377402`), friendly connection-drop statuses ("⏳ รถกำลังเดินทาง (สัญญาณขาดหายชั่วคราว)"), and a polished delivery completion screen with a polite thank-you message and store contact action.
+
+## [2026-08-22] Premium LINE OA Delivery Tracking Card (Flex Message) / ปรับการแจ้งเตือนส่งของเป็นการ์ดปุ่มกดติดตามรถ
+
+**ไทย:** ปรับปรุงระบบแจ้งเตือนการปล่อยรถ (Stage 2) ใน `LineController` และ `LineService` จากข้อความธรรมดาที่แสดง URL เปลือย ให้กลายเป็นการ์ดข้อความแบบโต้ตอบ (LINE Flex Message Card) ดีไซน์พรีเมียมสีเขียว Teal พร้อมปุ่มกด "📍 กดติดตามตำแหน่งรถบนแผนที่" โดยไม่ต้องแสดง URL ยาวๆ ให้เกะกะสายตา เมื่อลูกค้าแตะปุ่มจะเปิดหน้าแผนที่ติดตามรถสดได้ทันที พร้อมมีระบบ Fallback ส่งข้อความสำรองอัตโนมัติหากการส่ง Flex Card มีปัญหา.
+
+**English:** Upgraded Stage 2 delivery departure notifications in `LineController` and `LineService` from plain text with exposed URLs to interactive, styled LINE Flex Message Cards in teal branding with a direct "📍 กดติดตามตำแหน่งรถบนแผนที่" button. Customers can tap directly into the live tracking map without seeing raw URL strings, complete with an automatic plain-text fallback safeguard.
+
+## [2026-08-22] GPS Live Status Flow & Vehicle Return Visibility / แก้ไขสถานะปล่อยรถและการแสดงผลรถขากลับ
+
+**ไทย:** แก้ไขปัญหากดปล่อยรถแล้วสถานะงานในแผนที่ GPS ไม่เปลี่ยน โดยปรับปรุง `JobProvider.approveJobDeparture` ใน S-Link ให้ส่งชื่อรถจากทีมจัดส่งที่เลือกจริงไปยัง `/gps/update_job` และเพิ่มระบบ `normalizeVehicleKey` ใน `GpsController` ของ POS Backend เพื่อรองรับชื่อรถทั้งแบบเต็มและแบบย่อ ('รถเครน', 'ดั้มเล็ก', 'ดั้มใหญ่') พร้อม Broadcast SSE ทันที. ขยายเวลา Offline Threshold เป็น 120 วินาที และ Purge Timer เป็น 600 วินาที (10 นาที) เพื่อให้รถยังคงแสดงบนแผนที่ตลอดการเดินทางขากลับร้าน และเพิ่ม 'ดั้มเล็ก' กับ 'ดั้มใหญ่' ใน Whitelist ของ Customer Tracking เพื่อให้ออกลิงก์แผนที่ให้ลูกค้าได้ทุกคัน โดยหน้าเว็บลูกค้าแสดงเฉพาะตำแหน่งหมุด ไม่เปิดเผยชื่อรถหรือความเร็ว.
+
+**English:** Fixed the issue where approving job departure did not update the GPS map status by ensuring S-Link's `JobProvider.approveJobDeparture` uses the effective selected vehicle team when dispatching to `/gps/update_job`, and introducing `normalizeVehicleKey` in POS Backend's `GpsController` to canonicalize keys ('รถเครน', 'ดั้มเล็ก', 'ดั้มใหญ่') with immediate SSE broadcasting. Extended OFFLINE detection to 120s and memory purge timer to 600s (10 min) so vehicles remain visible on the store map throughout the return trip. Added 'ดั้มเล็ก' and 'ดั้มใหญ่' to the Customer Tracking whitelist so tracking links can be issued for all fleet vehicles while strictly preserving customer privacy (showing only location pins without vehicle names or speeds).
+
+## [2026-08-22] Verified backup and guarded restore / สำรองตรวจสอบได้และกู้คืนแบบมีรั้วป้องกัน
+
+**ไทย:** ไฟล์สำรองที่สร้างใหม่เปลี่ยนเป็นรูปแบบมีเวอร์ชัน พร้อม Manifest, จำนวนแถว, รายชื่อคอลัมน์, และ SHA-256 checksum รายตาราง/ทั้งไฟล์ ระบบตรวจไฟล์ก่อนกู้คืนอย่างเข้มงวด โดยอนุญาตเฉพาะตารางและคอลัมน์ที่ตรงกับฐานข้อมูลปัจจุบัน และปฏิเสธไฟล์ที่ถูกแก้ไขหรือโครงสร้างไม่ครบ ก่อนเริ่มเขียนข้อมูล ระบบจะสร้างและตรวจสอบไฟล์สำรองของข้อมูลเดิมอัตโนมัติ 1 ชุด แล้วทำงานใน exclusive database scope; เปิด foreign-key checks กลับเสมอแม้เกิดข้อผิดพลาด และตรวจจำนวนแถวหลังนำเข้าทุกตาราง หน้าจอกู้คืนจะแจ้งผลตรวจ, เตือนว่าการกู้คืนย้อนกลับไม่ได้, และแสดงตำแหน่งไฟล์สำรองก่อนกู้คืนเมื่อสำเร็จ. ไฟล์ JSON แบบเดิมยังอ่านได้เมื่อมีทุกตาราง/คอลัมน์ตรงกันและไม่มีข้อมูล binary ที่พิสูจน์ความถูกต้องไม่ได้.
+
+**English:** Newly created backups now use a versioned format with a manifest, row counts, column lists, and per-table/full-file SHA-256 checksums. Restore performs strict validation against the current database table and column allowlist and rejects altered or incomplete files. Before any mutation, the app creates and verifies one automatic pre-restore safety backup, then uses an exclusive database scope; foreign-key checks are always re-enabled and each restored table has its row count verified. The restore UI shows validation status, clearly warns that the action is irreversible, and displays the pre-restore backup location on success. Legacy JSON backups remain readable only when their complete table/column shape matches and they contain no unverifiable binary data.
+
+## [2026-08-22] Canonical barcode registry migration / ทะเบียนบาร์โค้ดกลาง
+
+**ไทย:** เพิ่มสคริปต์ `bin/migrate_barcode_registry.dart` สำหรับย้ายฐานข้อมูลแบบรัดกุม โดยอ่านค่า DB จาก environment/.env, ล็อก migration ด้วย MySQL advisory lock, ตรวจบาร์โค้ดซ้ำและหยุดก่อนเปลี่ยน schema, และสำรอง JSON แบบ UTF-8 ก่อน DDL. เมื่อข้อมูลสะอาด สคริปต์สร้าง `barcode_registry` ที่มี normalized barcode แบบ unique, backfill บาร์โค้ดหลักและหน่วยเสริม, แล้วติดตั้ง trigger สำหรับ insert/update/delete ของ `product` และ `product_barcode` เพื่อกันบาร์โค้ดซ้ำทั้งระบบ. การลบสินค้าจริงจะลบ reservation ทุกหน่วยของสินค้านั้น; soft delete จะยังสงวนบาร์โค้ดไว้. หลังทำงานสคริปต์ตรวจจำนวนและความตรงกันของ source/registry พร้อมสร้างรายงาน JSON; ไม่ซ่อมหรือกลืน error ของความถูกต้องอัตโนมัติ.
+
+**English:** Added `bin/migrate_barcode_registry.dart`, a guarded database migration that reads DB settings from environment/.env, uses a MySQL advisory lock, audits duplicates and stops before schema changes, and writes a UTF-8 JSON snapshot before DDL. With clean source data it creates the unique normalized `barcode_registry`, backfills primary and unit barcodes, and installs product/product_barcode insert/update/delete triggers to enforce global uniqueness. Hard product deletion releases every reservation for that product, while soft deletion retains reservations. The migration verifies source/registry counts and mappings and writes a JSON report; it never silently repairs or suppresses integrity failures.
+
 ไฟล์นี้ใช้สำหรับบันทึกการแก้ไขบั๊ก, การปรับปรุงโค้ด, หรือการเปลี่ยนแปลงระบบที่เกิดขึ้นในโปรเจกต์ เพื่อเป็นประวัติการทำงานและใช้อ้างอิงในอนาคต
+
+---
+
+## [2026-08-21] Primary barcode duplicate warning / แจ้งเตือนบาร์โค้ดหลักซ้ำทันที
+
+**ไทย:** ช่องบาร์โค้ดหลักในฟอร์มสินค้าเช็กบาร์โค้ดซ้ำอัตโนมัติหลังหยุดพิมพ์หรือสแกน 350 มิลลิวินาที และเช็กทันทีเมื่อกด Enter โดยแปลงค่าจากเครื่องสแกนตามการตั้งค่าเดิมก่อนตรวจ. กันผลค้นหาเก่าค้างและกล่องแจ้งเตือนซ้ำ; เมื่อพบจะแจ้งชัดเจนว่า “บาร์โค้ดซ้ำ” และการบันทึกยังตรวจซ้ำอีกครั้งเพื่อป้องกันข้อมูลซ้ำ.
+
+**English:** The primary barcode field now checks for duplicates 350 ms after typing or scanning settles, and immediately on Enter, preserving the existing scanner-input normalization. Stale lookups and repeated dialogs are suppressed; conflicts clearly show “Duplicate barcode,” while save-time validation remains a final duplicate-data safeguard.
+
+## [2026-08-21] Confirmed S-Link attendance / ยืนยันการลงเวลาจาก S-Link
+
+**ไทย:** POS รับการลงเวลาจากพนักงานที่ระบุใน JWT เท่านั้น และปฏิเสธ `user_id` ในข้อมูลที่ส่งมาหากไม่ตรงกัน. การตอบกลับซิงก์ระบุ `sync_id` ที่ยืนยันแล้ว; หน้า HR Summary รีเฟรชข้อมูลจาก POS ทุก 12 วินาทีและยกเลิก timer เมื่อปิดหน้า.
+
+**English:** POS now accepts attendance only for the employee resolved from the JWT and rejects conflicting body `user_id` values. Sync acknowledgements identify confirmed `sync_id`s; HR Summary refreshes POS data every 12 seconds and cancels its timer on disposal.
+
+## [2026-08-19] Wi-Fi GPS Firmware for Dump Trucks / สร้างโปรเจกต์ GPS Wi-Fi สำหรับรถดั้มเล็กและดั้มใหญ่
+
+**ไทย:** สร้างโปรเจกต์ ESP32 GPS + Pocket Wi-Fi เพิ่มอีก 2 ชุดในโฟลเดอร์ `GPS_WIFI_DUMP_SMALL` และ `GPS_WIFI_DUMP_LARGE` โดยตั้งชื่อรถตามรหัสกลางของระบบ (`ดั้มเล็ก` และ `ดั้มใหญ่`) ซึ่งตรงกับระบบจัดส่ง S-Link, POS และหน้าเว็บแผนที่แบบ 100% ทำให้เมื่อกดปล่อยรถในแอป S-Link สถานะงานจะซิงค์ขึ้นแผนที่เรียลไทม์ได้ถูกต้องทันที.
+
+**English:** Created two ESP32 GPS + Pocket Wi-Fi firmware projects under `GPS_WIFI_DUMP_SMALL` and `GPS_WIFI_DUMP_LARGE` with canonical vehicle keys `ดั้มเล็ก` and `ดั้มใหญ่`, matching S-Link delivery dispatch, POS, and the live GPS tracking map 100%.
+
+---
+
+## [2026-08-19] GPS Telegram Alert & Timeout Tuning / อัปเดตแจ้งเตือนและปรับเวลาตรวจจับดับรถ GPS
+
+**ไทย:** อัปเดต Bot Token (`8410912861:...`) และ Group Chat ID (`-5507041706`) ใน `gps_controller.dart` สำหรับแจ้งเตือนสถานะ GPS รถยนต์ พร้อมปรับเวลาการตรวจจับดับเครื่องยนต์ให้แจ้งเตือนเร็วขึ้นเมื่อขาดสัญญาณเกิน 60 วินาที (1 นาที) และลบรถออกจากแผนที่เมื่อขาดสัญญาณเกิน 2 นาที (120 วินาที) โดยตรวจสอบความถี่ทุก 10 วินาที Rebuild `backend/server.exe` เรียบร้อย.
+
+**English:** Updated the Telegram Bot Token and Group Chat ID (`-5507041706`) in `gps_controller.dart`. Tuned engine-stop/offline detection to alert after 60 seconds of signal loss and purge vehicles from map memory after 2 minutes (120 seconds), polling every 10 seconds. Rebuilt and restarted `backend/server.exe`.
 
 ---
 
@@ -1004,3 +1068,133 @@ manual refresh completion before reporting success.
 
 - TH: เพิ่ม cutoff ตามวันสิ้นสุดรอบ payroll ทั้งตอนคำนวณและตอนยืนยันใน transaction: จะหักได้เฉพาะรายการที่ยื่นและอนุมัติไม่เกินวันสิ้นสุดรอบเท่านั้น จึงไม่สามารถนำรายการเบิกใหม่ไปหักกับรอบเงินเดือนย้อนหลังได้. ไม่ได้ซ่อมหรือเปลี่ยนข้อมูลจริงเดิมอัตโนมัติ.
 - EN: Added a payroll-period-end cutoff both during calculation and during transactional confirmation: only advances requested and approved no later than the period end are eligible, so a new advance cannot reduce a historical payroll. No existing live data is repaired or changed automatically.
+
+# 2026-08-18 — Guarded payroll batch cleanup / เครื่องมือล้างรอบเงินเดือนแบบมีเงื่อนไข
+
+- TH: เพิ่มสคริปต์ครั้งเดียวแบบ preview เป็นค่าเริ่มต้นสำหรับล้างรอบเงินเดือนที่สร้างผิดวันที่ 18/08/2026 เท่านั้น. การล้างจริงต้องส่ง `--apply` และตรวจภายใน transaction ว่าตรงกับ payroll #383–#389 จำนวน 7 คน ยอดสุทธิ 7,398 บาท, ค่าใช้จ่าย #42 และรายการหักเงินเบิก #9–#11 รวม 2,100 บาทก่อนทุกครั้ง. หากเงื่อนไขใดไม่ตรงจะ rollback ทั้งหมด; หลังลบจะคำนวณยอดคงเหลือและสถานะของเงินเบิกจาก ledger ที่เหลือ (รวม ledger เก่าของรายการ #10) แล้วตรวจผลซ้ำ.
+- EN: Added a preview-by-default, one-off cleanup script for only the erroneous 18 Aug 2026 payroll batch. Actual deletion requires `--apply` and transactionally verifies payroll #383–#389 (7 rows totalling 7,398 baht), expense #42, and advance deductions #9–#11 totalling 2,100 baht. Any mismatch rolls back everything; after deletion it recomputes affected advance balances/statuses from the remaining ledger, retaining advance #10's older ledger, and post-verifies the result.
+# #   F i x :   B a r c o d e   S c a n n e r   I m p r o v e m e n t   P l a n  
+ * * D a t e * * :   2 0 2 6 - 0 8 - 1 9  
+ * * I s s u e * * :   B a r c o d e   s c a n n e r   i n t e g r a t i o n   h a d   s e v e r a l   i s s u e s   i n c l u d i n g   s c a n n i n g   t h e   w r o n g   p r o d u c t   d u e   t o   f u z z y   m a t c h i n g ,   A S C I I   c o n v e r s i o n   w i t h o u t   c h e c k i n g   f o r   T h a i   i n p u t ,   l a c k   o f   e n t e r / t a b   s u f f i x   c o n f i g u r a t i o n ,   a n d   m i s s i n g   h a r d w a r e   s c a n n e r   s u p p o r t   i n   p r o d u c t   c r e a t i o n   f o r m .  
+ * * R e s o l u t i o n * * :  
+ 1 .   * * S t a r t u p   C o n f i g   L o a d i n g * * :   I n i t i a l i z e d   \ B a r c o d e U t i l s \   e a r l y   i n   \ m a i n . d a r t \ .  
+ 2 .   * * S a f e   T h a i   C o n v e r s i o n * * :   A d d e d   \ i s T h a i I n p u t ( ) \   g u a r d   i n   \ B a r c o d e U t i l s . f i x T h a i I n p u t \   t o   p r e s e r v e   E n g l i s h   i n p u t .   A d d e d   s c a n n e r   s u f f i x   c o n f i g u r a t i o n   ( \ E n t e r \ / \ T a b \ )   t o   s h a r e d   p r e f e r e n c e s .  
+ 3 .   * * H a r d e n e d   P O S   S c a n   F l o w * * :   R e m o v e d   t h e   d a n g e r o u s   3 0 0 m s   d e b o u n c e   t i m e r   i n   \ p o s _ b a r c o d e _ h a n d l e r _ m i x i n . d a r t \   a n d   c l e a r e d   \  a r c o d e C t r l \   s y n c h r o n o u s l y .   H a n d l e d   \ L o g i c a l K e y b o a r d K e y . t a b \   n a t i v e l y .  
+ 4 .   * * E x a c t   M a t c h   R e q u i r e m e n t * * :   R e m o v e d   \ e l s e   i f   ( m a t c h e s . i s N o t E m p t y ) \   f r o m   \ p o s _ c a r t _ m i x i n . d a r t \   t o   s t r i c t l y   e n f o r c e   e x a c t   p r i m a r y / u n i t   b a r c o d e   m a t c h .  
+ 5 .   * * P r o d u c t   F o r m   S u p p o r t * * :   I n j e c t e d   \  u t o f o c u s :   t r u e \   a n d   \  i x T h a i I n p u t ( ) \   n o r m a l i z a t i o n   i n   \ p r o d u c t _ f o r m _ l e f t _ c o l u m n . d a r t \   a n d   \ p r o d u c t _ u n i t _ b a r c o d e _ t a b . d a r t \ .  
+ 6 .   * * O f f l i n e   U n i t   B a r c o d e   S y n c * * :   A d d e d   \ P r o d u c t B a r c o d e C o l l e c t i o n \   t o   I s a r .   M o d i f i e d   \ P r o d u c t R e p o s i t o r y . g e t A l l P r o d u c t s ( ) \   t o   s y n c   \ p r o d u c t _ b a r c o d e \   a n d   \  i n d P r o d u c t B a r c o d e ( ) \   t o   f a l l b a c k   t o   I s a r   w h e n   o f f l i n e .  
+ 7 .   * * S e t t i n g s   U I   U p d a t e * * :   E n h a n c e d   \  a r c o d e _ s e t t i n g s _ s c r e e n . d a r t \   w i t h   a   S u f f i x   D r o p d o w n   ( \ E n t e r \   o r   \ T a b \ )   a n d   a   ' T e s t   S c a n '   i n t e r a c t i v e   d i a l o g   t o   p r e v i e w   m a p p e d   o u t p u t s .  
+  
+ 
+# 2026-08-22 — Stock-in barcode quick add / สแกนบาร์โค้ดเพื่อเพิ่มรายการรับสินค้า
+
+- TH: เพิ่มช่องสแกนบาร์โค้ดที่โฟกัสอัตโนมัติบนหน้าสร้างใบรับสินค้า สแกนแล้วเพิ่มสินค้า
+  ลงในร่างใบรับทันที รองรับทั้งบาร์โค้ดหลักและบาร์โค้ดหน่วยเสริม; สินค้าเดิมจะเพิ่มจำนวน
+  ในแถวเดิมและคำนวณยอดใหม่โดยไม่สร้างรายการซ้ำ. รองรับ Enter และการหยุดรับข้อมูล 350 ms
+  สำหรับเครื่องสแกนที่ส่ง Tab/ไม่มี suffix. หากไม่พบหรือค้นหาผิดพลาดจะแจ้งเตือนแบบไม่บล็อก
+  และไม่สร้างสินค้าให้อัตโนมัติ. การสแกนเปลี่ยนเฉพาะร่างในหน้าจอ—ไม่เขียนสต็อกหรือ ledger
+  จนกดรับสินค้าเข้า.
+- EN: Added an autofocus barcode field to the goods-receipt creation page. A scan
+  immediately adds the product to the in-memory receipt draft, resolving both
+  primary and extra-unit barcodes; rescanning an existing product increments its
+  existing row and recalculates totals. It supports Enter and a 350 ms idle
+  fallback for Tab/no-suffix scanners. Missing or failed lookups show a
+  non-blocking alert without auto-creating a product. No stock or ledger write
+  happens until the user explicitly receives the goods.
+
+- TH: ปรับการสแกนต่อเนื่องให้ทุกการเปลี่ยนข้อมูลยกเลิกผลค้นหาเดิมทันที และเก็บการ
+  สแกนล่าสุดไว้ทำต่อหลังคำขอก่อนหน้าจบ จึงไม่เพิ่มสินค้าจากผลเก่าหรือทำรายการล่าสุดหาย;
+  กรณีไม่พบสินค้า/ค้นหาผิดพลาดจะคืนโฟกัสให้ช่องสแกนสำหรับเครื่องที่ส่ง Tab.
+- EN: Hardened consecutive scans so every input change immediately invalidates an
+  older lookup and the latest pending scan runs after the active lookup finishes,
+  preventing stale additions or lost latest scans. Missing/error outcomes also
+  return focus to support Tab-suffix scanners.
+
+# 2026-08-22 — Safe unknown write outcomes / ป้องกันการเขียนข้อมูลซ้ำเมื่อการเชื่อมต่อหลุด
+
+- TH: เปลี่ยน `MySqlQueryExecutor.execute()` ไม่ให้ reconnect หรือ retry คำสั่งเขียน
+  (INSERT/UPDATE/DELETE) อัตโนมัติเมื่อการเชื่อมต่อหลุด เพราะ MySQL อาจ commit สำเร็จก่อน
+  ที่เครื่องลูกข่ายจะไม่ได้รับคำตอบ การ retry จะเสี่ยงสร้างรายการเงินหรือสต็อกซ้ำ. ระบบจะ
+  ส่ง `MySqlWriteOutcomeUnknownException` ที่ระบุชัดว่าผลลัพธ์ไม่ทราบแน่ชัดและต้องตรวจสอบ
+  (reconcile) ด้วย idempotency key/หลักฐานรายการก่อนให้ผู้ใช้ทำซ้ำ. คงการ reconnect และ
+  retry หนึ่งครั้งไว้เฉพาะ SELECT/query ที่อ่านข้อมูลเท่านั้น.
+- EN: Changed `MySqlQueryExecutor.execute()` so INSERT/UPDATE/DELETE operations
+  are never reconnected and retried automatically after a connection loss:
+  MySQL may have committed before the client lost its response, so retrying can
+  duplicate money or stock records. It now raises the explicit
+  `MySqlWriteOutcomeUnknownException`, requiring reconciliation through an
+  idempotency key or operation evidence before a user retries. One reconnect
+  and retry remains available only for read SELECT/query operations.
+
+# 2026-08-22 — Checkout and purchase-order idempotency / ป้องกันบิลขายและใบสั่งซื้อซ้ำ
+
+- TH: เพิ่ม UUID ต่อหนึ่งหน้าต่างชำระเงิน และต่อหนึ่งหน้าสร้างใบรับ/ใบสั่งซื้อใหม่; เมื่อกดซ้ำ
+  หรือเครือข่ายหลุด ระบบใช้ UUID เดิมตรวจหาบิล/PO ที่บันทึกสำเร็จแล้ว พร้อมเทียบ SHA-256 ของ
+  ข้อมูลรายการทั้งหมด. ข้อมูลเดียวกันจะคืนเลขเอกสารเดิมโดยไม่ตัดสต็อกหรือบันทึกเงินซ้ำ;
+  ข้อมูลต่างกันภายใต้ UUID เดิมจะถูกปฏิเสธ. เพิ่ม unique key ของ `order.idempotencyKey` และ
+  `purchase_order.idempotencyKey` โดยตรวจข้อมูลซ้ำเดิมก่อนสร้าง index. เพิ่ม exclusive
+  transaction scope สำหรับ MySQL connection กลาง จึงไม่มี SQL จากงานอื่นแทรกระหว่าง
+  START TRANSACTION กับ COMMIT/ROLLBACK และห้าม reconnect/retry SELECT ภายใน scope.
+- EN: Added one UUID per payment dialog and per newly-created goods-receipt/PO page.
+  Retries and unknown network outcomes reconcile through that same UUID and a
+  canonical SHA-256 payload hash. A matching prior order/PO returns its original
+  ID without repeating stock or payment side effects; a different payload using
+  the same UUID is rejected. Added checked unique indexes for
+  `order.idempotencyKey` and `purchase_order.idempotencyKey`, plus an exclusive
+  transaction scope for the singleton MySQL connection so unrelated SQL cannot
+  interleave between START TRANSACTION and COMMIT/ROLLBACK; reads neither
+  reconnect nor retry inside that scope.
+
+# 2026-08-22 — Safe PO receiving / รับสินค้า PO แบบกันซ้ำและรับเฉพาะยอดคงเหลือ
+
+- TH: ปรับปุ่ม “รับทั้งหมด” ของใบสั่งซื้อให้รับเฉพาะจำนวนที่ยังค้างอยู่ ไม่ย้อนหรือลบ
+  สต็อกที่เคยรับแล้ว และล็อกหัวใบ/รายการ PO (`FOR UPDATE`) ก่อนปรับสต็อก. การรับบางส่วน
+  ตรวจสินค้าว่าอยู่ใน PO จริง, ไม่ซ้ำ, และจำนวนไม่เกินยอดค้างรับ ภายใน transaction เดียวกัน.
+  เพิ่มตาราง `purchase_order_receipt_operation` เก็บ UUID และ SHA-256 ของการรับแต่ละครั้ง;
+  การกดซ้ำหรือคำตอบจากเครือข่ายหายจะคืนผลเดิมโดยไม่เพิ่ม stock ledger ซ้ำ ส่วน UUID เดิมที่
+  ส่งข้อมูลต่างกันจะถูกปฏิเสธ. ย้ายโครงสร้างนี้จริงแล้ว พร้อมรายงานใน `migration_reports`.
+- EN: Changed “receive all” to receive only each PO line’s outstanding quantity,
+  never reversing or deleting stock already received, and locks the PO header and
+  lines (`FOR UPDATE`) before stock changes. Partial receiving now verifies that
+  each product belongs to the PO, is not duplicated, and does not exceed its
+  remaining quantity inside the same transaction. Added
+  `purchase_order_receipt_operation` to store a UUID and SHA-256 per receipt
+  action; repeated clicks and lost network responses reconcile to the completed
+  action without duplicate stock-ledger writes, while a reused UUID with a
+  different payload is rejected. The schema migration was applied and recorded
+  under `migration_reports`.
+
+# 2026-08-22 — PO lifecycle lock and immutable audit / ล็อกวงจร PO และประวัติถาวร
+
+- TH: การปิดใบรับเข้าบางส่วนใช้ UUID กันกดซ้ำและล็อกหัวใบ/รายการใน transaction เดียวกัน
+  แล้วตัดเฉพาะ “ยอดที่ยังไม่ได้รับ” โดยปรับจำนวนสั่งให้เท่ากับจำนวนรับจริง—ไม่ลบแถวหรือ
+  ย้อนสต็อกที่รับไปแล้ว. เพิ่ม `CLOSE` ในตาราง operation และ `purchase_order_audit_log`
+  สำหรับเก็บ snapshot ของการรับเต็ม/บางส่วน/ปิดใบ และการแก้ไขหรือยกเลิก PO แบบ append-only.
+  การแก้ไข/ยกเลิกทำได้เฉพาะ DRAFT หรือ ORDERED ที่ยังไม่มี receivedQuantity; PARTIAL,
+  RECEIVED และ CANCELLED ถูกปฏิเสธที่ repository แม้จะเรียกข้ามหน้าจอ. ปิดช่องทางเก่าที่
+  เขียนทับใบที่รับแล้วและย้อน/เพิ่มสต็อกใหม่ เพื่อบังคับให้ใช้ receipt flow ที่กันซ้ำ.
+- EN: Closing a partial PO now uses a persistent retry UUID and locks the header
+  and lines in one transaction. It cancels only the outstanding quantity by
+  reducing ordered quantity to received quantity; it never deletes PO lines or
+  reverses stock already received. Added `CLOSE` receipt operations and the
+  append-only `purchase_order_audit_log`, which snapshots full/partial receipts,
+  close actions, and successful PO edits/cancellations. Repository-level guards
+  allow edits/cancellation only for DRAFT or ORDERED POs with no received
+  quantity; PARTIAL, RECEIVED, and CANCELLED POs are rejected even if a caller
+  bypasses the UI. The old received-PO overwrite/reversal path now refuses work
+  so receiving must use the idempotent receipt flow.
+
+# 2026-08-22 — Legacy supplier PO safety / ปลอดภัยสำหรับหน้าผู้ขายแบบเก่า
+
+- TH: เปลี่ยนปุ่มรับสินค้าในหน้าจัดการใบสั่งซื้อแบบเก่าให้เรียก receipt flow กลางที่
+  ล็อก PO, รับเฉพาะยอดคงเหลือ, และบันทึก UUID ของการรับ แทนการบวกสต็อกและเขียน ledger
+  เอง. หน้าจอเก็บ UUID เดิมต่อ PO จนกว่าจะสำเร็จ ดังนั้นกดซ้ำหรือคำตอบเครือข่ายหายจะไม่
+  เพิ่มสต็อกซ้ำ. หน้า “สร้างใบสั่งซื้อ” แบบเก่าใช้ UUID และ SHA-256 ของข้อมูลรายการเช่นกัน
+  พร้อม exclusive transaction และคืนเลข PO เดิมเฉพาะเมื่อข้อมูลตรงกัน.
+- EN: Replaced the legacy supplier PO screen's direct stock/ledger writes with
+  the shared receipt flow, which locks the PO, receives only outstanding
+  quantities, and records a receipt UUID. The screen retains that UUID per PO
+  until success, so repeated taps or lost responses cannot add stock twice.
+  The legacy create-PO screen now also uses a UUID and SHA-256 payload hash,
+  an exclusive transaction, and returns the original PO ID only for a matching
+  retry.

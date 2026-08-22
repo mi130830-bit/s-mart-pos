@@ -256,11 +256,34 @@ class _BackupTabState extends State<BackupTab> {
   }
 
   Future<void> _confirmAndRestore(File file) async {
+    setState(() {
+      _isLoading = true;
+      _statusMsg = 'กำลังตรวจสอบไฟล์สำรองข้อมูล...';
+    });
+    final validation = await _backupService.inspectBackup(file);
+    if (!mounted) return;
+    if (!validation.isValid) {
+      setState(() {
+        _isLoading = false;
+        _statusMsg = '❌ ไฟล์ไม่ผ่านการตรวจสอบ: ${validation.error}';
+      });
+      AlertService.show(
+        context: context,
+        message: 'ไม่สามารถกู้คืนไฟล์นี้ได้: ${validation.error}',
+        type: 'error',
+      );
+      return;
+    }
+    setState(() => _isLoading = false);
+
     final confirm = await ConfirmDialog.show(
       context,
       title: 'ยืนยันการกู้คืนข้อมูล?',
       content:
-          'ข้อมูลปัจจุบันทั้งหมดจะถูกลบและแทนที่ด้วยข้อมูลจาก:\n${file.path.split(Platform.pathSeparator).last}\n\nแน่ใจหรือไม่?',
+          'ข้อมูลปัจจุบันทั้งหมดจะถูกลบและแทนที่ด้วยข้อมูลจาก:\n${file.path.split(Platform.pathSeparator).last}\n\n'
+          'ระบบตรวจไฟล์ผ่านแล้ว (${validation.tableCount} ตาราง${validation.isLegacy ? ', ไฟล์รูปแบบเดิม' : ', มี Checksum'})\n\n'
+          'ก่อนเริ่ม ระบบจะสร้างและตรวจสอบไฟล์สำรองของข้อมูลปัจจุบันอัตโนมัติ 1 ชุด จากนั้นจึงกู้คืนข้อมูล การกู้คืนนี้ย้อนกลับไม่ได้จากหน้าจอนี้\n\n'
+          'แน่ใจหรือไม่?',
       isDestructive: true,
       confirmText: 'ยืนยันกู้คืน',
     );
@@ -278,6 +301,10 @@ class _BackupTabState extends State<BackupTab> {
           _isLoading = false;
           _statusMsg =
               success ? '✅ กู้คืนข้อมูลสำเร็จ' : '❌ กู้คืนข้อมูลล้มเหลว';
+          if (success && _backupService.lastRestoreSafetyBackupPath != null) {
+            _statusMsg =
+                '✅ กู้คืนข้อมูลสำเร็จ\nสำรองข้อมูลเดิมไว้แล้ว: ${_backupService.lastRestoreSafetyBackupPath}';
+          }
         });
         AlertService.show(
           context: context,
@@ -330,7 +357,8 @@ class _BackupTabState extends State<BackupTab> {
                     Icon(Icons.vpn_key, color: Colors.orange),
                     SizedBox(width: 8),
                     Text('Google OAuth Credentials',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -351,7 +379,8 @@ class _BackupTabState extends State<BackupTab> {
                   prefixIcon: Icons.lock_outline,
                   obscureText: !_showSecret,
                   suffixIcon: IconButton(
-                    icon: Icon(_showSecret ? Icons.visibility_off : Icons.visibility),
+                    icon: Icon(
+                        _showSecret ? Icons.visibility_off : Icons.visibility),
                     onPressed: () => setState(() => _showSecret = !_showSecret),
                   ),
                 ),

@@ -79,6 +79,41 @@ class MySQLService {
           [Map<String, dynamic>? params]) =>
       _executor.query(sql, params);
 
+  /// Runs one atomic unit on the singleton connection without allowing another
+  /// app zone to issue SQL between START TRANSACTION and COMMIT/ROLLBACK.
+  Future<T> runExclusiveTransaction<T>(Future<T> Function() action) async {
+    if (!isConnected()) await connect();
+    if (!isConnected()) throw StateError('Database connection failed');
+    return _executor.runExclusiveTransaction(action);
+  }
+
+  Future<void> ensureOrderIdempotencySchema() async {
+    const table = '`order`';
+    await ensureColumn('order', 'idempotencyKey', 'VARCHAR(64) NULL');
+    await ensureColumn('order', 'idempotencyPayloadHash', 'CHAR(64) NULL');
+    final duplicates = await query('''
+      SELECT idempotencyKey FROM $table
+      WHERE idempotencyKey IS NOT NULL AND idempotencyKey <> ''
+      GROUP BY idempotencyKey HAVING COUNT(*) > 1 LIMIT 1
+    ''');
+    if (duplicates.isNotEmpty) {
+      throw StateError(
+          'Cannot add order idempotency unique key: existing duplicate key ${duplicates.first['idempotencyKey']}');
+    }
+    final existing = await query('''
+      SELECT COUNT(*) AS count FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'order'
+        AND index_name = 'idx_order_idempotency'
+    ''');
+    final indexCount = existing.isEmpty
+        ? 0
+        : int.tryParse(existing.first['count']?.toString() ?? '0') ?? 0;
+    if (indexCount == 0) {
+      await execute(
+          'ALTER TABLE $table ADD UNIQUE KEY idx_order_idempotency (idempotencyKey)');
+    }
+  }
+
   // Database Initialization Methods
   Future<void> initHeldBillsTable() async {
     const sql = '''
@@ -276,11 +311,27 @@ class MySQLService {
           'purchase_order', 'idempotencyKey', 'VARCHAR(64) NULL');
       await ensureColumn(
           'purchase_order', 'idempotencyPayloadHash', 'CHAR(64) NULL');
-      try {
+      await ensurePurchaseOrderReceiptOperationSchema();
+      final poDuplicates = await query('''
+        SELECT idempotencyKey FROM purchase_order
+        WHERE idempotencyKey IS NOT NULL AND idempotencyKey <> ''
+        GROUP BY idempotencyKey HAVING COUNT(*) > 1 LIMIT 1
+      ''');
+      if (poDuplicates.isNotEmpty) {
+        throw StateError(
+            'Cannot add purchase-order idempotency unique key: existing duplicate key ${poDuplicates.first['idempotencyKey']}');
+      }
+      final poIndex = await query('''
+        SELECT COUNT(*) AS count FROM information_schema.statistics
+        WHERE table_schema = DATABASE() AND table_name = 'purchase_order'
+          AND index_name = 'idx_purchase_order_idempotency'
+      ''');
+      final poIndexCount = poIndex.isEmpty
+          ? 0
+          : int.tryParse(poIndex.first['count']?.toString() ?? '0') ?? 0;
+      if (poIndexCount == 0) {
         await execute(
             'ALTER TABLE purchase_order ADD UNIQUE KEY idx_purchase_order_idempotency (idempotencyKey)');
-      } catch (_) {
-        // Existing installations may already have the key.
       }
       await ensureColumn('supplier', 'systemKey', 'VARCHAR(64) NULL');
       try {
@@ -293,6 +344,63 @@ class MySQLService {
       LoggerService.error(
           'MySQLService', 'Error ensuring purchase_order columns', e);
     }
+  }
+
+  /// Stores one immutable receipt operation per PO action.  This is separate
+  /// from the PO-create idempotency key because a single PO can be received in
+  /// several legitimate partial deliveries.
+  Future<void> ensurePurchaseOrderReceiptOperationSchema() async {
+    await execute('''
+      CREATE TABLE IF NOT EXISTS purchase_order_receipt_operation (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        poId INT NOT NULL,
+        operationKey VARCHAR(64) NOT NULL,
+        payloadHash CHAR(64) NOT NULL,
+        receiptMode ENUM('FULL', 'PARTIAL', 'CLOSE') NOT NULL,
+        status ENUM('COMPLETED') NOT NULL DEFAULT 'COMPLETED',
+        createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY idx_po_receipt_operation_key (operationKey),
+        INDEX idx_po_receipt_operation_po (poId)
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ''');
+    // Existing installs had an enum without CLOSE. Avoid a needless ALTER on
+    // every startup because DDL takes a table lock and implicitly commits.
+    final modeColumn = await query('''
+      SELECT COLUMN_TYPE AS columnType
+      FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'purchase_order_receipt_operation'
+        AND column_name = 'receiptMode'
+      LIMIT 1
+    ''');
+    final columnType = modeColumn.isEmpty
+        ? ''
+        : modeColumn.first['columnType']?.toString().toUpperCase() ?? '';
+    if (!columnType.contains("'CLOSE'")) {
+      await execute('''
+        ALTER TABLE purchase_order_receipt_operation
+        MODIFY receiptMode ENUM('FULL', 'PARTIAL', 'CLOSE') NOT NULL
+      ''');
+    }
+    await ensurePurchaseOrderAuditSchema();
+  }
+
+  /// Append-only evidence for PO lifecycle changes. Payload is stored as JSON
+  /// text so historical quantities remain inspectable after a PO is closed.
+  Future<void> ensurePurchaseOrderAuditSchema() async {
+    await execute('''
+      CREATE TABLE IF NOT EXISTS purchase_order_audit_log (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        poId INT NOT NULL,
+        eventType VARCHAR(48) NOT NULL,
+        operationKey VARCHAR(64) NULL,
+        payloadJson LONGTEXT NOT NULL,
+        createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_purchase_order_audit_po (poId),
+        INDEX idx_purchase_order_audit_operation (operationKey)
+      ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    ''');
   }
 
   Future<void> ensureBranchColumns() async {

@@ -22,6 +22,21 @@ class MockMySQLBackup implements MySQLService {
       ];
     }
 
+    if (sql.contains('SHOW COLUMNS FROM `users`')) {
+      return [
+        {'Field': 'id', 'Type': 'int'},
+        {'Field': 'name', 'Type': 'varchar(255)'},
+        {'Field': 'created_at', 'Type': 'datetime'},
+      ];
+    }
+    if (sql.contains('SHOW COLUMNS FROM `products`')) {
+      return [
+        {'Field': 'id', 'Type': 'int'},
+        {'Field': 'name', 'Type': 'varchar(255)'},
+        {'Field': 'price', 'Type': 'decimal(10,2)'},
+      ];
+    }
+
     // 2. Users Table
     // SELECT * FROM `users` LIMIT 1000 OFFSET 0
     if (sql.contains("FROM `users`")) {
@@ -73,11 +88,22 @@ void main() {
     // Expect Valid JSON
     expect(content, startsWith('{'));
     expect(content, endsWith('}'));
+    expect(content, contains('"data"'));
+    expect(content, contains('"manifest"'));
     expect(content, contains('"users":['));
     expect(content, contains('"products":['));
+    expect(content, contains('"checksum"'));
     // Check data
     expect(content, contains('"name":"Admin"'));
     expect(content, contains('"name":"Coke"'));
+
+    final inspection = await backupService.inspectBackup(file);
+    expect(inspection.isValid, isTrue);
+    expect(inspection.isLegacy, isFalse);
+
+    await file.writeAsString(content.replaceFirst('Coke', 'Pepsi'));
+    final tamperedInspection = await backupService.inspectBackup(file);
+    expect(tamperedInspection.isValid, isFalse);
 
     // Cleanup
     if (file.existsSync()) file.deleteSync();

@@ -105,17 +105,8 @@ extension PosCartExtension on PosStateNotifier {
         }
         await addProductToCart(exactMatch, quantity: quantity);
         return ScanResult(status: ScanStatus.success, product: exactMatch);
-      } else if (matches.isNotEmpty) {
-        if (matches.length == 1) {
-          final p = matches.first;
-          if (isWeighingProduct(p)) {
-            return ScanResult(status: ScanStatus.requiresWeight, product: p);
-          }
-          await addProductToCart(p, quantity: quantity);
-          return ScanResult(status: ScanStatus.success, product: p);
-        }
-        return ScanResult(status: ScanStatus.multipleMatches, matches: matches);
       }
+      
       return ScanResult(status: ScanStatus.notFound);
     } catch (e) {
       debugPrint('Scan Error: $e');

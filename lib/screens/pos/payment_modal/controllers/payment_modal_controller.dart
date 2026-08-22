@@ -23,6 +23,7 @@ import '../../../../widgets/dialogs/point_redemption_dialog.dart';
 import '../../../../utils/pos_reprint_barcode_router.dart';
 import '../../../../state/payment/payment_session_notifier.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import 'slip_verification_controller.dart';
 import '../widgets/reprint_dialog.dart';
 
@@ -32,6 +33,9 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
   final TextEditingController amountCtrl = TextEditingController();
   final TextEditingController noteCtrl = TextEditingController();
   final FocusNode amountFocusNode = FocusNode();
+  // Retained for this open payment dialog, including a retry after an unknown
+  // network outcome.  A new checkout dialog intentionally creates a new key.
+  final String _orderIdempotencyKey = const Uuid().v4();
 
   void disposePaymentController() {
     amountCtrl.dispose();
@@ -402,6 +406,7 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
 
       final orderId = await posState.saveOrder(
         payments: finalPayments,
+        idempotencyKey: _orderIdempotencyKey,
         deliveryType: session.deliveryType,
         note: noteCtrl.text.trim(),
       );

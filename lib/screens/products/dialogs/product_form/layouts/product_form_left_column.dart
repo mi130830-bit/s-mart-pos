@@ -69,6 +69,9 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                 children: [
                   CustomTextField(
                     controller: _barcodeCtrl,
+                    autofocus: widget.product?.barcode == null ||
+                        widget
+                            .product!.barcode!.isEmpty, // ✅ Auto-focus if empty
                     readOnly: widget.product?.barcode != null &&
                         widget.product!.barcode!.isNotEmpty,
                     label: 'รหัสบาร์โค้ด (Barcode)',
@@ -78,8 +81,9 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                             widget.product!.barcode!.isNotEmpty)
                         ? Colors.grey[200]
                         : null,
+                    onChanged: _schedulePrimaryBarcodeDuplicateCheck,
                     onSubmitted: (barcode) {
-                      _warnIfBarcodeIsAlreadyUsed(barcode);
+                      _checkPrimaryBarcodeDuplicateNow(barcode);
                     },
                   ),
                   const SizedBox(height: 12),

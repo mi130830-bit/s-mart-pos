@@ -12,7 +12,7 @@ import 'gps_controller.dart';
 class CustomerTrackingController {
   // Add a vehicle only after its ESP GPS tracker is provisioned with the
   // same canonical vehicle key, so customers never receive an unusable link.
-  static const Set<String> _customerTrackableVehicleKeys = {'รถเครน'};
+  static const Set<String> _customerTrackableVehicleKeys = {'รถเครน', 'ดั้มเล็ก', 'ดั้มใหญ่'};
 
   static final Random _random = Random.secure();
   static Future<void>? _schemaReady;

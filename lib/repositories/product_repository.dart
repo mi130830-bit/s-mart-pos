@@ -3,6 +3,7 @@ import 'package:isar/isar.dart';
 import 'package:string_similarity/string_similarity.dart';
 import '../services/local_db_service.dart';
 import '../models/schema/product_collection.dart';
+import '../models/schema/product_barcode_collection.dart'; // ✅ Added
 import '../services/mysql_service.dart';
 import '../services/api_service.dart';
 import '../models/product_barcode.dart';

@@ -24,16 +24,38 @@ extension ProductRepositoryBarcodes on ProductRepository {
   }
 
   Future<Map<String, dynamic>?> findProductBarcode(String barcode) async {
-    if (!_dbService.isConnected()) await _dbService.connect();
     try {
-      final results = await _dbService.query(
-          'SELECT * FROM product_barcode WHERE barcode = :barcode LIMIT 1',
-          {'barcode': barcode});
-      return results.isNotEmpty ? results.first : null;
+      if (!_dbService.isConnected()) await _dbService.connect();
+      if (_dbService.isConnected()) {
+        final results = await _dbService.query(
+            'SELECT * FROM product_barcode WHERE barcode = :barcode LIMIT 1',
+            {'barcode': barcode});
+        if (results.isNotEmpty) return results.first;
+      }
     } catch (e) {
-      debugPrint('Error finding barcode $barcode: $e');
-      return null;
+      debugPrint('Error finding barcode $barcode in MySQL: $e, trying Isar...');
     }
+
+    try {
+      // Fallback to Isar
+      final isarDoc = await _isar.productBarcodeCollections
+          .filter()
+          .barcodeEqualTo(barcode)
+          .findFirst();
+      if (isarDoc != null) {
+        return {
+          'id': isarDoc.id,
+          'productId': isarDoc.productId,
+          'barcode': isarDoc.barcode,
+          'unitName': isarDoc.unitName,
+          'price': isarDoc.price,
+          'quantity': isarDoc.quantity,
+        };
+      }
+    } catch (e) {
+      debugPrint('Error finding barcode $barcode in Isar: $e');
+    }
+    return null;
   }
 
   /// Finds a barcode owned by another product, whether it is the product's

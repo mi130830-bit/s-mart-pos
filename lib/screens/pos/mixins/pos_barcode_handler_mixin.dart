@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:intl/intl.dart';
@@ -43,22 +44,33 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
   final TextEditingController qtyCtrl = TextEditingController(text: '1');
   final ProductRepository productRepo = ProductRepository();
 
-  Timer? debounceTimer;
   final Queue<_ScanJob> _scanQueue = Queue<_ScanJob>();
   bool _isProcessingQueue = false;
 
   void initBarcodeHandler() {
-    barcodeCtrl.addListener(onBarcodeChanged);
     PosReprintBarcodeRouter.instance.addListener(onReprintDialogBarcode);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       barcodeFocusNode.requestFocus();
     });
+    
+    // ✅ Add Tab key interception for Scanner Tab suffix
+    barcodeFocusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.tab &&
+          BarcodeUtils.scannerSuffix == 'Tab') {
+        if (barcodeCtrl.text.isNotEmpty) {
+          final posState =
+              ProviderScope.containerOf(context, listen: false).read(posProvider.notifier);
+          handleBarcodeSubmit(barcodeCtrl.text, posState);
+        }
+        return KeyEventResult.handled; // Prevent focus shifting
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   void disposeBarcodeHandler() {
     PosReprintBarcodeRouter.instance.removeListener(onReprintDialogBarcode);
-    debounceTimer?.cancel();
-    barcodeCtrl.removeListener(onBarcodeChanged);
     barcodeFocusNode.dispose();
     keyboardListenerFocus.dispose();
     barcodeCtrl.dispose();
@@ -168,36 +180,15 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  void onBarcodeChanged() {
-    final text = barcodeCtrl.text;
-    if (text.isEmpty) return;
-    final normalized = BarcodeUtils.fixThaiInput(text);
-    if (normalized != text) {
-      barcodeCtrl.text = normalized;
-      barcodeCtrl.selection =
-          TextSelection.fromPosition(TextPosition(offset: normalized.length));
-    }
-    if (debounceTimer?.isActive ?? false) debounceTimer!.cancel();
-    if (normalized.length >= 3) {
-      debounceTimer = Timer(const Duration(milliseconds: 300), () {
-        if (!mounted) return;
-        final current = barcodeCtrl.text;
-        if (current.isNotEmpty) {
-          final posState =
-              ProviderScope.containerOf(context).read(posProvider.notifier);
-          handleBarcodeSubmit(current, posState);
-        }
-      });
-    }
-  }
-
   void handleBarcodeSubmit(String value, PosStateNotifier posState) {
-    debounceTimer?.cancel();
     if (value.isEmpty) {
       barcodeFocusNode.requestFocus();
       return;
     }
-    _scanQueue.add(_ScanJob(value, posState));
+    final normalized = BarcodeUtils.fixThaiInput(value);
+    barcodeCtrl.clear(); // ✅ Clear synchronously to prevent concatenation of fast scans
+    
+    _scanQueue.add(_ScanJob(normalized, posState));
     _processScanQueue();
   }
 

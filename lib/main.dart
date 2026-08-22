@@ -21,6 +21,7 @@ import 'screens/dashboard/main_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/customer_display/customer_display_screen.dart';
 import 'screens/settings/initial_setup_screen.dart';
+import 'utils/barcode_utils.dart'; // ✅ Added for BarcodeUtils
 import 'services/telegram_scheduler.dart';
 import 'services/telegram_service.dart';
 import 'services/notification_scheduler.dart';
@@ -69,6 +70,7 @@ void main(List<String> args) {
 
       // ✅ Pre-load connectivity settings (like api_url) from Prefs for early API access
       await SettingsService().preLoad();
+      await BarcodeUtils.init(); // ✅ Load scanner settings at startup
 
       // ---------------------------------------------------------
       // ✅ 1. ส่วนจัดการ Multi Window (จอฝั่งลูกค้า)

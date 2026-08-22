@@ -46,11 +46,13 @@ extension PosOrderExtension on PosStateNotifier {
 
   Future<int> saveOrder({
     required List<PaymentRecord> payments,
+    required String idempotencyKey,
     DeliveryType deliveryType = DeliveryType.none,
     String? note,
   }) async {
     try {
       final orderId = await _orderService.processOrder(
+        idempotencyKey: idempotencyKey,
         cart: cart,
         currentCustomer: _currentCustomer,
         payments: payments,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:decimal/decimal.dart'; // ✅ Import Decimal
+import 'package:uuid/uuid.dart';
 import '../../repositories/purchase_repository.dart';
 import '../../repositories/product_repository.dart';
 import '../../models/supplier.dart';
@@ -21,6 +22,7 @@ class CreatePurchaseOrderScreen extends StatefulWidget {
 
 class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   final PurchaseRepository _purchaseRepo = PurchaseRepository();
+  final String _createOperationKey = const Uuid().v4();
 
   Supplier? _selectedSupplier;
   final List<Map<String, dynamic>> _orderItems = [];
@@ -98,6 +100,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
     }).toList();
 
     final poId = await _purchaseRepo.createPO(
+      idempotencyKey: _createOperationKey,
       supplierId: _selectedSupplier!.id,
       branchId: 1, // Default. Future: Get from global state
       userId: null, // Future: Pass operator ID
@@ -168,9 +171,12 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  _selectedSupplier?.name ?? 'คลิกเพื่อเลือกผู้จำหน่าย',
+                                  _selectedSupplier?.name ??
+                                      'คลิกเพื่อเลือกผู้จำหน่าย',
                                   style: TextStyle(
-                                    color: _selectedSupplier == null ? Colors.grey : Colors.black,
+                                    color: _selectedSupplier == null
+                                        ? Colors.grey
+                                        : Colors.black,
                                     fontSize: 16,
                                   ),
                                 ),

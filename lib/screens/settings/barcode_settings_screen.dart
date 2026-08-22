@@ -14,6 +14,7 @@ class BarcodeSettingsScreen extends StatefulWidget {
 
 class _BarcodeSettingsScreenState extends State<BarcodeSettingsScreen> {
   bool _isEnabled = true;
+  String _scannerSuffix = 'Enter';
   Map<String, String> _mapping = {};
   bool _isLoading = true;
 
@@ -27,13 +28,18 @@ class _BarcodeSettingsScreenState extends State<BarcodeSettingsScreen> {
     await BarcodeUtils.init(); // Ensure loaded
     setState(() {
       _isEnabled = BarcodeUtils.isEnabled;
+      _scannerSuffix = BarcodeUtils.scannerSuffix;
       _mapping = Map.from(BarcodeUtils.getCurrentMapping());
       _isLoading = false;
     });
   }
 
   Future<void> _save() async {
-    await BarcodeUtils.saveSettings(enabled: _isEnabled, mapping: _mapping);
+    await BarcodeUtils.saveSettings(
+      enabled: _isEnabled,
+      mapping: _mapping,
+      suffix: _scannerSuffix,
+    );
     if (!mounted) return;
     AlertService.show(
       context: context,
@@ -106,6 +112,62 @@ class _BarcodeSettingsScreenState extends State<BarcodeSettingsScreen> {
     );
   }
 
+  void _testScan() {
+    final testCtrl = TextEditingController();
+    String result = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('ทดสอบสแกน (Test Scan)'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('ลองสแกนบาร์โค้ดที่นี่เพื่อดูผลการแปลง'),
+              const SizedBox(height: 12),
+              CustomTextField(
+                controller: testCtrl,
+                label: 'สแกนบาร์โค้ด',
+                autofocus: true,
+                onSubmitted: (val) {
+                  setDialogState(() {
+                    result = BarcodeUtils.fixThaiInput(val);
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              if (result.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('ผลลัพธ์การแปลง:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(result, style: const TextStyle(fontSize: 18, color: Colors.blue, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            CustomButton(
+              onPressed: () => Navigator.pop(ctx),
+              label: 'ปิด',
+              type: ButtonType.secondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -138,6 +200,39 @@ class _BarcodeSettingsScreenState extends State<BarcodeSettingsScreen> {
               setState(() => _isEnabled = val);
               _save();
             },
+          ),
+          ListTile(
+            title: const Text('ปุ่มยืนยันของเครื่องสแกน (Suffix)',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: const Text('ตั้งค่าว่าเครื่องสแกนส่งปุ่มใดเพื่อจบการสแกน'),
+            trailing: DropdownButton<String>(
+              value: _scannerSuffix,
+              items: const [
+                DropdownMenuItem(value: 'Enter', child: Text('Enter')),
+                DropdownMenuItem(value: 'Tab', child: Text('Tab')),
+              ],
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => _scannerSuffix = val);
+                  _save();
+                }
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: CustomButton(
+                    onPressed: _testScan,
+                    icon: Icons.qr_code_scanner,
+                    label: 'ทดสอบสแกน',
+                    type: ButtonType.secondary,
+                  ),
+                ),
+              ],
+            ),
           ),
           const Divider(),
           Padding(

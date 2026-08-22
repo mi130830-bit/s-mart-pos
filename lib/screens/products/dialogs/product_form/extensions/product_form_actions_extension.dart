@@ -2,6 +2,93 @@
 part of '../product_form_dialog.dart';
 
 extension ProductFormActionsExtension on _ProductFormDialogState {
+  void _schedulePrimaryBarcodeDuplicateCheck(String rawBarcode) {
+    _barcodeDuplicateCheckTimer?.cancel();
+    final barcode = BarcodeUtils.fixThaiInput(rawBarcode).trim();
+    if (barcode != rawBarcode) {
+      _barcodeCtrl.value = TextEditingValue(
+        text: barcode,
+        selection: TextSelection.collapsed(offset: barcode.length),
+      );
+    }
+    if (barcode != _lastDuplicatePrimaryBarcode) {
+      _lastDuplicatePrimaryBarcode = null;
+    }
+    final request = ++_barcodeDuplicateCheckRequest;
+    if (barcode.isEmpty) return;
+    _barcodeDuplicateCheckTimer = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_checkPrimaryBarcodeDuplicate(barcode, request));
+    });
+  }
+
+  void _checkPrimaryBarcodeDuplicateNow(String rawBarcode) {
+    _barcodeDuplicateCheckTimer?.cancel();
+    final barcode = BarcodeUtils.fixThaiInput(rawBarcode).trim();
+    if (barcode != rawBarcode) {
+      _barcodeCtrl.value = TextEditingValue(
+        text: barcode,
+        selection: TextSelection.collapsed(offset: barcode.length),
+      );
+    }
+    if (barcode != _lastDuplicatePrimaryBarcode) {
+      _lastDuplicatePrimaryBarcode = null;
+    }
+    if (barcode.isEmpty) return;
+    unawaited(_checkPrimaryBarcodeDuplicate(
+      barcode,
+      ++_barcodeDuplicateCheckRequest,
+    ));
+  }
+
+  Future<void> _checkPrimaryBarcodeDuplicate(
+    String barcode,
+    int request,
+  ) async {
+    var openedDialog = false;
+    try {
+      final conflict = await widget.repo.findBarcodeConflict(
+        barcode,
+        excludingProductId: widget.product?.id,
+      );
+      final currentBarcode =
+          BarcodeUtils.fixThaiInput(_barcodeCtrl.text).trim();
+      if (!mounted ||
+          request != _barcodeDuplicateCheckRequest ||
+          barcode != currentBarcode ||
+          conflict == null ||
+          _barcodeDuplicateDialogVisible ||
+          _lastDuplicatePrimaryBarcode == barcode) {
+        return;
+      }
+
+      _lastDuplicatePrimaryBarcode = barcode;
+      _barcodeDuplicateDialogVisible = true;
+      openedDialog = true;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('บาร์โค้ดซ้ำ'),
+          content: Text(
+            'บาร์โค้ด $barcode ถูกใช้กับสินค้า ${conflict['name'] ?? ''} แล้ว\n'
+            'กรุณาใช้บาร์โค้ดอื่นก่อนบันทึก',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ตกลง'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      // The existing save-time validation remains the final protection.
+    } finally {
+      if (openedDialog) {
+        _barcodeDuplicateDialogVisible = false;
+      }
+    }
+  }
+
   Future<bool> _warnIfBarcodeIsAlreadyUsed(String rawBarcode) async {
     final barcode = rawBarcode.trim();
     if (barcode.isEmpty) return false;

@@ -1,217 +1,366 @@
 part of '../stock_repository.dart';
 
 extension PurchaseOrderReceivingExtension on StockRepository {
-  Future<void> receivePurchaseOrder(int poId) async {
-    if (!_dbService.isConnected()) await _dbService.connect();
-    final items = await _dbService.query(
-        'SELECT * FROM purchase_order_item WHERE poId = :id', {'id': poId});
-    final header = await _dbService
-        .query('SELECT * FROM purchase_order WHERE id = :id', {'id': poId});
-
-    if (items.isEmpty || header.isEmpty) throw Exception('PO not found');
-
-    if (items.any(
-        (item) => (int.tryParse(item['productId'].toString()) ?? 0) <= 0)) {
-      throw Exception(
-          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
-    }
-
-    final docNo = header.first['documentNo'] ?? '-';
-    final List<Map<String, dynamic>> notifyQueue = [];
-
-    await _dbService.execute('START TRANSACTION;');
-
-    try {
-      for (var item in items) {
-        final pId = int.tryParse(item['productId'].toString()) ?? 0;
-        final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
-        final cost = double.tryParse(item['costPrice'].toString()) ?? 0.0;
-        if (pId == 0) continue;
-        await _adjustRecursive(pId, qty, 'PURCHASE_IN',
-            'Ref: $docNo | Cost: $cost | PO: #$poId', null,
-            maxDepth: 10);
-        await _dbService.execute(
-          'UPDATE product SET costPrice = :cost WHERE id = :id',
-          {'cost': cost, 'id': pId},
-        );
-        notifyQueue.add({
-          'id': pId,
-          'qty': qty,
-          'type': 'PURCHASE_IN',
-          'note': 'PO #$poId'
-        });
-      }
-
-      await _dbService.execute(
-        "UPDATE purchase_order SET status = 'RECEIVED', updatedAt = NOW() WHERE id = :id",
-        {'id': poId},
-      );
-      await _dbService.execute('COMMIT;');
-
-      for (var n in notifyQueue) {
-        _checkAndNotify(n['id'], n['qty'], n['type'], n['note']);
-      }
-    } catch (e) {
-      await _dbService.execute('ROLLBACK;');
-      rethrow;
-    }
+  /// Receives only quantities still outstanding on this PO.  A supplied
+  /// operation key is retained by the caller while it retries, so a lost
+  /// response cannot add stock a second time.
+  Future<int> receiveRemainingPurchaseOrder({
+    required int poId,
+    required String operationKey,
+  }) async {
+    final payloadHash = canonicalPayloadHash({'poId': poId, 'mode': 'FULL'});
+    final outcome = await _runReceiptOperation(
+      poId: poId,
+      operationKey: operationKey,
+      payloadHash: payloadHash,
+      mode: 'FULL',
+      apply: (header, items, notifyQueue) async {
+        _validateReceivableHeader(header);
+        _validateResolvedItems(items);
+        final docNo = header['documentNo']?.toString() ?? '-';
+        var receivedAny = false;
+        for (final item in items) {
+          final productId = _asInt(item['productId']);
+          final ordered = _asDouble(item['quantity']);
+          final received = _asDouble(item['receivedQuantity']);
+          final remaining = ordered - received;
+          if (remaining <= _receiptEpsilon) continue;
+          final cost = _asDouble(item['costPrice']);
+          receivedAny = true;
+          await _dbService.execute('''
+            UPDATE purchase_order_item
+            SET receivedQuantity = quantity
+            WHERE id = :itemId AND poId = :poId
+          ''', {'itemId': item['id'], 'poId': poId});
+          await _adjustRecursive(productId, remaining, 'PURCHASE_IN',
+              'Ref: $docNo | Cost: $cost | PO: #$poId', null,
+              maxDepth: 10);
+          await _dbService.execute(
+            'UPDATE product SET costPrice = :cost WHERE id = :id',
+            {'cost': cost, 'id': productId},
+          );
+          notifyQueue.add({
+            'id': productId,
+            'qty': remaining,
+            'type': 'PURCHASE_IN',
+            'note': 'PO #$poId',
+          });
+        }
+        if (!receivedAny) {
+          throw StateError('ไม่มีจำนวนสินค้าคงเหลือให้รับเข้า');
+        }
+        await _updateReceiptHeader(poId, items, forceReceived: true);
+      },
+    );
+    _notifyReceipt(outcome.notifications);
+    return outcome.poId;
   }
 
   Future<int> receivePartialPurchaseOrder({
     required int originalPoId,
     required List<Map<String, dynamic>> receivedItems,
+    required String operationKey,
   }) async {
-    if (!_dbService.isConnected()) await _dbService.connect();
     if (receivedItems.isEmpty) throw Exception('No items to receive');
+    final normalizedItems = receivedItems
+        .map((item) => {
+              'productId': _asInt(item['productId']),
+              'quantity': _asDouble(item['quantity']).toStringAsFixed(4),
+              'costPrice': _asDouble(item['costPrice']).toStringAsFixed(4),
+              'retailPrice': _asDouble(item['retailPrice']).toStringAsFixed(4),
+            })
+        .toList();
+    final payloadHash = canonicalPayloadHash({
+      'poId': originalPoId,
+      'mode': 'PARTIAL',
+      'items': normalizedItems,
+    });
+    final outcome = await _runReceiptOperation(
+      poId: originalPoId,
+      operationKey: operationKey,
+      payloadHash: payloadHash,
+      mode: 'PARTIAL',
+      apply: (header, lockedItems, notifyQueue) async {
+        _validateReceivableHeader(header);
+        _validateResolvedItems(lockedItems);
+        final byProduct = <int, Map<String, dynamic>>{};
+        for (final item in lockedItems) {
+          final productId = _asInt(item['productId']);
+          if (byProduct.containsKey(productId)) {
+            throw StateError('PO มีสินค้าเดิมซ้ำ จึงไม่ปลอดภัยที่จะรับสินค้า');
+          }
+          byProduct[productId] = item;
+        }
+        final seen = <int>{};
+        final docNo = header['documentNo']?.toString() ?? '-';
+        for (final requested in receivedItems) {
+          final productId = _asInt(requested['productId']);
+          final quantity = _asDouble(requested['quantity']);
+          if (productId <= 0 ||
+              quantity <= _receiptEpsilon ||
+              !seen.add(productId)) {
+            throw StateError('รายการรับสินค้าไม่ถูกต้องหรือมีสินค้าซ้ำ');
+          }
+          final line = byProduct[productId];
+          if (line == null) {
+            throw StateError('สินค้า #$productId ไม่อยู่ในใบสั่งซื้อ');
+          }
+          final remaining =
+              _asDouble(line['quantity']) - _asDouble(line['receivedQuantity']);
+          if (quantity - remaining > _receiptEpsilon) {
+            throw StateError(
+                'จำนวนรับสินค้าเกินยอดคงเหลือของสินค้า #$productId');
+          }
+          final cost = _asDouble(requested['costPrice']);
+          final retail = _asDouble(requested['retailPrice']);
+          await _dbService.execute('''
+            UPDATE purchase_order_item
+            SET receivedQuantity = receivedQuantity + :qty,
+                costPrice = :cost, total = quantity * :cost
+            WHERE id = :itemId AND poId = :poId
+          ''', {
+            'qty': quantity,
+            'cost': cost,
+            'itemId': line['id'],
+            'poId': originalPoId,
+          });
+          await _adjustRecursive(productId, quantity, 'PURCHASE_IN',
+              'Ref: $docNo | Cost: $cost | PO: #$originalPoId (Partial)', null,
+              maxDepth: 10);
+          await _dbService.execute(
+            'UPDATE product SET costPrice = :cost, retailPrice = :retail WHERE id = :id',
+            {'cost': cost, 'retail': retail, 'id': productId},
+          );
+          notifyQueue.add({
+            'id': productId,
+            'qty': quantity,
+            'type': 'PURCHASE_IN',
+            'note': 'PO #$originalPoId (Partial)',
+          });
+        }
+        final refreshedItems = await _dbService.query(
+          'SELECT id, productId, quantity, receivedQuantity, costPrice FROM purchase_order_item WHERE poId = :id FOR UPDATE',
+          {'id': originalPoId},
+        );
+        await _updateReceiptHeader(originalPoId, refreshedItems);
+      },
+    );
+    _notifyReceipt(outcome.notifications);
+    return outcome.poId;
+  }
 
-    await _ensureNoUnresolvedPurchaseOrderLines(originalPoId);
+  Future<_ReceiptOutcome> _runReceiptOperation({
+    required int poId,
+    required String operationKey,
+    required String payloadHash,
+    required String mode,
+    required Future<void> Function(
+            Map<String, dynamic> header,
+            List<Map<String, dynamic>> items,
+            List<Map<String, dynamic>> notifications)
+        apply,
+  }) async {
+    if (operationKey.trim().isEmpty || operationKey.length > 64) {
+      throw ArgumentError.value(
+          operationKey, 'operationKey', 'ต้องเป็นรหัส UUID ที่ถูกต้อง');
+    }
+    if (!_dbService.isConnected()) await _dbService.connect();
+    await _dbService.ensurePurchaseOrderReceiptOperationSchema();
 
-    await _dbService.execute('START TRANSACTION;');
+    Future<_ReceiptOutcome?> reconcile() async {
+      final rows = await _dbService.query('''
+        SELECT poId, payloadHash, receiptMode FROM purchase_order_receipt_operation
+        WHERE operationKey = :key LIMIT 1
+      ''', {'key': operationKey});
+      if (rows.isEmpty) return null;
+      if (rows.first['payloadHash']?.toString() != payloadHash ||
+          rows.first['receiptMode']?.toString() != mode ||
+          _asInt(rows.first['poId']) != poId) {
+        throw StateError('รหัสการรับสินค้าเดิมถูกใช้กับข้อมูลคนละชุด');
+      }
+      return _ReceiptOutcome(poId: poId, notifications: const []);
+    }
 
     try {
-      final docNoRes = await _dbService.query(
-          'SELECT documentNo FROM purchase_order WHERE id = :id',
-          {'id': originalPoId});
-      final docNo = docNoRes.isNotEmpty ? docNoRes.first['documentNo'] : '-';
-
-      for (var item in receivedItems) {
-        final int pId = int.tryParse(item['productId'].toString()) ?? 0;
-        final double qtyReceivedNow =
-            double.tryParse(item['quantity'].toString()) ?? 0;
-        final double cost = double.tryParse(item['costPrice'].toString()) ?? 0;
-        final double retail =
-            double.tryParse(item['retailPrice'].toString()) ?? 0;
-        if (pId == 0 || qtyReceivedNow <= 0) continue;
-
-        await _dbService.execute(
-          '''
-          UPDATE purchase_order_item 
-          SET receivedQuantity = receivedQuantity + :qty,
-              costPrice = :cost, 
-              total = quantity * :cost 
-          WHERE poId = :poId AND productId = :pId
-          ''',
-          {
-            'qty': qtyReceivedNow,
-            'cost': cost,
-            'poId': originalPoId,
-            'pId': pId
-          },
-        );
-        await _adjustRecursive(pId, qtyReceivedNow, 'PURCHASE_IN',
-            'Ref: $docNo | Cost: $cost | PO: #$originalPoId (Partial)', null);
-        await _dbService.execute(
-          'UPDATE product SET costPrice = :cost, retailPrice = :retail WHERE id = :id',
-          {'cost': cost, 'retail': retail, 'id': pId},
-        );
-      }
-
-      final itemsRes = await _dbService.query(
-        'SELECT quantity, receivedQuantity FROM purchase_order_item WHERE poId = :id',
-        {'id': originalPoId},
-      );
-
-      bool allCompleted = true;
-      bool anyReceived = false;
-      for (var row in itemsRes) {
-        double qty = double.tryParse(row['quantity'].toString()) ?? 0;
-        double recv = double.tryParse(row['receivedQuantity'].toString()) ?? 0;
-        if (recv > 0) anyReceived = true;
-        if (recv < qty) allCompleted = false;
-      }
-
-      String newStatus = 'ORDERED';
-      if (allCompleted && itemsRes.isNotEmpty) {
-        newStatus = 'RECEIVED';
-      } else if (anyReceived) {
-        newStatus = 'PARTIAL';
-      }
-
-      final totalRes = await _dbService.query(
-        'SELECT SUM(total) as newTotal FROM purchase_order_item WHERE poId = :id',
-        {'id': originalPoId},
-      );
-      double newTotal = 0.0;
-      if (totalRes.isNotEmpty && totalRes.first['newTotal'] != null) {
-        newTotal =
-            double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
-      }
-
-      final vatRes = await _dbService.query(
-          'SELECT vatType FROM purchase_order WHERE id = :id',
-          {'id': originalPoId});
-      int vatType = 0;
-      if (vatRes.isNotEmpty) {
-        vatType = int.tryParse(vatRes.first['vatType'].toString()) ?? 0;
-      }
-      if (vatType == 1) newTotal = newTotal * 1.07;
-
-      await _dbService.execute(
-        'UPDATE purchase_order SET status = :status, totalAmount = :total, updatedAt = NOW() WHERE id = :id',
-        {'status': newStatus, 'total': newTotal, 'id': originalPoId},
-      );
-
-      await _dbService.execute('COMMIT;');
-      return originalPoId;
-    } catch (e) {
-      await _dbService.execute('ROLLBACK;');
-      debugPrint('Error partial receiving PO: $e');
+      return await _dbService.runExclusiveTransaction(() async {
+        await _dbService.execute('START TRANSACTION');
+        try {
+          final existing = await _lockOrCreateReceiptOperation(
+            poId: poId,
+            operationKey: operationKey,
+            payloadHash: payloadHash,
+            mode: mode,
+          );
+          if (existing) {
+            await _dbService.execute('COMMIT');
+            return _ReceiptOutcome(poId: poId, notifications: const []);
+          }
+          final headers = await _dbService.query(
+            'SELECT id, documentNo, status, vatType FROM purchase_order WHERE id = :id FOR UPDATE',
+            {'id': poId},
+          );
+          if (headers.length != 1) throw StateError('ไม่พบใบสั่งซื้อ');
+          final items = await _dbService.query('''
+            SELECT id, productId, quantity, receivedQuantity, costPrice
+            FROM purchase_order_item WHERE poId = :id FOR UPDATE
+          ''', {'id': poId});
+          if (items.isEmpty) throw StateError('ไม่พบรายการสินค้าในใบสั่งซื้อ');
+          final notifications = <Map<String, dynamic>>[];
+          await apply(headers.first, items, notifications);
+          await _writePurchaseOrderAudit(
+            poId: poId,
+            eventType: 'RECEIPT_$mode',
+            operationKey: operationKey,
+            payload: {
+              'header': headers.first,
+              'items': items,
+              'payloadHash': payloadHash,
+            },
+          );
+          await _dbService.execute('''
+            UPDATE purchase_order_receipt_operation
+            SET completedAt = NOW() WHERE operationKey = :key
+          ''', {'key': operationKey});
+          await _dbService.execute('COMMIT');
+          return _ReceiptOutcome(poId: poId, notifications: notifications);
+        } catch (_) {
+          try {
+            await _dbService.execute('ROLLBACK');
+          } catch (_) {
+            // The operation-key reconciliation below is the only safe retry.
+          }
+          rethrow;
+        }
+      });
+    } catch (_) {
+      final completed = await reconcile();
+      if (completed != null) return completed;
       rethrow;
     }
   }
 
-  Future<void> closePartialPurchaseOrder(int poId) async {
-    if (!_dbService.isConnected()) await _dbService.connect();
-
-    final headerRes = await _dbService.query(
-        'SELECT status FROM purchase_order WHERE id = :id', {'id': poId});
-    if (headerRes.isEmpty || headerRes.first['status'] != 'PARTIAL') return;
-
-    await _dbService.execute('START TRANSACTION;');
-
-    try {
-      await _dbService.execute(
-        'DELETE FROM purchase_order_item WHERE poId = :id AND receivedQuantity <= 0',
-        {'id': poId},
-      );
-      await _dbService.execute(
-        '''
-        UPDATE purchase_order_item 
-        SET quantity = receivedQuantity,
-            total = receivedQuantity * costPrice
-        WHERE poId = :id AND receivedQuantity > 0
-        ''',
-        {'id': poId},
-      );
-
-      final totalRes = await _dbService.query(
-        'SELECT SUM(total) as newTotal FROM purchase_order_item WHERE poId = :id',
-        {'id': poId},
-      );
-      double newTotal = 0.0;
-      if (totalRes.isNotEmpty && totalRes.first['newTotal'] != null) {
-        newTotal =
-            double.tryParse(totalRes.first['newTotal'].toString()) ?? 0.0;
-      }
-
-      final vatRes = await _dbService.query(
-          'SELECT vatType FROM purchase_order WHERE id = :id', {'id': poId});
-      int vatType = 0;
-      if (vatRes.isNotEmpty) {
-        vatType = int.tryParse(vatRes.first['vatType'].toString()) ?? 0;
-      }
-      if (vatType == 1) newTotal = newTotal * 1.07;
-
-      await _dbService.execute(
-        "UPDATE purchase_order SET status = 'RECEIVED', totalAmount = :total, updatedAt = NOW() WHERE id = :id",
-        {'id': poId, 'total': newTotal},
-      );
-      await _dbService.execute('COMMIT;');
-    } catch (e) {
-      await _dbService.execute('ROLLBACK;');
-      debugPrint('Error closing partial PO: $e');
-      rethrow;
+  Future<bool> _lockOrCreateReceiptOperation({
+    required int poId,
+    required String operationKey,
+    required String payloadHash,
+    required String mode,
+  }) async {
+    final insert = await _dbService.execute('''
+      INSERT INTO purchase_order_receipt_operation
+        (poId, operationKey, payloadHash, receiptMode)
+      VALUES (:poId, :key, :hash, :mode)
+      ON DUPLICATE KEY UPDATE operationKey = VALUES(operationKey)
+    ''',
+        {'poId': poId, 'key': operationKey, 'hash': payloadHash, 'mode': mode});
+    final rows = await _dbService.query('''
+      SELECT poId, payloadHash, receiptMode FROM purchase_order_receipt_operation
+      WHERE operationKey = :key FOR UPDATE
+    ''', {'key': operationKey});
+    if (rows.length != 1) throw StateError('ไม่สามารถยืนยันรหัสการรับสินค้า');
+    final row = rows.first;
+    if (_asInt(row['poId']) != poId ||
+        row['payloadHash']?.toString() != payloadHash ||
+        row['receiptMode']?.toString() != mode) {
+      throw StateError('รหัสการรับสินค้าเดิมถูกใช้กับข้อมูลคนละชุด');
     }
+    // The row can only exist here if a previous transaction committed it.
+    // `affectedRows == 1` means this transaction created the operation row.
+    return insert.affectedRows.toInt() != 1;
+  }
+
+  void _validateReceivableHeader(Map<String, dynamic> header) {
+    final status = header['status']?.toString() ?? '';
+    if (!{'DRAFT', 'ORDERED', 'PARTIAL'}.contains(status)) {
+      throw StateError('ใบสั่งซื้อนี้ไม่อยู่ในสถานะที่รับสินค้าได้');
+    }
+  }
+
+  void _validateResolvedItems(List<Map<String, dynamic>> items) {
+    if (items.any((item) => _asInt(item['productId']) <= 0)) {
+      throw StateError(
+          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
+    }
+  }
+
+  Future<void> _updateReceiptHeader(int poId, List<Map<String, dynamic>> items,
+      {bool forceReceived = false}) async {
+    final allCompleted = forceReceived ||
+        items.every((item) =>
+            _asDouble(item['receivedQuantity']) + _receiptEpsilon >=
+            _asDouble(item['quantity']));
+    final anyReceived = items
+        .any((item) => _asDouble(item['receivedQuantity']) > _receiptEpsilon);
+    var status = 'ORDERED';
+    if (allCompleted) {
+      status = 'RECEIVED';
+    } else if (anyReceived) {
+      status = 'PARTIAL';
+    }
+    final totalRows = await _dbService.query(
+      'SELECT COALESCE(SUM(total), 0) AS total FROM purchase_order_item WHERE poId = :id',
+      {'id': poId},
+    );
+    var total = totalRows.isEmpty ? 0.0 : _asDouble(totalRows.first['total']);
+    final vatRows = await _dbService.query(
+        'SELECT vatType FROM purchase_order WHERE id = :id', {'id': poId});
+    if (vatRows.isNotEmpty && _asInt(vatRows.first['vatType']) == 1) {
+      total *= 1.07;
+    }
+    await _dbService.execute('''
+      UPDATE purchase_order
+      SET status = :status, totalAmount = :total, updatedAt = NOW()
+      WHERE id = :id
+    ''', {'status': status, 'total': total, 'id': poId});
+  }
+
+  void _notifyReceipt(List<Map<String, dynamic>> notifications) {
+    for (final item in notifications) {
+      _checkAndNotify(item['id'] as int, item['qty'] as double,
+          item['type'] as String, item['note'] as String);
+    }
+  }
+
+  int _asInt(Object? value) => int.tryParse(value?.toString() ?? '') ?? 0;
+  double _asDouble(Object? value) =>
+      double.tryParse(value?.toString() ?? '') ?? 0.0;
+
+  Future<int> closePartialPurchaseOrder({
+    required int poId,
+    required String operationKey,
+  }) async {
+    final payloadHash = canonicalPayloadHash({'poId': poId, 'mode': 'CLOSE'});
+    final outcome = await _runReceiptOperation(
+      poId: poId,
+      operationKey: operationKey,
+      payloadHash: payloadHash,
+      mode: 'CLOSE',
+      apply: (header, items, _) async {
+        if (header['status']?.toString() != 'PARTIAL') {
+          throw StateError('ปิดได้เฉพาะใบสั่งซื้อที่รับบางส่วนเท่านั้น');
+        }
+        // Keep the immutable pre-close snapshot in the audit log, then cancel
+        // every outstanding quantity by reducing each line to what was received.
+        await _dbService.execute('''
+          UPDATE purchase_order_item
+          SET quantity = receivedQuantity,
+              total = receivedQuantity * costPrice
+          WHERE poId = :id
+        ''', {'id': poId});
+        final totalRows = await _dbService.query('''
+          SELECT COALESCE(SUM(total), 0) AS total
+          FROM purchase_order_item WHERE poId = :id
+        ''', {'id': poId});
+        var total =
+            totalRows.isEmpty ? 0.0 : _asDouble(totalRows.first['total']);
+        if (_asInt(header['vatType']) == 1) total *= 1.07;
+        await _dbService.execute('''
+          UPDATE purchase_order
+          SET status = 'RECEIVED', totalAmount = :total, updatedAt = NOW()
+          WHERE id = :id AND status = 'PARTIAL'
+        ''', {'id': poId, 'total': total});
+      },
+    );
+    return outcome.poId;
   }
 
   Future<void> updateReceivedPurchaseOrderQty({
@@ -223,106 +372,33 @@ extension PurchaseOrderReceivingExtension on StockRepository {
     int vatType = 0,
     bool isPaid = false,
   }) async {
-    if (!_dbService.isConnected()) await _dbService.connect();
-    if (newItems.any((item) =>
-        (int.tryParse(item['productId']?.toString() ?? '') ?? 0) <= 0)) {
-      throw Exception(
-          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
-    }
-    await _dbService.execute('START TRANSACTION;');
+    throw StateError(
+        'ไม่อนุญาตให้แก้ไขใบที่เริ่มรับสินค้าแล้ว กรุณาใช้การรับสินค้าแบบปลอดภัยแทน');
+  }
 
-    try {
-      // Revert previous stock changes if PO was received or partially received
-      await _revertStockForPurchaseOrder(poId,
-          note: 'Edit PO #$poId (Revert Old)');
-
-      await _dbService.execute(
-        'DELETE FROM purchase_order_item WHERE poId = :id',
-        {'id': poId},
-      );
-
-      for (var item in newItems) {
-        final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
-        final cost = double.tryParse(item['costPrice'].toString()) ?? 0.0;
-        final total = qty * cost;
-        await _dbService.execute(
-          '''
-          INSERT INTO purchase_order_item (poId, productId, productName, quantity, receivedQuantity, costPrice, total)
-          VALUES (:poId, :pId, :pName, :qty, :recvQty, :cost, :total)
-          ''',
-          {
-            'poId': poId,
-            'pId': item['productId'],
-            'pName': item['productName'],
-            'qty': qty,
-            'recvQty': qty,
-            'cost': cost,
-            'total': total,
-          },
-        );
-      }
-
-      final docNo = documentNo ?? '-';
-      for (var item in newItems) {
-        final pId = int.tryParse(item['productId'].toString()) ?? 0;
-        final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
-        final cost = double.tryParse(item['costPrice'].toString()) ?? 0.0;
-        if (pId == 0 || qty <= 0) continue;
-        await _adjustRecursive(pId, qty, 'PURCHASE_IN',
-            'Ref: $docNo | Cost: $cost | PO: #$poId (Edited)', null);
-        await _dbService.execute(
-          'UPDATE product SET costPrice = :cost WHERE id = :id',
-          {'cost': cost, 'id': pId},
-        );
-      }
-
-      double recalcTotal = newItems.fold(0.0, (sum, item) {
-        final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
-        final cost = double.tryParse(item['costPrice'].toString()) ?? 0.0;
-        return sum + (qty * cost);
+  Future<void> _writePurchaseOrderAudit({
+    required int poId,
+    required String eventType,
+    String? operationKey,
+    required Map<String, dynamic> payload,
+  }) =>
+      _dbService.execute('''
+        INSERT INTO purchase_order_audit_log
+          (poId, eventType, operationKey, payloadJson)
+        VALUES (:poId, :eventType, :operationKey, :payload)
+      ''', {
+        'poId': poId,
+        'eventType': eventType,
+        'operationKey': operationKey,
+        'payload': jsonEncode(payload),
       });
-      final finalTotal = totalAmount > 0 ? totalAmount : recalcTotal;
-
-      await _dbService.execute(
-        '''
-        UPDATE purchase_order 
-        SET totalAmount = :total, vatType = :vat, note = :note,
-            isPaid = :paid, updatedAt = NOW()
-        WHERE id = :id
-        ''',
-        {
-          'total': finalTotal,
-          'vat': vatType,
-          'note': note,
-          'paid': isPaid ? 1 : 0,
-          'id': poId,
-        },
-      );
-
-      await _dbService.execute('COMMIT;');
-
-      for (var item in newItems) {
-        final pId = int.tryParse(item['productId'].toString()) ?? 0;
-        final qty = double.tryParse(item['quantity'].toString()) ?? 0.0;
-        if (pId != 0 && qty > 0) {
-          _checkAndNotify(pId, qty, 'PURCHASE_IN', 'แก้ไข PO #$poId');
-        }
-      }
-    } catch (e) {
-      await _dbService.execute('ROLLBACK;');
-      debugPrint('Error updating received PO qty: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _ensureNoUnresolvedPurchaseOrderLines(int poId) async {
-    final unresolved = await _dbService.query(
-      'SELECT id FROM purchase_order_item WHERE poId = :id AND productId <= 0 LIMIT 1',
-      {'id': poId},
-    );
-    if (unresolved.isNotEmpty) {
-      throw Exception(
-          'มีรายการที่ยังไม่ได้จับคู่สินค้า กรุณาแก้ไขใบสั่งซื้อก่อนรับสินค้า');
-    }
-  }
 }
+
+class _ReceiptOutcome {
+  const _ReceiptOutcome({required this.poId, required this.notifications});
+
+  final int poId;
+  final List<Map<String, dynamic>> notifications;
+}
+
+const double _receiptEpsilon = 0.000001;

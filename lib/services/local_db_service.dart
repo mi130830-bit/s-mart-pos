@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import '../models/schema/product_collection.dart';
 import '../models/schema/order_collection.dart';
+import '../models/schema/product_barcode_collection.dart';
 
 class LocalDbService {
   static final LocalDbService _instance = LocalDbService._internal();
@@ -23,7 +24,7 @@ class LocalDbService {
     final dir = await getApplicationDocumentsDirectory();
 
     _isar = await Isar.open(
-      [ProductCollectionSchema, OrderCollectionSchema],
+      [ProductCollectionSchema, OrderCollectionSchema, ProductBarcodeCollectionSchema],
       directory: dir.path,
       inspector: kDebugMode, // Enable inspector in debug mode
     );

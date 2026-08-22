@@ -488,10 +488,149 @@ class LineController {
       final trackingUrl = trackingToken == null
           ? null
           : '${EnvConfig().publicUrl}/public/customer_tracking.html#$trackingToken';
-      var message =
-          '🚚 สินค้าของท่านกำลังเดินทางจัดส่งครับ\nหากมีข้อสงสัยสามารถติดต่อได้ที่เบอร์ร้าน 085-1377402 ครับ';
-      if (trackingUrl != null) message += '\n\n📍 ติดตามตำแหน่งรถได้ที่:\n$trackingUrl';
-      await _lineService.pushMessage(lineUserId, message);
+      if (trackingUrl != null) {
+        final flexCard = {
+          'type': 'bubble',
+          'size': 'mega',
+          'header': {
+            'type': 'box',
+            'layout': 'vertical',
+            'contents': [
+              {
+                'type': 'text',
+                'text': '🚚 สินค้ากำลังเดินทางจัดส่ง',
+                'weight': 'bold',
+                'size': 'lg',
+                'color': '#ffffff',
+              },
+            ],
+            'backgroundColor': '#0f766e',
+            'paddingAll': '16px',
+          },
+          'body': {
+            'type': 'box',
+            'layout': 'vertical',
+            'spacing': 'md',
+            'contents': [
+              {
+                'type': 'text',
+                'text':
+                    'สินค้าของท่านถูกปล่อยออกจากร้านแล้วครับ กำลังมุ่งหน้าไปจัดส่งให้ท่านถึงหน้างาน',
+                'wrap': true,
+                'size': 'sm',
+                'color': '#334155',
+              },
+              {
+                'type': 'box',
+                'layout': 'vertical',
+                'margin': 'md',
+                'spacing': 'xs',
+                'contents': [
+                  {
+                    'type': 'box',
+                    'layout': 'baseline',
+                    'spacing': 'sm',
+                    'contents': [
+                      {
+                        'type': 'text',
+                        'text': '🔖 ออเดอร์:',
+                        'color': '#64748b',
+                        'size': 'sm',
+                        'flex': 2,
+                      },
+                      {
+                        'type': 'text',
+                        'text': '#$orderId',
+                        'weight': 'bold',
+                        'color': '#0f766e',
+                        'size': 'sm',
+                        'flex': 4,
+                      },
+                    ],
+                  },
+                  {
+                    'type': 'box',
+                    'layout': 'baseline',
+                    'spacing': 'sm',
+                    'contents': [
+                      {
+                        'type': 'text',
+                        'text': '📞 ติดต่อร้าน:',
+                        'color': '#64748b',
+                        'size': 'sm',
+                        'flex': 2,
+                      },
+                      {
+                        'type': 'text',
+                        'text': '085-1377402',
+                        'weight': 'bold',
+                        'color': '#334155',
+                        'size': 'sm',
+                        'flex': 4,
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                'type': 'separator',
+                'margin': 'md',
+                'color': '#e2e8f0',
+              },
+              {
+                'type': 'text',
+                'text': 'แตะปุ่มด้านล่างเพื่อดูตำแหน่งรถสดบนแผนที่ 📍',
+                'size': 'xs',
+                'color': '#94a3b8',
+                'wrap': true,
+              },
+            ],
+            'paddingAll': '16px',
+          },
+          'footer': {
+            'type': 'box',
+            'layout': 'vertical',
+            'spacing': 'sm',
+            'contents': [
+              {
+                'type': 'button',
+                'style': 'primary',
+                'height': 'sm',
+                'action': {
+                  'type': 'uri',
+                  'label': '📍 กดติดตามตำแหน่งรถบนแผนที่',
+                  'uri': trackingUrl,
+                },
+                'color': '#0f766e',
+              },
+            ],
+            'paddingAll': '16px',
+            'paddingTop': '0px',
+          },
+        };
+
+        final sent = await _lineService.pushFlexMessage(
+          lineUserId,
+          '🚚 สินค้าของท่านกำลังเดินทางจัดส่งครับ (กดดูตำแหน่งรถ)',
+          flexCard,
+        );
+
+        if (!sent) {
+          // Fallback to text message if flex push failed
+          final fallbackMessage =
+              '🚚 สินค้าของท่านกำลังเดินทางจัดส่งครับ\n'
+              '🔖 ออเดอร์: #$orderId\n'
+              '📞 โทร: 085-1377402\n\n'
+              '📍 ติดตามตำแหน่งรถได้ที่:\n$trackingUrl';
+          await _lineService.pushMessage(lineUserId, fallbackMessage);
+        }
+      } else {
+        final message =
+            '🚚 สินค้าของท่านกำลังเดินทางจัดส่งครับ\n'
+            '🔖 ออเดอร์: #$orderId\n'
+            'หากมีข้อสงสัยสามารถติดต่อได้ที่เบอร์ร้าน 085-1377402 ครับ';
+        await _lineService.pushMessage(lineUserId, message);
+      }
 
       stdout.writeln('✅ Stage 2 Line sent to $lineUserId for Order #$orderId');
       return Response.ok('Stage 2 Notification Sent');

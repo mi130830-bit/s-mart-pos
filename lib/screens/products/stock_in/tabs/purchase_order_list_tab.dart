@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../services/alert_service.dart';
 import '../../../../repositories/stock_repository.dart';
@@ -18,6 +19,7 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
   final StockRepository _stockRepo = StockRepository();
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = false;
+  final Map<int, String> _closeOperationKeys = <int, String>{};
 
   @override
   void initState() {
@@ -67,19 +69,30 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
         final status = order['status'];
         return Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: CircleAvatar(
               backgroundColor: status == 'DRAFT'
                   ? Colors.grey[200]
-                  : (status == 'PARTIAL' ? Colors.blue[100] : Colors.orange[100]),
+                  : (status == 'PARTIAL'
+                      ? Colors.blue[100]
+                      : Colors.orange[100]),
               child: Icon(
-                status == 'DRAFT' ? Icons.edit_note : (status == 'PARTIAL' ? Icons.access_time : Icons.local_shipping),
-                color: status == 'DRAFT' ? Colors.grey : (status == 'PARTIAL' ? Colors.blue : Colors.orange),
+                status == 'DRAFT'
+                    ? Icons.edit_note
+                    : (status == 'PARTIAL'
+                        ? Icons.access_time
+                        : Icons.local_shipping),
+                color: status == 'DRAFT'
+                    ? Colors.grey
+                    : (status == 'PARTIAL' ? Colors.blue : Colors.orange),
               ),
             ),
-            title: Text('PO #${order['id']} | Ref: ${order['documentNo'] ?? '-'}',
+            title: Text(
+                'PO #${order['id']} | Ref: ${order['documentNo'] ?? '-'}',
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,7 +102,9 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
                 Text('วันที่: ${DateFormat('dd/MM/yyyy HH:mm').format(dt)}'),
                 Text('สถานะ: $status',
                     style: TextStyle(
-                      color: status == 'DRAFT' ? Colors.grey : (status == 'PARTIAL' ? Colors.blue : Colors.orange),
+                      color: status == 'DRAFT'
+                          ? Colors.grey
+                          : (status == 'PARTIAL' ? Colors.blue : Colors.orange),
                       fontWeight: FontWeight.bold,
                     )),
               ],
@@ -103,7 +118,10 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
                   children: [
                     Text(
                       '${NumberFormat('#,##0.00').format(double.tryParse(order['totalAmount'].toString()) ?? 0)} ฿',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green),
                     ),
                     const SizedBox(height: 4),
                     Text('${order['itemCount']} รายการ'),
@@ -117,28 +135,35 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
                     onPressed: () => _closePartialOrder(order),
                   ),
                 ],
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  tooltip: 'ลบใบสั่งซื้อ',
-                  onPressed: () => _deleteOrder(order),
-                ),
+                if (status == 'DRAFT' || status == 'ORDERED')
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    tooltip: 'ลบใบสั่งซื้อ',
+                    onPressed: () => _deleteOrder(order),
+                  ),
               ],
             ),
-            onTap: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(title: Text('จัดการใบสั่งซื้อ #${order['id']}')),
-                    body: StockInCreatePage(existingPoId: int.tryParse(order['id'].toString())),
-                  ),
-                ),
-              );
-              if (result == true || (result is String && result.isNotEmpty)) {
-                _loadData();
-                widget.onRefresh?.call();
-              }
-            },
+            onTap: status == 'PARTIAL'
+                ? null
+                : () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(
+                              title: Text('จัดการใบสั่งซื้อ #${order['id']}')),
+                          body: StockInCreatePage(
+                              existingPoId:
+                                  int.tryParse(order['id'].toString())),
+                        ),
+                      ),
+                    );
+                    if (result == true ||
+                        (result is String && result.isNotEmpty)) {
+                      _loadData();
+                      widget.onRefresh?.call();
+                    }
+                  },
           ),
         );
       },
@@ -149,25 +174,40 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
     final confirm = await ConfirmDialog.show(
       context,
       title: 'ปิดจบบิลรับเข้าบางส่วน?',
-      content: 'ระบบจะตัดรายการสินค้าที่ยังไม่ได้รับออกทั้งหมด และบันทึกใบสั่งซื้อนี้เป็นจัดส่งเสร็จสิ้น (RECEIVED)\nคุณต้องการดำเนินการต่อใช่หรือไม่?',
+      content:
+          'ระบบจะตัดรายการสินค้าที่ยังไม่ได้รับออกทั้งหมด และบันทึกใบสั่งซื้อนี้เป็นจัดส่งเสร็จสิ้น (RECEIVED)\nคุณต้องการดำเนินการต่อใช่หรือไม่?',
       confirmText: 'ปิดจบบิล',
       cancelText: 'ยกเลิก',
     );
     if (confirm != true) return;
     if (!mounted) return;
     try {
-      showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
-      await _stockRepo.closePartialPurchaseOrder(int.tryParse(order['id'].toString()) ?? 0);
+      showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()));
+      final poId = int.tryParse(order['id'].toString()) ?? 0;
+      final operationKey =
+          _closeOperationKeys.putIfAbsent(poId, () => const Uuid().v4());
+      await _stockRepo.closePartialPurchaseOrder(
+        poId: poId,
+        operationKey: operationKey,
+      );
+      _closeOperationKeys.remove(poId);
       if (mounted) {
         Navigator.pop(context);
         _loadData();
         widget.onRefresh?.call();
-        AlertService.show(context: context, message: 'ปิดจบบิลเรียบร้อยรายการที่ค้างรับถูกยกเลิกแล้ว', type: 'success');
+        AlertService.show(
+            context: context,
+            message: 'ปิดจบบิลเรียบร้อยรายการที่ค้างรับถูกยกเลิกแล้ว',
+            type: 'success');
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
-        AlertService.show(context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+        AlertService.show(
+            context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
       }
     }
   }
@@ -176,18 +216,21 @@ class _PurchaseOrderListTabState extends State<PurchaseOrderListTab> {
     final confirm = await ConfirmDialog.show(
       context,
       title: 'ลบใบสั่งซื้อ #${order['id']}?',
-      content: 'คุณต้องการลบรายการนี้ใช่หรือไม่?\n(การกระทำนี้ไม่สามารถย้อนกลับได้)',
+      content:
+          'คุณต้องการลบรายการนี้ใช่หรือไม่?\n(การกระทำนี้ไม่สามารถย้อนกลับได้)',
       confirmText: 'ลบ',
       cancelText: 'ยกเลิก',
     );
     if (confirm != true) return;
     try {
-      await _stockRepo.deletePurchaseOrder(int.tryParse(order['id'].toString()) ?? 0);
+      await _stockRepo
+          .deletePurchaseOrder(int.tryParse(order['id'].toString()) ?? 0);
       _loadData();
       widget.onRefresh?.call();
     } catch (e) {
       if (mounted) {
-        AlertService.show(context: context, message: 'ไม่สามารถลบได้: $e', type: 'error');
+        AlertService.show(
+            context: context, message: 'ไม่สามารถลบได้: $e', type: 'error');
       }
     }
   }

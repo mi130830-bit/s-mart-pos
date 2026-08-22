@@ -9,39 +9,73 @@
   <style>
     * { box-sizing: border-box; }
     body { margin:0; font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif; background:#f8fafc; color:#172554; }
-    header { padding:16px 20px; background:#0f766e; color:white; font-weight:700; }
+    header { padding:16px 20px; background:#0f766e; color:white; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
     #map { height:calc(100vh - 212px); min-height:320px; }
-    #card { position:fixed; z-index:1000; left:16px; right:16px; bottom:16px; padding:16px; border-radius:16px; background:white; box-shadow:0 10px 28px #0f172a33; }
-    #status { font-weight:700; font-size:18px; } #detail { margin-top:5px; color:#475569; font-size:14px; }
-    .expired { display:grid; min-height:80vh; place-items:center; text-align:center; padding:32px; } .expired div { max-width:360px; }
+    #card { position:fixed; z-index:1000; left:16px; right:16px; bottom:16px; padding:16px 20px; border-radius:16px; background:white; box-shadow:0 10px 28px #0f172a33; border: 1px solid #e2e8f0; }
+    #status { font-weight:700; font-size:18px; color:#0f766e; }
+    #detail { margin-top:6px; color:#475569; font-size:14px; line-height:1.4; }
+    .call-btn { display:inline-block; margin-top:10px; padding:8px 16px; background:#0f766e; color:white; text-decoration:none; border-radius:8px; font-weight:bold; font-size:14px; }
+    .call-btn:active { background:#115e59; }
+    .expired { display:grid; min-height:80vh; place-items:center; text-align:center; padding:32px; }
+    .expired div { max-width:360px; }
+    .expired h1 { color:#0f766e; font-size:22px; margin-bottom:8px; }
   </style>
 </head>
 <body>
-  <header>🚚 ร้าน ส.บริการ ท่าข้าม · ติดตามการจัดส่ง</header>
+  <header>
+    <span>🚚 ติดตามการจัดส่ง</span>
+    <span style="font-size:13px; font-weight:normal; opacity:0.9;">ร้าน ส.บริการ ท่าข้าม</span>
+  </header>
   <div id="map"></div>
-  <section id="card"><div id="status">กำลังเชื่อมต่อข้อมูลรถ…</div><div id="detail">กรุณารอสักครู่</div></section>
+  <section id="card">
+    <div id="status">กำลังเชื่อมต่อข้อมูลรถ…</div>
+    <div id="detail">กรุณารอสักครู่ ระบบกำลังค้นหาพิกัดรถ</div>
+    <a href="tel:0851377402" class="call-btn">📞 โทรสอบถามร้าน (085-1377402)</a>
+  </section>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     const token = location.hash.slice(1);
     let map, marker, first = true;
-    const status = document.getElementById('status'); const detail = document.getElementById('detail');
-    function ended() { document.body.innerHTML = '<main class="expired"><div><h1>การติดตามสิ้นสุดแล้ว</h1><p>งานจัดส่งนี้ถูกปิดเรียบร้อยแล้ว ขอบคุณที่ใช้บริการครับ</p></div></main>'; }
-    function init(lat, lng) { map = L.map('map').setView([lat,lng], 15); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map); marker=L.marker([lat,lng]).addTo(map); }
+    const status = document.getElementById('status');
+    const detail = document.getElementById('detail');
+    function ended() {
+      document.body.innerHTML = '<main class="expired"><div><h1>✅ การจัดส่งเสร็จสมบูรณ์แล้ว</h1><p style="color:#475569; margin-bottom:20px;">งานจัดส่งนี้ถูกปิดเรียบร้อยแล้ว ขอบคุณที่ให้ความไว้วางใจร้าน ส.บริการ ท่าข้าม ครับ 🙏</p><a href="tel:0851377402" class="call-btn">📞 ติดต่อร้าน: 085-1377402</a></div></main>';
+    }
+    function init(lat, lng) {
+      map = L.map('map').setView([lat,lng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+      marker = L.marker([lat,lng]).addTo(map);
+    }
     async function refresh() {
       if (!token) return ended();
       try {
         const res = await fetch('/api/v1/tracking/' + encodeURIComponent(token), { cache:'no-store' });
         if (!res.ok) return ended();
-        const data = await res.json(); const point=data.location;
-        if (!point) { status.textContent='กำลังรอสัญญาณจากรถ'; detail.textContent='รถกำลังเดินทาง ระบบจะอัปเดตตำแหน่งให้อัตโนมัติ'; return; }
-        const at = new Date(point.time); const age = Math.max(0, Math.round((Date.now()-at.getTime())/1000));
-        status.textContent = point.status === 'ONLINE' ? 'รถกำลังเดินทางมาหาคุณ' : 'กำลังรอสัญญาณจากรถ';
+        const data = await res.json();
+        const point = data.location;
+        if (!point) {
+          status.textContent = 'รถกำลังเดินทางมาหาคุณ';
+          detail.textContent = 'กำลังรอสัญญาณพิกัดล่าสุด ระบบจะอัปเดตให้อัตโนมัติ';
+          return;
+        }
+        const at = new Date(point.time);
+        const age = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000));
+        status.textContent = point.status === 'ONLINE' ? '🚚 รถกำลังเดินทางมาหาคุณ' : '⏳ รถกำลังเดินทาง (สัญญาณขาดหายชั่วคราว)';
         detail.textContent = 'อัปเดตล่าสุด ' + (age < 60 ? age + ' วินาทีที่แล้ว' : Math.floor(age/60) + ' นาทีที่แล้ว');
-        if (!map) init(point.lat, point.lng); else { marker.setLatLng([point.lat,point.lng]); if (first) map.setView([point.lat,point.lng],15); }
-        first=false;
-      } catch (_) { status.textContent='กำลังเชื่อมต่อใหม่…'; detail.textContent='ระบบจะลองดึงข้อมูลอีกครั้งอัตโนมัติ'; }
+        if (!map) {
+          init(point.lat, point.lng);
+        } else {
+          marker.setLatLng([point.lat, point.lng]);
+          if (first) map.setView([point.lat, point.lng], 15);
+        }
+        first = false;
+      } catch (_) {
+        status.textContent = '⏳ รถกำลังเดินทางมาหาคุณ';
+        detail.textContent = 'กำลังพยายามเชื่อมต่อใหม่ หรือโทรสอบถามหน้าร้านได้ทันที';
+      }
     }
-    refresh(); setInterval(refresh, 5000);
+    refresh();
+    setInterval(refresh, 5000);
   </script>
 </body>
 </html>

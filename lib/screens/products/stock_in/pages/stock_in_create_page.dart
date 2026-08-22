@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../services/alert_service.dart';
 import '../../../../models/product.dart';
 import '../../../../models/supplier.dart';
@@ -11,6 +14,7 @@ import '../../product_multi_selection_dialog.dart';
 import '../../dialogs/product_form/product_form_dialog.dart';
 import '../../../../widgets/common/custom_buttons.dart';
 import '../../../../widgets/common/confirm_dialog.dart';
+import '../../../../utils/barcode_utils.dart';
 import '../models/stock_in_item.dart';
 import '../dialogs/partial_receive_dialog.dart';
 import 'widgets/stock_in_table_row.dart';
@@ -46,6 +50,15 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   final List<StockInItem> _stockInItems = [];
   final Map<int, Map<String, TextEditingController>> _itemControllers = {};
   final TextEditingController _docNoCtrl = TextEditingController();
+  final TextEditingController _barcodeCtrl = TextEditingController();
+  final FocusNode _barcodeFocusNode = FocusNode();
+  // One key survives retries for this newly-created PO page only.
+  final String _purchaseOrderIdempotencyKey = const Uuid().v4();
+  // A receipt action keeps its key after a transient failure, but a completed
+  // receipt gets a new key for the next legitimate delivery.
+  String? _fullReceiptOperationKey;
+  String? _partialReceiptOperationKey;
+  String? _newReceiptOperationKey;
   final ValueNotifier<StockInTotals> _totalsNotifier = ValueNotifier(
     StockInTotals(subtotal: 0.0, vatAmount: 0.0, grandTotal: 0.0),
   );
@@ -57,6 +70,11 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   int _vatType = 2; // 0=Included, 1=Excluded, 2=NoVAT
   bool _isPaid = false;
   bool _isLoading = false;
+  Timer? _barcodeDebounce;
+  int _barcodeRequestId = 0;
+  bool _isBarcodeLookupInProgress = false;
+  bool _ignoreBarcodeChange = false;
+  bool _hasPendingBarcode = false;
 
   Map<String, TextEditingController> _createControllersForItem(
       StockInItem item) {
@@ -129,7 +147,10 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
 
   @override
   void dispose() {
+    _barcodeDebounce?.cancel();
     _docNoCtrl.dispose();
+    _barcodeCtrl.dispose();
+    _barcodeFocusNode.dispose();
     for (var ctrls in _itemControllers.values) {
       ctrls['qty']?.dispose();
       ctrls['cost']?.dispose();
@@ -248,30 +269,7 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     );
 
     if (pickedList != null && pickedList.isNotEmpty) {
-      setState(() {
-        for (var picked in pickedList) {
-          final existingIndex = _stockInItems.indexWhere(
-            (i) => i.product.id == picked.id,
-          );
-          if (existingIndex >= 0) {
-            _stockInItems[existingIndex].quantity += 1;
-            final newQty = _stockInItems[existingIndex].quantity;
-            _itemControllers[picked.id]?['qty']?.text = newQty > 0
-                ? newQty.toString().replaceAll(RegExp(r"([.]*0+)(?!.*\d)"), "")
-                : "";
-          } else {
-            final newItem = StockInItem(
-              product: picked,
-              quantity: 1,
-              costPrice: picked.costPrice,
-              vatType: picked.vatType,
-            );
-            _stockInItems.add(newItem);
-            _itemControllers[picked.id] = _createControllersForItem(newItem);
-          }
-        }
-      });
-      _updateTotals();
+      _addOrIncrementProducts(pickedList);
     }
   }
 
@@ -286,18 +284,135 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     );
 
     if (newProduct != null && mounted) {
-      // ✅ Product is already saved with a real ID > 0
-      setState(() {
-        final newItem = StockInItem(
-          product: newProduct,
-          quantity: 1,
-          costPrice: newProduct.costPrice,
-          vatType: newProduct.vatType,
+      // Product is already saved with a real ID > 0.
+      _addOrIncrementProducts([newProduct]);
+    }
+  }
+
+  /// Adds scanned, manually selected, and newly created products consistently.
+  /// This only changes the in-memory purchase-order draft; it never writes stock.
+  void _addOrIncrementProducts(Iterable<Product> products) {
+    if (!mounted) return;
+    setState(() {
+      for (final product in products) {
+        final existingIndex = _stockInItems.indexWhere(
+          (item) => item.product.id == product.id,
         );
-        _stockInItems.add(newItem);
-        _itemControllers[newProduct.id] = _createControllersForItem(newItem);
-      });
-      _updateTotals();
+        if (existingIndex >= 0) {
+          final item = _stockInItems[existingIndex];
+          item.quantity += 1;
+          _itemControllers[product.id]?['qty']?.text =
+              _formatNumber(item.quantity);
+          _itemControllers[product.id]?['total']?.text =
+              _formatNumber(item.total);
+        } else {
+          final newItem = StockInItem(
+            product: product,
+            quantity: 1,
+            costPrice: product.costPrice,
+            vatType: product.vatType,
+          );
+          _stockInItems.add(newItem);
+          _itemControllers[product.id] = _createControllersForItem(newItem);
+        }
+      }
+    });
+    _updateTotals();
+  }
+
+  void _onBarcodeChanged(String _) {
+    if (_ignoreBarcodeChange) return;
+    // Invalidate any result that belongs to the previous contents immediately.
+    _barcodeRequestId++;
+    _scheduleBarcodeLookup();
+  }
+
+  void _scheduleBarcodeLookup() {
+    _barcodeDebounce?.cancel();
+    _barcodeDebounce = Timer(const Duration(milliseconds: 350), () {
+      _handleBarcodeScan();
+    });
+  }
+
+  void _submitBarcodeLookup() {
+    _barcodeDebounce?.cancel();
+    // A submit may race the idle timer; it always becomes the newest request.
+    _barcodeRequestId++;
+    _handleBarcodeScan();
+  }
+
+  Future<Product?> _resolveBarcodeProduct(String barcode) async {
+    final primaryMatches = await _productRepo.getProductsByBarcodes([barcode]);
+    for (final product in primaryMatches) {
+      if (product.barcode == barcode) return product;
+    }
+
+    final unitBarcode = await _productRepo.findProductBarcode(barcode);
+    if (unitBarcode == null) return null;
+    final productId = int.tryParse(unitBarcode['productId'].toString());
+    return productId == null ? null : _productRepo.getProductById(productId);
+  }
+
+  void _clearAndRefocusBarcodeInput() {
+    _ignoreBarcodeChange = true;
+    _barcodeCtrl.clear();
+    _ignoreBarcodeChange = false;
+    _barcodeFocusNode.requestFocus();
+  }
+
+  Future<void> _handleBarcodeScan() async {
+    final barcode = BarcodeUtils.fixThaiInput(_barcodeCtrl.text.trim());
+    if (barcode.isEmpty) return;
+
+    if (_isBarcodeLookupInProgress) {
+      // Keep only the most recent complete scan. The active request has already
+      // been invalidated by _onBarcodeChanged/_submitBarcodeLookup.
+      _hasPendingBarcode = true;
+      return;
+    }
+
+    final requestId = _barcodeRequestId;
+    setState(() => _isBarcodeLookupInProgress = true);
+    try {
+      final product = await _resolveBarcodeProduct(barcode);
+      if (!mounted || requestId != _barcodeRequestId) return;
+
+      if (product == null) {
+        AlertService.show(
+          context: context,
+          message: 'ไม่พบสินค้าสำหรับบาร์โค้ด $barcode',
+          type: 'warning',
+        );
+        _barcodeFocusNode.requestFocus();
+        return;
+      }
+
+      _addOrIncrementProducts([product]);
+      _clearAndRefocusBarcodeInput();
+    } catch (error, stackTrace) {
+      debugPrint('Stock-in barcode lookup failed: $error\n$stackTrace');
+      if (mounted && requestId == _barcodeRequestId) {
+        AlertService.show(
+          context: context,
+          message: 'ค้นหาบาร์โค้ดไม่สำเร็จ กรุณาลองใหม่',
+          type: 'error',
+        );
+        _barcodeFocusNode.requestFocus();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isBarcodeLookupInProgress = false);
+      } else {
+        _isBarcodeLookupInProgress = false;
+      }
+
+      final hasPendingBarcode = _hasPendingBarcode;
+      _hasPendingBarcode = false;
+      if (mounted && hasPendingBarcode) {
+        // Re-read the field so an even newer scan cannot be replaced by a
+        // result that was still running when its input changed.
+        unawaited(_handleBarcodeScan());
+      }
     }
   }
 
@@ -428,7 +543,10 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
         await _handlePartialReceive();
         return;
       }
-      // If FULL, continue to normal flow below...
+      if (choice == 'FULL') {
+        await _handleFullReceive();
+        return;
+      }
     }
 
     if (!mounted) return;
@@ -482,15 +600,27 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
           isPaid: _isPaid,
         );
       } else {
-        await _stockRepo.createPurchaseOrder(
+        // Create the PO first, then receive through the same guarded receipt
+        // path used by existing POs. Both keys survive a retry, so a lost
+        // response cannot create stock/ledger records twice.
+        final poId = await _stockRepo.createPurchaseOrder(
+          idempotencyKey: _purchaseOrderIdempotencyKey,
           supplierId: _selectedSupplierId!,
           totalAmount: _totalCost,
           items: itemsMap,
           documentNo: _docNoCtrl.text,
-          status: targetStatus,
+          status: targetStatus == 'RECEIVED' ? 'ORDERED' : targetStatus,
           vatType: _vatType,
           isPaid: _isPaid,
         );
+        if (targetStatus == 'RECEIVED') {
+          _newReceiptOperationKey ??= const Uuid().v4();
+          await _stockRepo.receiveRemainingPurchaseOrder(
+            poId: poId,
+            operationKey: _newReceiptOperationKey!,
+          );
+          _newReceiptOperationKey = null;
+        }
       }
 
       if (mounted) {
@@ -516,6 +646,41 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
   }
 
   // ✅ UI สำหรับเลือกรับบางรายการ (Partial Receive)
+  Future<void> _handleFullReceive() async {
+    if (widget.existingPoId == null || !mounted) return;
+    final bool? confirm = await ConfirmDialog.show(
+      context,
+      title: 'ยืนยันการรับสินค้าคงเหลือทั้งหมด?',
+      content: 'ระบบจะรับเข้าเฉพาะจำนวนที่ยังค้างอยู่ในใบสั่งซื้อนี้ '
+          'โดยไม่ย้อนหรือลบสต็อกที่รับไปแล้ว',
+      confirmText: 'รับสินค้าคงเหลือ',
+      cancelText: 'ยกเลิก',
+    );
+    if (confirm != true || !mounted) return;
+    setState(() => _isLoading = true);
+    _fullReceiptOperationKey ??= const Uuid().v4();
+    try {
+      await _stockRepo.receiveRemainingPurchaseOrder(
+        poId: widget.existingPoId!,
+        operationKey: _fullReceiptOperationKey!,
+      );
+      _fullReceiptOperationKey = null;
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AlertService.show(
+        context: context,
+        message: '✅ รับสินค้าคงเหลือเข้าสต็อกเรียบร้อยแล้ว',
+        type: 'success',
+      );
+      Navigator.of(context).pop('RECEIVED');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AlertService.show(
+          context: context, message: 'เกิดข้อผิดพลาด: $e', type: 'error');
+    }
+  }
+
   Future<void> _handlePartialReceive() async {
     // 1. Show Selection Dialog
     final List<Map<String, dynamic>>? selectedItems =
@@ -536,12 +701,15 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
     // 3. Process
     if (!mounted) return;
     setState(() => _isLoading = true);
+    _partialReceiptOperationKey ??= const Uuid().v4();
 
     try {
       await _stockRepo.receivePartialPurchaseOrder(
         originalPoId: widget.existingPoId!,
         receivedItems: selectedItems,
+        operationKey: _partialReceiptOperationKey!,
       );
+      _partialReceiptOperationKey = null;
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -610,6 +778,38 @@ class _StockInCreatePageState extends State<StockInCreatePage> {
                       _poStatus == 'DRAFT' ||
                       _poStatus == 'RECEIVED' ||
                       _poStatus == 'PARTIAL') ...[
+                    SizedBox(
+                      width: 360,
+                      child: TextField(
+                        key: const Key('stock-in-barcode-input'),
+                        controller: _barcodeCtrl,
+                        focusNode: _barcodeFocusNode,
+                        autofocus: true,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          labelText: 'สแกนบาร์โค้ดเพื่อเพิ่มสินค้า',
+                          hintText: 'สแกนแล้วเพิ่มรายการทันที',
+                          prefixIcon: const Icon(Icons.qr_code_scanner),
+                          suffixIcon: _isBarcodeLookupInProgress
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: _onBarcodeChanged,
+                        onSubmitted: (_) => _submitBarcodeLookup(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     CustomButton(
                       onPressed: _createNewProduct,
                       icon: Icons.add_box,

@@ -1,0 +1,8 @@
+📁 [EnvConfig] writableDir resolved to: C:\Users\msiri\AppData\Local/S_Mart_POS
+✅ Registering LineController Routes - VERSION 2
+✅ Firestore Bridge initialized for: fir-link-a8266
+📡 [Bridge] Polling for new PRINT_RECEIPT commands...
+====================================
+  S-Link POS Backend API
+  Listening on port 8080
+====================================
