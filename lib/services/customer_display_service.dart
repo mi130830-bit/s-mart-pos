@@ -22,19 +22,36 @@ class CustomerDisplayService {
 
   /// ✅ ส่งคำสั่งสั่งโหลดการตั้งค่าใหม่ (ใช้เมื่อมีการซิงก์จาก SyncService)
   Future<void> reloadSettings() async {
+    if (_windowId == null) {
+      await _tryFindOpenWindow();
+    }
     if (_windowId == null) return;
     try {
       await WindowController.fromWindowId(_windowId!.toString())
-          .invokeMethod('reload_settings', '');
+          .invokeMethod('reload_settings', '{}');
     } catch (e) {
       debugPrint('⚠️ Error sending reload to customer display: $e');
     }
   }
 
+  Future<void> _tryFindOpenWindow() async {
+    try {
+      final all = await WindowController.getAll();
+      for (final w in all) {
+        if (w.windowId.toString() != '0') {
+          _windowId = w.windowId;
+          break;
+        }
+      }
+    } catch (_) {}
+  }
+
   /// เขียนข้อมูลผ่าน IPC (Method Channel)
   Future<void> _sendToWindow(Map<String, dynamic> data) async {
     if (_windowId == null) {
-      // ถ้าหน้าต่างยังไม่เปิด ให้บันทึกไว้รอเปิด
+      await _tryFindOpenWindow();
+    }
+    if (_windowId == null) {
       return;
     }
 

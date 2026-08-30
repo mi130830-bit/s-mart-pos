@@ -202,10 +202,46 @@ class DashboardOrdersTable extends StatelessWidget {
       decoration: isVoid ? TextDecoration.lineThrough : null,
     );
 
+    final rawOrderNum = o['orderNumber']?.toString();
+    final isOnlineOrder = o['sales_channel'] == 'ONLINE' ||
+        (rawOrderNum != null && rawOrderNum.startsWith('ON-')) ||
+        (o['note']?.toString().contains('(LINE OA)') ?? false);
+    final displayOrderNum = (rawOrderNum != null && rawOrderNum.isNotEmpty)
+        ? rawOrderNum
+        : (isOnlineOrder ? 'ON-$orderId' : '#$orderId');
+
     return DataRow(cells: [
       // เลขที่บิล
-      DataCell(Text('#${o["id"]}',
-          style: textStyle.copyWith(fontWeight: FontWeight.bold))),
+      DataCell(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(displayOrderNum,
+                style: textStyle.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isOnlineOrder ? Colors.teal.shade800 : null)),
+            if (isOnlineOrder) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD1FAE5),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF10B981)),
+                ),
+                child: const Text(
+                  'LINE OA',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF065F46),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
       // เวลา
       DataCell(Text(timeStr, style: textStyle)),
       // ลูกค้า

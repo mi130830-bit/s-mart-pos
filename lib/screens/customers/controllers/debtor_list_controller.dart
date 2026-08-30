@@ -257,6 +257,8 @@ class DebtorListController extends AutoDisposeNotifier<DebtorListState> {
       final total = double.tryParse(orderData['total'].toString()) ?? grandTotal;
       final received = double.tryParse(orderData['received'].toString()) ?? 0.0;
       final change = double.tryParse(orderData['changeAmount'].toString()) ?? 0.0;
+      final String? orderNote =
+          orderData['notes']?.toString() ?? orderData['note']?.toString();
 
       if (!context.mounted) return;
       Navigator.pop(context); // Pop loading dialog
@@ -272,6 +274,7 @@ class DebtorListController extends AutoDisposeNotifier<DebtorListState> {
           change: change,
           customer: customer,
           isPreview: false,
+          remark: orderNote,
         );
       } else if (type == 'DELIVERY') {
         await receiptService.printDeliveryNote(
@@ -280,6 +283,7 @@ class DebtorListController extends AutoDisposeNotifier<DebtorListState> {
           customer: customer,
           discount: discount,
           isPreview: false,
+          remark: orderNote,
         );
       } else if (type == 'SAVE_RECEIPT_PDF') {
         await receiptService.printReceipt(
@@ -293,6 +297,7 @@ class DebtorListController extends AutoDisposeNotifier<DebtorListState> {
           customer: customer,
           isPreview: true,
           useCashBillSettings: true,
+          remark: orderNote,
         );
       } else if (type == 'SAVE_DELIVERY_PDF') {
         await receiptService.printDeliveryNote(
@@ -301,6 +306,7 @@ class DebtorListController extends AutoDisposeNotifier<DebtorListState> {
           customer: customer,
           discount: discount,
           isPreview: true,
+          remark: orderNote,
         );
       }
     } catch (e) {

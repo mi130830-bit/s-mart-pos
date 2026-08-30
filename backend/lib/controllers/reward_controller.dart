@@ -1,22 +1,43 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import '../db_config.dart';
+import '../middlewares/liff_auth_middleware.dart';
+import '../services/line_identity_service.dart';
+import '../services/membership_service.dart';
+import '../services/member_tier_service.dart';
+import '../services/reward_redemption_service.dart';
 import 'dart:io';
 
 class RewardController {
-  Router get router {
+  final MembershipService _membershipService = MembershipService();
+  final MemberTierService _memberTierService = MemberTierService();
+  final RewardRedemptionService _redemptionService = RewardRedemptionService();
+  Router get publicRouter {
     final router = Router();
     router.get('/', _getRewards);
-    router.get('/customer/<lineUserId>', _getCustomer);
+    return router;
+  }
+
+  Router get memberRouter {
+    final router = Router();
+    router.get('/me', _getCustomer);
     router.post('/link-phone', _linkCustomer);
     router.post('/redeem', _redeemReward);
-    // Phase 2: History & Coupon
-    router.get('/my-history/<lineUserId>', _getMyHistory);
-    router.get('/my-coupons/<lineUserId>', _getMyCoupons);
-    router.get('/admin/redemptions', _getAdminRedemptions);
-    router.patch('/admin/redemptions/<id>/fulfill', _fulfillRedemption);
+    router.post('/claim', _claimFreeReward);
+    router.get('/my-history', _getMyHistory);
+    router.get('/my-coupons', _getMyCoupons);
+    return router;
+  }
+
+  Router get staffRouter {
+    final router = Router();
+    router.get('/rewards', _getAdminRewards);
+    router.post('/rewards', _createReward);
+    router.put('/rewards/<id>', _updateReward);
+    router.delete('/rewards/<id>', _deleteReward);
+    router.get('/redemptions', _getAdminRedemptions);
+    router.patch('/redemptions/<id>/fulfill', _fulfillRedemption);
     router.get('/coupon/<code>', _validateCoupon);
     router.post('/coupon/<code>/use', _useCoupon);
     return router;
@@ -35,27 +56,80 @@ class RewardController {
   Future<Response> _getRewards(Request request) async {
     try {
       final conn = await DbConfig().connection;
+      // ดึง LINE identity เพื่อเช็คโควตาต่อคน (optional — ไม่ block ถ้าไม่มี)
+      int? currentCustomerId;
+      final identity = request.context[lineIdentityContextKey];
+      if (identity is LineIdentity) {
+        final ownerRes = await conn.execute(
+          '''SELECT o.customer_id FROM customer_identity_owner o
+             JOIN customer c ON c.id = o.customer_id
+             WHERE o.provider = 'LINE' AND o.subject = :subject
+               AND (c.isDeleted = 0 OR c.isDeleted IS NULL) LIMIT 1''',
+          {'subject': identity.subject},
+        );
+        if (ownerRes.rows.isNotEmpty) {
+          currentCustomerId = int.tryParse(
+            ownerRes.rows.first.assoc()['customer_id']?.toString() ?? '',
+          );
+        }
+      }
+
       final sql = '''
         SELECT id, name, description, point_price, stock_quantity, image_url,
                COALESCE(reward_type, 'GIFT') as reward_type,
-               COALESCE(discount_value, 0) as discount_value
+               COALESCE(discount_value, 0) as discount_value,
+               COALESCE(claim_type, 'POINTS_REDEEM') as claim_type,
+               COALESCE(claim_limit_per_user, 1) as claim_limit_per_user
         FROM point_reward 
         WHERE is_active = 1 AND stock_quantity > 0
-        ORDER BY point_price ASC
+        ORDER BY claim_type ASC, point_price ASC
       ''';
       final result = await conn.execute(sql);
-      final List<Map<String, dynamic>> rewards = result.rows.map((row) => row.assoc()).toList();
-      return Response.ok(jsonEncode(rewards), headers: {'content-type': 'application/json'});
+      final List<Map<String, dynamic>> rewards = [];
+      for (final row in result.rows) {
+        final r = Map<String, dynamic>.from(row.assoc());
+        // เช็คโควตาต่อคนสำหรับ FREE_CLAIM
+        if (currentCustomerId != null) {
+          final limitPerUser = int.tryParse(r['claim_limit_per_user']?.toString() ?? '0') ?? 0;
+          if (limitPerUser > 0) {
+            final claimedRes = await conn.execute(
+              '''SELECT COUNT(*) AS cnt FROM reward_redemption
+                 WHERE customer_id = :cid AND reward_id = :rid''',
+              {'cid': currentCustomerId, 'rid': r['id']},
+            );
+            final cnt = int.tryParse(
+              claimedRes.rows.first.assoc()['cnt']?.toString() ?? '0',
+            ) ?? 0;
+            r['user_claimed_count'] = cnt;
+            r['is_claim_limit_reached'] = cnt >= limitPerUser;
+          } else {
+            r['user_claimed_count'] = 0;
+            r['is_claim_limit_reached'] = false;
+          }
+        } else {
+          r['user_claimed_count'] = 0;
+          r['is_claim_limit_reached'] = false;
+        }
+        rewards.add(r);
+      }
+      return Response.ok(
+        jsonEncode(rewards),
+        headers: {'content-type': 'application/json'},
+      );
     } catch (e) {
       stdout.writeln('❌ API Error (Get Rewards): $e');
-      return Response.internalServerError(body: jsonEncode({'error': 'Failed to fetch rewards: $e'}));
+      return _codedError(500, 'REWARDS_FETCH_ERROR', 'Unable to fetch rewards');
     }
   }
 
-  // GET /api/v1/rewards/customer/:lineUserId
-  Future<Response> _getCustomer(Request request, String lineUserId) async {
+  // GET /api/v1/rewards-member/me
+  Future<Response> _getCustomer(Request request) async {
     try {
-      stdout.writeln('🔍 RewardAPI: Searching for Customer with LineUID: "$lineUserId"');
+      final identity = request.context[lineIdentityContextKey];
+      if (identity is! LineIdentity) {
+        return Response.unauthorized('Unauthorized');
+      }
+      final lineUserId = identity.subject;
       final conn = await DbConfig().connection;
       final sql = '''
         SELECT id, memberCode, firstName, lastName, line_display_name, isDeleted
@@ -66,7 +140,6 @@ class RewardController {
       ''';
       final result = await conn.execute(sql, {'lineUserId': lineUserId.trim()});
       if (result.rows.isEmpty) {
-        stdout.writeln('⚠️ RewardAPI: No customer found for "$lineUserId"');
         return Response.notFound(jsonEncode({'error': 'Customer not found'}));
       }
       var customerMap = result.rows.first.assoc();
@@ -75,7 +148,9 @@ class RewardController {
       String lineName = customerMap['line_display_name']?.toString() ?? '';
       String finalName = '$fName $lName'.trim();
       if (finalName.isEmpty) finalName = lineName;
-      if (finalName.isEmpty) finalName = 'Member ${customerMap['memberCode']?.toString() ?? ''}';
+      if (finalName.isEmpty) {
+        finalName = 'Member ${customerMap['memberCode']?.toString() ?? ''}';
+      }
 
       // 🟢 CHANGE: Use accurate ledger sum instead of denormalized column
       final pointSql = '''
@@ -84,171 +159,151 @@ class RewardController {
         WHERE customer_id = :cid AND (expires_at IS NULL OR expires_at > NOW())
       ''';
       final pointRes = await conn.execute(pointSql, {'cid': customerMap['id']});
-      final currentPoints = int.tryParse(pointRes.rows.first.colAt(0)?.toString() ?? '0') ?? 0;
+      final currentPoints =
+          int.tryParse(pointRes.rows.first.colAt(0)?.toString() ?? '0') ?? 0;
 
       return Response.ok(
         jsonEncode({
-          'id': customerMap['id'], 
-          'name': finalName, 
-          'currentPoints': currentPoints
+          'id': customerMap['id'],
+          'name': finalName,
+          'currentPoints': currentPoints,
         }),
         headers: {'content-type': 'application/json'},
       );
     } catch (e) {
       stdout.writeln('❌ API Error (Get Customer): $e');
-      return Response.internalServerError(body: jsonEncode({'error': 'Failed to fetch customer: $e'}));
+      return _codedError(500, 'MEMBER_FETCH_ERROR', 'Unable to fetch member');
     }
   }
 
   // POST /api/v1/rewards/link-phone
   Future<Response> _linkCustomer(Request request) async {
+    final identity = request.context[lineIdentityContextKey];
+    if (identity is! LineIdentity) return Response.unauthorized('Unauthorized');
     try {
-      final body = await request.readAsString();
-      final data = jsonDecode(body);
-      final String? phone = data['phone']?.toString().replaceAll(' ', '');
-      final String? name = data['name']?.toString().trim();
-      final String? lineUserId = data['lineUserId']?.toString();
-      final String? lineDisplayName = data['lineDisplayName']?.toString();
-      final String? linePictureUrl = data['linePictureUrl']?.toString();
-
-      if (phone == null || lineUserId == null || phone.isEmpty) {
-        return Response.badRequest(body: jsonEncode({'error': 'Phone and Line ID are required'}));
-      }
-      final conn = await DbConfig().connection;
-      final checkLine = await conn.execute('SELECT id FROM customer WHERE TRIM(line_user_id) = :lineId AND (isDeleted = 0 OR isDeleted IS NULL)', {'lineId': lineUserId.trim()});
-      if (checkLine.rows.isNotEmpty) {
-        return Response.badRequest(body: jsonEncode({'error': 'บัญชี LINE นี้ถูกเชื่อมต่อกับสมาชิกท่านอื่นแล้ว'}));
-      }
-      final checkPhone = await conn.execute('SELECT id FROM customer WHERE phone = :phone AND (isDeleted = 0 OR isDeleted IS NULL) LIMIT 1', {'phone': phone});
-      if (checkPhone.rows.isNotEmpty) {
-        final customerId = checkPhone.rows.first.assoc()['id'];
-        await conn.execute('UPDATE customer SET line_user_id = :lineId, line_display_name = :lineName, line_picture_url = :linePic WHERE id = :id',
-            {'lineId': lineUserId, 'lineName': lineDisplayName, 'linePic': linePictureUrl, 'id': customerId});
-        stdout.writeln('🔗 RewardAPI: Linked Phone $phone to existing customer ID $customerId');
-        return Response.ok(jsonEncode({'success': true, 'message': 'เชื่อมต่อสมาชิกเสร็จเรียบร้อย'}));
-      } else {
-        final firstName = (name != null && name.isNotEmpty) ? name : 'ลูกค้าใหม่';
-        await conn.execute(
-          'INSERT INTO customer (memberCode, firstName, phone, line_user_id, line_display_name, line_picture_url, currentPoints, isDeleted) VALUES (:code, :fname, :phone, :lineId, :lineName, :linePic, 0, 0)',
-          {'code': phone, 'fname': firstName, 'phone': phone, 'lineId': lineUserId, 'lineName': lineDisplayName, 'linePic': linePictureUrl}
-        );
-        stdout.writeln('🆕 RewardAPI: Registered new customer with Phone $phone');
-        return Response.ok(jsonEncode({'success': true, 'message': 'สมัครสมาชิกใหม่เรียบร้อย'}));
-      }
-    } catch (e) {
-      stdout.writeln('❌ API Error (Link Phone): $e');
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      final data = jsonDecode(await request.readAsString());
+      final requestUuid = data['requestUuid']?.toString().trim();
+      final result = await _membershipService.selfSignup(
+        identity: identity,
+        phone: data['phone']?.toString() ?? '',
+        name: data['name']?.toString() ?? '',
+        requestUuid: requestUuid == null || requestUuid.isEmpty
+            ? MembershipSecurity.newRequestUuid()
+            : requestUuid,
+      );
+      return Response(
+        result.httpStatus,
+        body: jsonEncode(result.data),
+        headers: {'content-type': 'application/json'},
+      );
+    } on MembershipException catch (e) {
+      return Response(
+        e.statusCode,
+        body: jsonEncode({
+          'success': false,
+          'code': e.code,
+          'error': e.message,
+        }),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (_) {
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to register member'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
   // POST /api/v1/rewards/redeem
   Future<Response> _redeemReward(Request request) async {
+    final identity = request.context[lineIdentityContextKey];
+    if (identity is! LineIdentity) {
+      return _codedError(401, 'UNAUTHORIZED', 'Authentication required');
+    }
     try {
-      final body = await request.readAsString();
-      final data = jsonDecode(body);
-      final String? lineUserId = data['lineUserId']?.toString();
-      final int? rewardId = int.tryParse(data['rewardId']?.toString() ?? '');
-      if (lineUserId == null || rewardId == null) {
-        return Response.badRequest(body: jsonEncode({'error': 'Missing parameters'}));
+      final decoded = jsonDecode(await request.readAsString());
+      if (decoded is! Map<String, dynamic>) {
+        return _codedError(400, 'INVALID_BODY', 'Invalid request body');
       }
-      final conn = await DbConfig().connection;
-      await conn.execute('START TRANSACTION');
-      try {
-        final custResult = await conn.execute(
-          'SELECT id FROM customer WHERE TRIM(line_user_id) = :lineUserId AND (isDeleted = 0 OR isDeleted IS NULL) FOR UPDATE',
-          {'lineUserId': lineUserId.trim()}
-        );
-        if (custResult.rows.isEmpty) throw Exception('Customer not found');
-        final customerId = int.parse(custResult.rows.first.assoc()['id'].toString());
-
-        // 🟢 CHANGE: Calculate current points from ledger for 100% accuracy
-        final pointSql = '''
-          SELECT COALESCE(SUM(points_earned - points_used), 0) as total
-          FROM point_ledger 
-          WHERE customer_id = :cid AND (expires_at IS NULL OR expires_at > NOW())
-          FOR UPDATE
-        ''';
-        final pointRes = await conn.execute(pointSql, {'cid': customerId});
-        final currentPoints = int.tryParse(pointRes.rows.first.colAt(0)?.toString() ?? '0') ?? 0;
-
-        final rewardResult = await conn.execute(
-          '''SELECT point_price, stock_quantity, name,
-                    COALESCE(reward_type, 'GIFT') as reward_type,
-                    COALESCE(discount_value, 0) as discount_value,
-                    COALESCE(coupon_expiry_days, 30) as coupon_expiry_days
-             FROM point_reward WHERE id = :rewardId AND is_active = 1 FOR UPDATE''',
-          {'rewardId': rewardId}
-        );
-        if (rewardResult.rows.isEmpty) throw Exception('Reward not found or deactivated');
-
-        final rewardData = rewardResult.rows.first.assoc();
-        final pointPrice = int.parse(rewardData['point_price'].toString());
-        final stockQuantity = int.parse(rewardData['stock_quantity'].toString());
-        final rewardType = rewardData['reward_type']?.toString() ?? 'GIFT';
-        final rewardName = rewardData['name']?.toString() ?? 'รางวัล';
-        final discountValue = double.tryParse(rewardData['discount_value'].toString()) ?? 0;
-        final expiryDays = int.tryParse(rewardData['coupon_expiry_days'].toString()) ?? 30;
-
-        if (currentPoints < pointPrice) throw Exception('Insufficient points (มี $currentPoints แต้ม ใช้ $pointPrice แต้ม)');
-        if (stockQuantity <= 0) throw Exception('Out of stock');
-
-        final newPoints = currentPoints - pointPrice;
-        
-        // 🟢 Update Legacy Column
-        await conn.execute('UPDATE customer SET currentPoints = :points WHERE id = :id', {'points': newPoints, 'id': customerId});
-        
-        // 🟢 Update Ledger (Insert Deduction)
-        await conn.execute(
-          '''INSERT INTO point_ledger (customer_id, points_earned, points_used, description, expires_at) 
-             VALUES (:cid, 0, :used, :desc, NULL)''',
-          {'cid': customerId, 'used': pointPrice, 'desc': 'Redeem: $rewardName'}
-        );
-        
-        await conn.execute('UPDATE point_reward SET stock_quantity = :stock WHERE id = :id', {'stock': stockQuantity - 1, 'id': rewardId});
-
-        final redemptionResult = await conn.execute(
-          "INSERT INTO reward_redemption (customer_id, reward_id, points_used, status, reward_type) VALUES (:cid, :rid, :pts, 'PENDING', :rtype)",
-          {'cid': customerId, 'rid': rewardId, 'pts': pointPrice, 'rtype': rewardType}
-        );
-        final redemptionId = redemptionResult.lastInsertID.toInt();
-
-        String? couponCode;
-        if (rewardType == 'COUPON' && discountValue > 0) {
-          couponCode = _generateCouponCode();
-          final expiresAt = DateTime.now().add(Duration(days: expiryDays));
-          final expiresAtStr = expiresAt.toIso8601String().substring(0, 19).replaceAll('T', ' ');
-          await conn.execute(
-            "INSERT INTO reward_coupon (coupon_code, customer_id, reward_id, redemption_id, discount_value, expires_at, status) VALUES (:code, :cid, :rid, :rdid, :dv, :exp, 'ACTIVE')",
-            {'code': couponCode, 'cid': customerId, 'rid': rewardId, 'rdid': redemptionId, 'dv': discountValue, 'exp': expiresAtStr}
-          );
-          stdout.writeln('🎟️ Generated Coupon: $couponCode for Customer $customerId');
-        }
-
-        await conn.execute('COMMIT');
-        stdout.writeln('✅ Customer $customerId redeemed Reward $rewardId (type: $rewardType)');
-        return Response.ok(
-          jsonEncode({'success': true, 'remainingPoints': newPoints, 'rewardType': rewardType, 'couponCode': couponCode, 'discountValue': discountValue}),
-          headers: {'content-type': 'application/json'},
-        );
-      } catch (txError) {
-        await conn.execute('ROLLBACK');
-        stdout.writeln('⚠️ Redemption Transaction Failed: $txError');
-        return Response.badRequest(body: jsonEncode({'error': txError.toString().replaceAll('Exception: ', '')}));
+      final rewardId = int.tryParse(decoded['rewardId']?.toString() ?? '');
+      if (rewardId == null) {
+        return _codedError(400, 'INVALID_REWARD', 'Invalid reward');
       }
-    } catch (e) {
-      stdout.writeln('❌ API Error (Redeem): $e');
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      final result = await _redemptionService.redeem(
+        lineSubject: identity.subject,
+        rewardId: rewardId,
+        clientRequestId: decoded['clientRequestId']?.toString() ?? '',
+      );
+      return Response.ok(
+        jsonEncode(result),
+        headers: {'content-type': 'application/json'},
+      );
+    } on RewardRedemptionException catch (error) {
+      return _codedError(error.statusCode, error.code, error.message);
+    } on FormatException {
+      return _codedError(400, 'INVALID_BODY', 'Invalid request body');
+    } catch (_) {
+      return _codedError(500, 'REDEMPTION_ERROR', 'Unable to redeem reward');
     }
   }
 
-  // GET /api/v1/rewards/my-history/:lineUserId
-  Future<Response> _getMyHistory(Request request, String lineUserId) async {
+  // POST /api/v1/rewards-member/claim
+  Future<Response> _claimFreeReward(Request request) async {
+    final identity = request.context[lineIdentityContextKey];
+    if (identity is! LineIdentity) {
+      return _codedError(401, 'UNAUTHORIZED', 'Authentication required');
+    }
     try {
+      final decoded = jsonDecode(await request.readAsString());
+      if (decoded is! Map<String, dynamic>) {
+        return _codedError(400, 'INVALID_BODY', 'Invalid request body');
+      }
+      final rewardId = int.tryParse(decoded['rewardId']?.toString() ?? '');
+      if (rewardId == null) {
+        return _codedError(400, 'INVALID_REWARD', 'Invalid reward');
+      }
+      final result = await _redemptionService.claimFreeCoupon(
+        lineSubject: identity.subject,
+        rewardId: rewardId,
+        clientRequestId: decoded['clientRequestId']?.toString() ?? '',
+      );
+      return Response.ok(
+        jsonEncode(result),
+        headers: {'content-type': 'application/json'},
+      );
+    } on RewardRedemptionException catch (error) {
+      return _codedError(error.statusCode, error.code, error.message);
+    } on FormatException {
+      return _codedError(400, 'INVALID_BODY', 'Invalid request body');
+    } catch (_) {
+      return _codedError(500, 'CLAIM_ERROR', 'Unable to claim coupon');
+    }
+  }
+
+  Response _codedError(int status, String code, String message) => Response(
+    status,
+    body: jsonEncode({'success': false, 'code': code, 'error': message}),
+    headers: {'content-type': 'application/json'},
+  );
+  // GET /api/v1/rewards-member/my-history
+  Future<Response> _getMyHistory(Request request) async {
+    try {
+      final identity = request.context[lineIdentityContextKey];
+      if (identity is! LineIdentity) {
+        return Response.unauthorized('Unauthorized');
+      }
+      final lineUserId = identity.subject;
       final conn = await DbConfig().connection;
-      final custResult = await conn.execute('SELECT id FROM customer WHERE TRIM(line_user_id) = :lineUserId AND (isDeleted = 0 OR isDeleted IS NULL) LIMIT 1', {'lineUserId': lineUserId.trim()});
-      if (custResult.rows.isEmpty) return Response.notFound(jsonEncode({'error': 'Customer not found'}));
+      final custResult = await conn.execute(
+        'SELECT id FROM customer WHERE TRIM(line_user_id) = :lineUserId AND (isDeleted = 0 OR isDeleted IS NULL) LIMIT 1',
+        {'lineUserId': lineUserId.trim()},
+      );
+      if (custResult.rows.isEmpty) {
+        return Response.notFound(jsonEncode({'error': 'Customer not found'}));
+      }
       final customerId = custResult.rows.first.assoc()['id'];
-      final result = await conn.execute('''
+      final result = await conn.execute(
+        '''
         SELECT rr.id, rr.points_used, rr.redeemed_at,
                COALESCE(rr.status, 'PENDING') as status,
                COALESCE(rr.reward_type, 'GIFT') as reward_type,
@@ -260,34 +315,76 @@ class RewardController {
         LEFT JOIN reward_coupon rc ON rc.redemption_id = rr.id
         WHERE rr.customer_id = :cid
         ORDER BY rr.redeemed_at DESC LIMIT 30
-      ''', {'cid': customerId});
+      ''',
+        {'cid': customerId},
+      );
       final history = result.rows.map((row) => _safeMap(row.assoc())).toList();
-      return Response.ok(jsonEncode(history), headers: {'content-type': 'application/json'});
+      return Response.ok(
+        jsonEncode(history),
+        headers: {'content-type': 'application/json'},
+      );
     } catch (e) {
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      stderr.writeln('Member reward history fetch failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to load reward history'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
-  // GET /api/v1/rewards/my-coupons/:lineUserId
-  Future<Response> _getMyCoupons(Request request, String lineUserId) async {
+  // GET /api/v1/rewards-member/my-coupons
+  Future<Response> _getMyCoupons(Request request) async {
     try {
+      final identity = request.context[lineIdentityContextKey];
+      if (identity is! LineIdentity) {
+        return Response.unauthorized(
+          jsonEncode({'error': 'Authentication required'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
       final conn = await DbConfig().connection;
-      final custResult = await conn.execute('SELECT id FROM customer WHERE TRIM(line_user_id) = :lineUserId AND (isDeleted = 0 OR isDeleted IS NULL) LIMIT 1', {'lineUserId': lineUserId.trim()});
-      if (custResult.rows.isEmpty) return Response.notFound(jsonEncode({'error': 'Customer not found'}));
-      final customerId = custResult.rows.first.assoc()['id'];
-      await conn.execute("UPDATE reward_coupon SET status = 'EXPIRED' WHERE customer_id = :cid AND expires_at < NOW() AND status = 'ACTIVE'", {'cid': customerId});
-      final result = await conn.execute('''
-        SELECT rc.id, rc.coupon_code, rc.discount_value, rc.expires_at, rc.status, rc.used_at,
+      final customerId = await _memberTierService.resolveCustomerId(
+        conn,
+        identity.subject,
+      );
+      if (customerId == null) {
+        return Response.notFound(jsonEncode({'error': 'Member not found'}));
+      }
+      await conn.execute(
+        '''UPDATE reward_coupon
+           SET status = CASE WHEN expires_at > NOW() THEN 'ACTIVE' ELSE 'EXPIRED' END,
+               reserved_online_order_id = NULL, reserved_until = NULL
+           WHERE customer_id = :cid AND status = 'RESERVED'
+             AND (reserved_until IS NULL OR reserved_until <= NOW())''',
+        {'cid': customerId},
+      );
+      await conn.execute(
+        "UPDATE reward_coupon SET status = 'EXPIRED' WHERE customer_id = :cid AND expires_at < NOW() AND status = 'ACTIVE'",
+        {'cid': customerId},
+      );
+      final result = await conn.execute(
+        '''
+        SELECT rc.id, rc.coupon_code, rc.discount_value, rc.expires_at,
+               rc.status, rc.used_at, rc.reserved_until,
                pr.name as reward_name
         FROM reward_coupon rc
         JOIN point_reward pr ON rc.reward_id = pr.id
         WHERE rc.customer_id = :cid
         ORDER BY rc.expires_at ASC
-      ''', {'cid': customerId});
+      ''',
+        {'cid': customerId},
+      );
       final coupons = result.rows.map((row) => _safeMap(row.assoc())).toList();
-      return Response.ok(jsonEncode(coupons), headers: {'content-type': 'application/json'});
-    } catch (e) {
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      return Response.ok(
+        jsonEncode(coupons),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (error) {
+      stderr.writeln('Member coupon fetch failed: $error');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to load member coupons'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
@@ -309,9 +406,16 @@ class RewardController {
         ORDER BY rr.redeemed_at DESC LIMIT 200
       ''');
       final list = result.rows.map((row) => _safeMap(row.assoc())).toList();
-      return Response.ok(jsonEncode(list), headers: {'content-type': 'application/json'});
+      return Response.ok(
+        jsonEncode(list),
+        headers: {'content-type': 'application/json'},
+      );
     } catch (e) {
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      stderr.writeln('Admin redemption fetch failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to load redemptions'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
@@ -319,11 +423,18 @@ class RewardController {
   Future<Response> _fulfillRedemption(Request request, String id) async {
     try {
       final conn = await DbConfig().connection;
-      await conn.execute("UPDATE reward_redemption SET status = 'FULFILLED' WHERE id = :id", {'id': id});
+      await conn.execute(
+        "UPDATE reward_redemption SET status = 'FULFILLED' WHERE id = :id",
+        {'id': id},
+      );
       stdout.writeln('✅ Admin fulfilled redemption #$id');
       return Response.ok(jsonEncode({'success': true}));
     } catch (e) {
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      stderr.writeln('Redemption fulfillment failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to fulfill redemption'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
@@ -331,8 +442,11 @@ class RewardController {
   Future<Response> _validateCoupon(Request request, String code) async {
     try {
       final conn = await DbConfig().connection;
-      await conn.execute("UPDATE reward_coupon SET status = 'EXPIRED' WHERE expires_at < NOW() AND status = 'ACTIVE'");
-      final result = await conn.execute('''
+      await conn.execute(
+        "UPDATE reward_coupon SET status = 'EXPIRED' WHERE expires_at < NOW() AND status = 'ACTIVE'",
+      );
+      final result = await conn.execute(
+        '''
         SELECT rc.id, rc.coupon_code, rc.discount_value, rc.expires_at, rc.status,
                pr.name as reward_name,
                c.firstName, c.lastName, c.phone
@@ -340,11 +454,22 @@ class RewardController {
         JOIN point_reward pr ON rc.reward_id = pr.id
         JOIN customer c ON rc.customer_id = c.id
         WHERE rc.coupon_code = :code LIMIT 1
-      ''', {'code': code.toUpperCase()});
-      if (result.rows.isEmpty) return Response.notFound(jsonEncode({'error': 'ไม่พบรหัสคูปองนี้'}));
-      return Response.ok(jsonEncode(_safeMap(result.rows.first.assoc())), headers: {'content-type': 'application/json'});
+      ''',
+        {'code': code.toUpperCase()},
+      );
+      if (result.rows.isEmpty) {
+        return Response.notFound(jsonEncode({'error': 'ไม่พบรหัสคูปองนี้'}));
+      }
+      return Response.ok(
+        jsonEncode(_safeMap(result.rows.first.assoc())),
+        headers: {'content-type': 'application/json'},
+      );
     } catch (e) {
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      stderr.writeln('Coupon validation failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to validate coupon'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
@@ -352,25 +477,197 @@ class RewardController {
   Future<Response> _useCoupon(Request request, String code) async {
     try {
       final conn = await DbConfig().connection;
-      final res = await conn.execute("UPDATE reward_coupon SET status = 'USED', used_at = NOW() WHERE coupon_code = :code AND status = 'ACTIVE'", {'code': code.toUpperCase()});
-      if (res.affectedRows == BigInt.zero) return Response.badRequest(body: jsonEncode({'error': 'คูปองไม่สามารถใช้งานได้ (อาจถูกใช้ไปแล้ว หรือหมดอายุ)'}));
+      final res = await conn.execute(
+        "UPDATE reward_coupon SET status = 'USED', used_at = NOW() WHERE coupon_code = :code AND status = 'ACTIVE'",
+        {'code': code.toUpperCase()},
+      );
+      if (res.affectedRows == BigInt.zero) {
+        return Response.badRequest(
+          body: jsonEncode({
+            'error': 'คูปองไม่สามารถใช้งานได้ (อาจถูกใช้ไปแล้ว หรือหมดอายุ)',
+          }),
+        );
+      }
       return Response.ok(jsonEncode({'success': true}));
     } catch (e) {
-      return Response.internalServerError(body: jsonEncode({'error': 'Server error: $e'}));
+      stderr.writeln('Coupon use failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to use coupon'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
   }
 
-  String _generateCouponCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rnd = Random();
-    String code = 'SMR-';
-    for (var i = 0; i < 4; i++) {
-      code += chars[rnd.nextInt(chars.length)];
+  // GET /api/v1/rewards-admin/rewards
+  Future<Response> _getAdminRewards(Request request) async {
+    try {
+      final conn = await DbConfig().connection;
+      final sql = '''
+        SELECT id, name, description, point_price, stock_quantity, image_url,
+               COALESCE(reward_type, 'GIFT') as reward_type,
+               COALESCE(discount_value, 0) as discount_value,
+               COALESCE(claim_type, 'POINTS_REDEEM') as claim_type,
+               COALESCE(claim_limit_per_user, 1) as claim_limit_per_user,
+               COALESCE(is_active, 1) as is_active
+        FROM point_reward 
+        ORDER BY is_active DESC, claim_type ASC, point_price ASC
+      ''';
+      final result = await conn.execute(sql);
+      final list = result.rows.map((row) => _safeMap(row.assoc())).toList();
+      return Response.ok(
+        jsonEncode(list),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (e) {
+      stderr.writeln('Admin reward fetch failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'Unable to load rewards'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
-    code += '-';
-    for (var i = 0; i < 4; i++) {
-      code += chars[rnd.nextInt(chars.length)];
+  }
+
+  // POST /api/v1/rewards-admin/rewards
+  Future<Response> _createReward(Request request) async {
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString().trim() ?? '';
+      if (name.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'กรุณาระบุชื่อของรางวัล/คูปอง'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      final desc = body['description']?.toString().trim() ?? '';
+      final pointPrice = int.tryParse(body['point_price']?.toString() ?? '0') ?? 0;
+      final stock = int.tryParse(body['stock_quantity']?.toString() ?? '0') ?? 0;
+      final imageUrl = body['image_url']?.toString().trim() ?? '';
+      final rewardType = body['reward_type']?.toString().trim() ?? 'GIFT';
+      final discountValue = double.tryParse(body['discount_value']?.toString() ?? '0') ?? 0.0;
+      final claimType = body['claim_type']?.toString().trim() ?? 'POINTS_REDEEM';
+      final claimLimitPerUser = int.tryParse(body['claim_limit_per_user']?.toString() ?? '1') ?? 1;
+      final isActive = body['is_active'] == true || body['is_active'] == 1 || body['is_active'] == '1' ? 1 : 0;
+
+      final conn = await DbConfig().connection;
+      final sql = '''
+        INSERT INTO point_reward
+        (name, description, point_price, stock_quantity, image_url, reward_type, discount_value, claim_type, claim_limit_per_user, is_active)
+        VALUES
+        (:name, :desc, :pointPrice, :stock, :imageUrl, :rewardType, :discountVal, :claimType, :claimLimit, :isActive)
+      ''';
+      final res = await conn.execute(sql, {
+        'name': name,
+        'desc': desc,
+        'pointPrice': pointPrice,
+        'stock': stock,
+        'imageUrl': imageUrl,
+        'rewardType': rewardType,
+        'discountVal': discountValue,
+        'claimType': claimType,
+        'claimLimit': claimLimitPerUser,
+        'isActive': isActive,
+      });
+
+      return Response.ok(
+        jsonEncode({
+          'success': true,
+          'id': res.lastInsertID.toInt(),
+          'message': 'สร้างรางวัลสำเร็จ',
+        }),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (e) {
+      stderr.writeln('Create reward failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'ไม่สามารถสร้างรางวัลได้: $e'}),
+        headers: {'content-type': 'application/json'},
+      );
     }
-    return code;
+  }
+
+  // PUT /api/v1/rewards-admin/rewards/<id>
+  Future<Response> _updateReward(Request request, String id) async {
+    try {
+      final rewardId = int.tryParse(id);
+      if (rewardId == null) {
+        return Response.badRequest(body: jsonEncode({'error': 'รหัสรางวัลไม่ถูกต้อง'}));
+      }
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString().trim() ?? '';
+      if (name.isEmpty) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'กรุณาระบุชื่อของรางวัล/คูปอง'}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      final desc = body['description']?.toString().trim() ?? '';
+      final pointPrice = int.tryParse(body['point_price']?.toString() ?? '0') ?? 0;
+      final stock = int.tryParse(body['stock_quantity']?.toString() ?? '0') ?? 0;
+      final imageUrl = body['image_url']?.toString().trim() ?? '';
+      final rewardType = body['reward_type']?.toString().trim() ?? 'GIFT';
+      final discountValue = double.tryParse(body['discount_value']?.toString() ?? '0') ?? 0.0;
+      final claimType = body['claim_type']?.toString().trim() ?? 'POINTS_REDEEM';
+      final claimLimitPerUser = int.tryParse(body['claim_limit_per_user']?.toString() ?? '1') ?? 1;
+      final isActive = body['is_active'] == true || body['is_active'] == 1 || body['is_active'] == '1' ? 1 : 0;
+
+      final conn = await DbConfig().connection;
+      final sql = '''
+        UPDATE point_reward
+        SET name = :name, description = :desc, point_price = :pointPrice,
+            stock_quantity = :stock, image_url = :imageUrl, reward_type = :rewardType,
+            discount_value = :discountVal, claim_type = :claimType,
+            claim_limit_per_user = :claimLimit, is_active = :isActive
+        WHERE id = :id
+      ''';
+      await conn.execute(sql, {
+        'id': rewardId,
+        'name': name,
+        'desc': desc,
+        'pointPrice': pointPrice,
+        'stock': stock,
+        'imageUrl': imageUrl,
+        'rewardType': rewardType,
+        'discountVal': discountValue,
+        'claimType': claimType,
+        'claimLimit': claimLimitPerUser,
+        'isActive': isActive,
+      });
+
+      return Response.ok(
+        jsonEncode({'success': true, 'message': 'อัปเดตรางวัลสำเร็จ'}),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (e) {
+      stderr.writeln('Update reward failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'ไม่สามารถแก้ไขรางวัลได้: $e'}),
+        headers: {'content-type': 'application/json'},
+      );
+    }
+  }
+
+  // DELETE /api/v1/rewards-admin/rewards/<id>
+  Future<Response> _deleteReward(Request request, String id) async {
+    try {
+      final rewardId = int.tryParse(id);
+      if (rewardId == null) {
+        return Response.badRequest(body: jsonEncode({'error': 'รหัสรางวัลไม่ถูกต้อง'}));
+      }
+      final conn = await DbConfig().connection;
+      await conn.execute(
+        "UPDATE point_reward SET is_active = 0 WHERE id = :id",
+        {'id': rewardId},
+      );
+      return Response.ok(
+        jsonEncode({'success': true, 'message': 'ปิดใช้งานรางวัลสำเร็จ'}),
+        headers: {'content-type': 'application/json'},
+      );
+    } catch (e) {
+      stderr.writeln('Delete reward failed: $e');
+      return Response.internalServerError(
+        body: jsonEncode({'error': 'ไม่สามารถลบรางวัลได้'}),
+        headers: {'content-type': 'application/json'},
+      );
+    }
   }
 }

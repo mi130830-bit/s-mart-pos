@@ -196,6 +196,42 @@ extension CustomerRepositoryQueries on CustomerRepository {
     }
   }
 
+  Future<Customer?> getCustomerByPhone(String rawPhone) async {
+    if (!_dbService.isConnected()) {
+      try {
+        await _dbService.connect();
+      } catch (e) {
+        debugPrint('⚠️ Auto-connect failed in getCustomerByPhone: $e');
+        return null;
+      }
+    }
+    var clean = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.startsWith('66') && clean.length > 9) {
+      clean = '0${clean.substring(2)}';
+    }
+    if (clean.isEmpty) return null;
+
+    try {
+      final results = await _dbService.query('''
+        SELECT c.*, t.name as tierName 
+        FROM customer c
+        LEFT JOIN member_tier t ON c.tierId = t.id
+        WHERE REPLACE(REPLACE(REPLACE(c.phone, '-', ''), ' ', ''), '+66', '0') = :cleanPhone
+           OR c.phone LIKE :likePhone
+        ORDER BY c.id DESC
+        LIMIT 1
+      ''', {
+        'cleanPhone': clean,
+        'likePhone': '%$clean%',
+      });
+      if (results.isEmpty) return null;
+      return Customer.fromJson(results.first);
+    } catch (e) {
+      debugPrint('Error fetching customer by phone: $e');
+      return null;
+    }
+  }
+
   Future<double> getCurrentDebt(int customerId) async {
     if (!_dbService.isConnected()) await _dbService.connect();
     try {

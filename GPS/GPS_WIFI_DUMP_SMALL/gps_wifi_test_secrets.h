@@ -2,8 +2,8 @@
 // Never commit gps_wifi_test_secrets.h.
 #pragma once
 
-const char* WIFI_SSID = "Kankanda_2.4G";
-const char* WIFI_PASSWORD = "0318066064";
+const char* WIFI_SSID = "Sorborikan3";
+const char* WIFI_PASSWORD = "92311111";
 const char* SERVER_URL = "https://api.namecheap.work/api/v1/gps"; // URL จริงของร้าน
 const char* GPS_DEVICE_KEY = "s-mart-gps-a7670e-2026"; // กุญแจจริงจากโปรเจกต์หลัก
 const char* VEHICLE_NAME = "ดั้มเล็ก";

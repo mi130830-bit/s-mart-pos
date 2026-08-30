@@ -21,6 +21,8 @@ import '../../models/delivery_type.dart';
 import '../../models/promotion.dart'; // Added
 import '../settings_service.dart'; // Added
 import '../idempotency_payload.dart';
+import 'coupon_eligibility_rules.dart';
+import 'loyalty_award_rules.dart';
 
 class OrderProcessingService {
   final MySQLService _dbService;
@@ -61,6 +63,7 @@ class OrderProcessingService {
     double pointRedemptionBase = 0.0,
     String? couponCode,
     double couponDiscountAmount = 0.0,
+    int? sourceOnlineOrderId,
     List<Promotion>? activePromotions, // ✅ โปรโมชั่นที่กำลัง active
     MemberTier? currentTier, // ✅ ระดับสมาชิก สำหรับคูณแต้ม
   }) async {
@@ -100,6 +103,7 @@ class OrderProcessingService {
       'pointRedemptionBase': pointRedemptionBase.toStringAsFixed(4),
       'couponCode': couponCode?.toUpperCase() ?? '',
       'couponDiscountAmount': couponDiscountAmount.toStringAsFixed(4),
+      'sourceOnlineOrderId': sourceOnlineOrderId ?? 0,
       'items': filteredCart
           .map((item) => {
                 'productId': item.productId,
@@ -145,6 +149,19 @@ class OrderProcessingService {
     }
     String paymentMethodStr = methods.join(',');
 
+    final hasCreditPayment = payments.any((payment) =>
+        payment.amount > 0 &&
+        (payment.method.toUpperCase().contains('CREDIT') ||
+            payment.method.contains('เงินเชื่อ')));
+    if (couponCode != null &&
+        !CouponEligibilityRules.checkoutIsFullyPaid(
+          received: received,
+          grandTotal: grandTotal,
+          hasCreditPayment: hasCreditPayment,
+        )) {
+      throw StateError('บิลที่ใช้คูปองต้องชำระเต็มจำนวนและห้ามมียอดเงินเชื่อ');
+    }
+
     // คำนวณเงินทอน (ถ้าจ่ายด้วยเครดิต received จะน้อยกว่ายอดรวม เงินทอนจะเป็น 0)
     final currentChange = (received - grandTotal).clamp(0.0, double.infinity);
 
@@ -154,6 +171,61 @@ class OrderProcessingService {
         if (previous != null) return previous;
         await _dbService.execute('START TRANSACTION;');
         try {
+          Map<String, dynamic>? sourceOrder;
+          if (sourceOnlineOrderId != null) {
+            sourceOrder = await _lockSourceOnlineOrder(sourceOnlineOrderId);
+            if (sourceOrder == null) {
+              throw StateError('ไม่พบออเดอร์ออนไลน์ต้นทาง');
+            }
+            final sourceStatus =
+                sourceOrder['status']?.toString().toUpperCase() ?? '';
+            final sourcePosOrderId =
+                int.tryParse(sourceOrder['posOrderId']?.toString() ?? '');
+            final sourceCustomerId =
+                int.tryParse(sourceOrder['customerId']?.toString() ?? '');
+            if (!{
+                  'PENDING',
+                  'CONFIRMED',
+                  'PREPARING',
+                  'READY',
+                  'DISPATCHED',
+                  'SHIPPING',
+                }.contains(sourceStatus) ||
+                sourcePosOrderId != null) {
+              throw StateError('ออเดอร์ออนไลน์นี้ถูกปิดหรือขายเข้า POS แล้ว');
+            }
+            if (sourceCustomerId != currentCustomer?.id) {
+              throw StateError('สมาชิกในตะกร้าไม่ตรงกับออเดอร์ออนไลน์ต้นทาง');
+            }
+
+            // An elapsed reservation must not block checkout, but a still-live
+            // reservation may only be consumed by this source order.
+            await _dbService.execute('''
+              UPDATE reward_coupon
+              SET status = CASE WHEN expires_at > NOW()
+                                THEN 'ACTIVE' ELSE 'EXPIRED' END,
+                  reserved_online_order_id = NULL,
+                  reserved_until = NULL
+              WHERE reserved_online_order_id = :sourceId
+                AND status = 'RESERVED'
+                AND (reserved_until IS NULL OR reserved_until <= NOW())
+            ''', {'sourceId': sourceOnlineOrderId});
+            final liveReservation = await _dbService.query('''
+              SELECT coupon_code FROM reward_coupon
+              WHERE reserved_online_order_id = :sourceId
+                AND status = 'RESERVED' AND reserved_until > NOW()
+              LIMIT 1 FOR UPDATE
+            ''', {'sourceId': sourceOnlineOrderId});
+            if (liveReservation.isNotEmpty &&
+                liveReservation.first['coupon_code']
+                        ?.toString()
+                        .toUpperCase() !=
+                    couponCode?.toUpperCase()) {
+              throw StateError(
+                  'ออเดอร์นี้ยังมีคูปองที่สำรองอยู่ กรุณาใช้คูปองเดิมหรือยกเลิกออเดอร์');
+            }
+          }
+
           // Checkout is authoritative: do not accept an arbitrary point amount
           // from a POS/S-Link client. The cap uses the pre-VAT base after ordinary
           // discounts and promotions, as agreed for this shop.
@@ -173,9 +245,9 @@ class OrderProcessingService {
           String status =
               (received < grandTotal - 0.01) ? 'UNPAID' : 'COMPLETED';
           double debtAmt = (grandTotal - received).clamp(0.0, double.infinity);
+          final fullyPaid = status == 'COMPLETED' && !hasCreditPayment;
 
-          // 3. Insert Order Header (✅ เพิ่ม userId, changeAmount, deliveryType, note)
-          // ✅ Auto-migrate: เพิ่ม column note ถ้ายังไม่มี
+          // 3. Insert Order Header (✅ เพิ่ม userId, changeAmount, deliveryType, note, sales_channel)
           try {
             final checkSql = "SHOW COLUMNS FROM `order` LIKE 'note'";
             final res = await _dbService.query(checkSql);
@@ -187,17 +259,36 @@ class OrderProcessingService {
             debugPrint('Failed to ensure note column: $e');
           }
 
+          try {
+            final checkCol = "SHOW COLUMNS FROM `order` LIKE 'sales_channel'";
+            final res = await _dbService.query(checkCol);
+            if (res.isEmpty) {
+              await _dbService.execute(
+                  "ALTER TABLE `order` ADD COLUMN sales_channel VARCHAR(30) DEFAULT 'POS'");
+            }
+          } catch (e) {
+            debugPrint('Failed to ensure sales_channel column: $e');
+          }
+
+          final isOnline = sourceOnlineOrderId != null;
+          final channel = isOnline ? 'ONLINE' : 'POS';
+          final formattedNote = isOnline
+              ? ((note != null && note.isNotEmpty)
+                  ? (note.contains('(LINE OA)') ? note : '(LINE OA) $note')
+                  : '(LINE OA)')
+              : note;
+
           final sqlOrder = '''
         INSERT INTO `order` (
           customerId, total, discount, grandTotal, 
           paymentMethod, received, changeAmount, 
           userId, branchId, status, deliveryType, note,
-          idempotencyKey, idempotencyPayloadHash, createdAt
+          idempotencyKey, idempotencyPayloadHash, sales_channel, createdAt
         )
         VALUES (
           :cid, :total, :disc, :grand, 
           :pm, :rcv, :chg, 
-          :uid, :bid, :status, :dtype, :note, :idempotencyKey, :payloadHash, NOW()
+          :uid, :bid, :status, :dtype, :note, :idempotencyKey, :payloadHash, :channel, NOW()
         )
       ''';
 
@@ -226,12 +317,22 @@ class OrderProcessingService {
             'bid': 1,
             'status': status,
             'dtype': deliveryType.name,
-            'note': (note != null && note.isNotEmpty) ? note : null,
+            'note': (formattedNote != null && formattedNote.isNotEmpty)
+                ? formattedNote
+                : null,
             'idempotencyKey': operationKey,
             'payloadHash': payloadHash,
+            'channel': channel,
           });
 
           final orderId = resOrder.lastInsertID.toInt();
+          final orderNum = isOnline ? 'ON-$orderId' : '$orderId';
+          try {
+            await _dbService.execute(
+              "UPDATE `order` SET orderNumber = :num WHERE id = :id",
+              {'num': orderNum, 'id': orderId},
+            );
+          } catch (_) {}
 
           // Consume the coupon in this same transaction. The status, owner,
           // expiry and stored discount are all checked again at checkout time.
@@ -239,20 +340,66 @@ class OrderProcessingService {
             if (currentCustomer == null || currentCustomer.id <= 0) {
               throw StateError('ต้องเลือกลูกค้าที่เป็นเจ้าของคูปอง');
             }
-            final couponResult = await _dbService.execute('''
-          UPDATE reward_coupon
-          SET status = 'USED', used_at = NOW(), order_id = :orderId
-          WHERE coupon_code = :code
-            AND customer_id = :customerId
-            AND status = 'ACTIVE'
-            AND expires_at > NOW()
-            AND discount_value = :discount
-        ''', {
-              'orderId': orderId,
-              'code': couponCode.toUpperCase(),
-              'customerId': currentCustomer.id,
-              'discount': couponDiscountAmount,
-            });
+            final coupon = await _lockCoupon(couponCode);
+            if (coupon == null) {
+              throw StateError('ไม่พบคูปองหรือคูปองใช้ไม่ได้');
+            }
+            final couponStatus =
+                coupon['status']?.toString().toUpperCase() ?? '';
+            final couponCustomerId =
+                int.tryParse(coupon['customer_id']?.toString() ?? '');
+            final reservedSourceId = int.tryParse(
+                coupon['reserved_online_order_id']?.toString() ?? '');
+            final reservedUntil =
+                DateTime.tryParse(coupon['reserved_until']?.toString() ?? '');
+            final expiresAt =
+                DateTime.tryParse(coupon['expires_at']?.toString() ?? '');
+            final storedDiscount =
+                double.tryParse(coupon['discount_value']?.toString() ?? '') ??
+                    -1;
+            final now = DateTime.now();
+            final eligible = couponCustomerId == currentCustomer.id &&
+                expiresAt != null &&
+                expiresAt.isAfter(now) &&
+                CouponEligibilityRules.canUse(
+                  status: couponStatus,
+                  requestedSourceOnlineOrderId: sourceOnlineOrderId,
+                  reservedOnlineOrderId: reservedSourceId,
+                  reservedUntil: reservedUntil,
+                  now: now,
+                );
+            final sourceDiscount = sourceOrder == null
+                ? null
+                : double.tryParse(
+                    sourceOrder['couponDiscount']?.toString() ?? '');
+            final discountMatches = couponStatus == 'RESERVED'
+                ? (sourceOrder?['couponCode']?.toString().toUpperCase() ==
+                        couponCode.toUpperCase() &&
+                    sourceDiscount != null &&
+                    CouponEligibilityRules.discountMatches(
+                        sourceDiscount, couponDiscountAmount) &&
+                    storedDiscount + 0.01 >= couponDiscountAmount)
+                : CouponEligibilityRules.discountMatches(
+                    storedDiscount, couponDiscountAmount);
+            if (!eligible || !discountMatches) {
+              throw StateError(
+                  'คูปองใช้ไม่ได้ เจ้าของ ออเดอร์ ส่วนลด หรือเวลาสำรองไม่ตรงกัน');
+            }
+            final supportsReservation = coupon['_supportsReservation'] == true;
+            final couponResult = await _dbService.execute(
+                supportsReservation
+                    ? '''UPDATE reward_coupon
+                         SET status = 'USED', used_at = NOW(), order_id = :orderId,
+                             reserved_online_order_id = NULL, reserved_until = NULL
+                         WHERE id = :couponId AND status = :expectedStatus'''
+                    : '''UPDATE reward_coupon
+                         SET status = 'USED', used_at = NOW(), order_id = :orderId
+                         WHERE id = :couponId AND status = :expectedStatus''',
+                {
+                  'orderId': orderId,
+                  'couponId': coupon['id'],
+                  'expectedStatus': couponStatus,
+                });
             if (couponResult.affectedRows != BigInt.one) {
               throw StateError(
                   'คูปองใช้ไม่ได้ ถูกใช้แล้ว หมดอายุ หรือส่วนลดไม่ตรงกัน');
@@ -263,6 +410,20 @@ class OrderProcessingService {
           SET rr.status = 'FULFILLED'
           WHERE rc.coupon_code = :code
         ''', {'code': couponCode.toUpperCase()});
+          }
+
+          if (sourceOnlineOrderId != null) {
+            final linked = await _dbService.execute('''
+              UPDATE online_orders
+              SET posOrderId = :posOrderId, status = 'COMPLETED', updatedAt = NOW()
+              WHERE id = :sourceId AND posOrderId IS NULL
+            ''', {
+              'posOrderId': orderId,
+              'sourceId': sourceOnlineOrderId,
+            });
+            if (linked.affectedRows != BigInt.one) {
+              throw StateError('ไม่สามารถเชื่อมบิล POS กับออเดอร์ออนไลน์ได้');
+            }
           }
 
           // 4. Insert Items & Cut Stock
@@ -339,16 +500,119 @@ class OrderProcessingService {
 
           // 7. Update Customer Points & Spending
           if (currentCustomer != null && currentCustomer.id > 0) {
+            final lockedCustomer = await _dbService.query(
+              '''SELECT c.id,
+                        COALESCE(t.loyaltySegment, 'CUSTOMER') AS loyaltySegment
+                 FROM customer c
+                 LEFT JOIN member_tier t ON t.id = c.tierId
+                 WHERE c.id = :cid LIMIT 1 FOR UPDATE''',
+              {'cid': currentCustomer.id},
+            );
+            final isContractor = lockedCustomer.isNotEmpty &&
+                lockedCustomer.first['loyaltySegment']?.toString() ==
+                    'CONTRACTOR';
             double rate = _settings.pointPriceRate;
             if (rate <= 0) rate = 100.0; // Prevent division by zero
 
             // ✅ Check if Point System is Enabled
             final bool isPointEnabled = _settings.pointEnabled;
-            int pointsEarned = isPointEnabled ? (grandTotal / rate).floor() : 0;
+            int pointsEarned =
+                isPointEnabled && fullyPaid ? (grandTotal / rate).floor() : 0;
 
-            if (isPointEnabled) {
+            double monthlyThreshold = 0;
+            double monthlyMultiplier = 1;
+            int tierSettingsVersion = 0;
+            double appliedMultiplier = 1;
+            int appliedBonusPoints = 0;
+
+            if (isPointEnabled && fullyPaid) {
               int bonusPoints = 0;
               double multiplier = 1.0;
+
+              final tierSettings = await _dbService.query('''
+                SELECT enabled, monthly_threshold, points_multiplier,
+                       contractor_threshold_1, contractor_multiplier_1,
+                       contractor_threshold_2, contractor_multiplier_2,
+                       settings_version, program_started_at
+                FROM loyalty_tier_settings WHERE id = 1 LIMIT 1
+              ''');
+              if (tierSettings.isNotEmpty &&
+                  tierSettings.first['enabled']?.toString() == '1') {
+                monthlyThreshold = double.tryParse(
+                        tierSettings.first['monthly_threshold']?.toString() ??
+                            '0') ??
+                    0;
+                monthlyMultiplier = double.tryParse(
+                        tierSettings.first['points_multiplier']?.toString() ??
+                            '1') ??
+                    1;
+                final contractorThreshold1 = double.tryParse(tierSettings
+                            .first['contractor_threshold_1']
+                            ?.toString() ??
+                        '20000') ??
+                    20000;
+                final contractorMultiplier1 = double.tryParse(tierSettings
+                            .first['contractor_multiplier_1']
+                            ?.toString() ??
+                        '2.5') ??
+                    2.5;
+                final contractorThreshold2 = double.tryParse(tierSettings
+                            .first['contractor_threshold_2']
+                            ?.toString() ??
+                        '50000') ??
+                    50000;
+                final contractorMultiplier2 = double.tryParse(tierSettings
+                            .first['contractor_multiplier_2']
+                            ?.toString() ??
+                        '3') ??
+                    3;
+                tierSettingsVersion = int.tryParse(
+                        tierSettings.first['settings_version']?.toString() ??
+                            '0') ??
+                    0;
+                final priorSpendRows = await _dbService.query('''
+                  SELECT COALESCE(SUM(grandTotal), 0) AS monthlySpend
+                  FROM `order`
+                  WHERE customerId = :cid AND id <> :orderId
+                    AND status = 'COMPLETED'
+                    AND COALESCE(loyaltyPaidAt, createdAt) >=
+                        DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00')
+                    AND COALESCE(loyaltyPaidAt, createdAt) >=
+                        COALESCE(:programStartedAt, '1000-01-01 00:00:00')
+                    AND COALESCE(loyaltyPaidAt, createdAt) <
+                        DATE_ADD(DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00'),
+                                 INTERVAL 1 MONTH)
+                ''', {
+                  'cid': currentCustomer.id,
+                  'orderId': orderId,
+                  'programStartedAt': tierSettings.first['program_started_at'],
+                });
+                final priorSpend = double.tryParse(
+                        priorSpendRows.first['monthlySpend']?.toString() ??
+                            '0') ??
+                    0;
+                if (isContractor) {
+                  if (priorSpend > contractorThreshold2) {
+                    monthlyThreshold = contractorThreshold2;
+                    monthlyMultiplier = contractorMultiplier2;
+                  } else if (priorSpend > contractorThreshold1) {
+                    monthlyThreshold = contractorThreshold1;
+                    monthlyMultiplier = contractorMultiplier1;
+                  } else {
+                    monthlyThreshold = contractorThreshold1;
+                    monthlyMultiplier = 2;
+                  }
+                }
+                if ((isContractor ||
+                        LoyaltyAwardRules.priorPaidSpendQualifies(
+                          enabled: true,
+                          priorPaidSpend: priorSpend,
+                          threshold: monthlyThreshold,
+                        )) &&
+                    monthlyMultiplier > multiplier) {
+                  multiplier = monthlyMultiplier;
+                }
+              }
 
               // 1. Tier Multiplier
               if (currentTier != null && currentTier.pointsMultiplier > 1.0) {
@@ -397,24 +661,48 @@ class OrderProcessingService {
               }
 
               if (pointsEarned > 0 || bonusPoints > 0) {
-                pointsEarned =
-                    (pointsEarned * multiplier).floor() + bonusPoints;
+                appliedMultiplier = multiplier;
+                appliedBonusPoints = bonusPoints;
+                pointsEarned = LoyaltyAwardRules.awardedPoints(
+                  paidAmount: grandTotal,
+                  bahtPerPoint: rate,
+                  multiplier: multiplier,
+                  bonusPoints: bonusPoints,
+                );
               }
             }
 
             finalEarnedPoints = pointsEarned;
+            int? loyaltyPaymentEventId;
 
             try {
+              if (fullyPaid) {
+                await _dbService.execute('''
+                  UPDATE `order` SET loyaltyPaidAt = COALESCE(loyaltyPaidAt, NOW())
+                  WHERE id = :orderId
+                ''', {'orderId': orderId});
+                final paymentEvent = await _dbService.execute('''
+                  INSERT INTO loyalty_payment_event
+                    (idempotency_key, customer_id, order_id, amount, paid_at, source)
+                  VALUES (:key, :cid, :orderId, :amount, NOW(), 'POS_SALE')
+                ''', {
+                  'key': '$operationKey:sale',
+                  'cid': currentCustomer.id,
+                  'orderId': orderId,
+                  'amount': grandTotal,
+                });
+                loyaltyPaymentEventId = paymentEvent.lastInsertID.toInt();
+              }
               await _dbService.execute(
                 '''
               UPDATE customer 
               SET 
-                totalSpending = totalSpending + :spending,
+                totalSpending = COALESCE(totalSpending, 0) + :spending,
                 lastActivity = NOW()
               WHERE id = :cid
             ''',
                 {
-                  'spending': grandTotal,
+                  'spending': fullyPaid ? grandTotal : 0,
                   'cid': currentCustomer.id,
                 },
               );
@@ -428,8 +716,56 @@ class OrderProcessingService {
                     '✅ [Points] Redeemed $pointsUsed pts for order #$orderId');
               }
               if (pointsEarned > 0) {
-                await _customerRepo.addPoints(currentCustomer.id, pointsEarned,
-                    orderId: orderId);
+                final now = DateTime.now();
+                final expiry = now.month <= 6
+                    ? '${now.year + 1}-06-30 23:59:59'
+                    : '${now.year + 1}-12-31 23:59:59';
+                final awardInsert = await _dbService.execute('''
+                  INSERT INTO loyalty_order_award
+                    (order_id, customer_id, paid_at, qualifying_month,
+                     base_amount, base_points, multiplier, bonus_points,
+                     awarded_points, monthly_threshold, settings_version,
+                     source, cycle_number, current_payment_event_id)
+                  VALUES (:orderId, :cid, NOW(),
+                          DATE_FORMAT(NOW(), '%Y-%m-01'), :amount, :basePoints,
+                          :multiplier, :bonus, :awarded, :threshold,
+                          :settingsVersion, 'POS_SALE', 1, :paymentEventId)
+                ''', {
+                  'orderId': orderId,
+                  'cid': currentCustomer.id,
+                  'amount': grandTotal,
+                  'basePoints': (grandTotal / rate).floor(),
+                  'multiplier': appliedMultiplier,
+                  'bonus': appliedBonusPoints,
+                  'awarded': pointsEarned,
+                  'threshold': monthlyThreshold,
+                  'settingsVersion': tierSettingsVersion,
+                  'paymentEventId': loyaltyPaymentEventId,
+                });
+                final ledgerInsert = await _dbService.execute('''
+                  INSERT INTO point_ledger
+                    (customer_id, points_earned, order_id, expires_at)
+                  VALUES (:cid, :points, :orderId, :expiry)
+                ''', {
+                  'cid': currentCustomer.id,
+                  'points': pointsEarned,
+                  'orderId': orderId,
+                  'expiry': expiry,
+                });
+                await _dbService.execute('''
+                  UPDATE loyalty_order_award SET point_ledger_id = :ledgerId
+                  WHERE id = :awardId
+                ''', {
+                  'ledgerId': ledgerInsert.lastInsertID.toInt(),
+                  'awardId': awardInsert.lastInsertID.toInt(),
+                });
+                await _dbService.execute('''
+                  UPDATE customer SET currentPoints = (
+                    SELECT COALESCE(SUM(points_earned - points_used), 0)
+                    FROM point_ledger WHERE customer_id = :cid
+                      AND (expires_at IS NULL OR expires_at > NOW())
+                  ) WHERE id = :cid
+                ''', {'cid': currentCustomer.id});
               }
 
               newTotalPoints =
@@ -447,19 +783,18 @@ class OrderProcessingService {
                   '''
                 UPDATE customer 
                 SET 
-                  totalSpending = totalSpending + :spending,
+                  totalSpending = COALESCE(totalSpending, 0) + :spending,
                   lastActivity = NOW()
                 WHERE id = :cid
               ''',
                   {
-                    'spending': grandTotal,
+                    'spending': fullyPaid ? grandTotal : 0,
                     'cid': currentCustomer.id,
                   },
                 );
                 if (pointsEarned > 0) {
-                  await _customerRepo.addPoints(
-                      currentCustomer.id, pointsEarned,
-                      orderId: orderId);
+                  throw StateError(
+                      'ไม่สามารถบันทึกแต้มได้อย่างปลอดภัย กรุณาลองทำรายการใหม่');
                 }
               } else {
                 rethrow;
@@ -525,6 +860,45 @@ class OrderProcessingService {
       if (previous != null) return previous;
       debugPrint('Error processing order: $e');
       rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _lockSourceOnlineOrder(int sourceId) async {
+    try {
+      final rows = await _dbService.query('''
+        SELECT id, customerId, status, couponCode, couponDiscount, posOrderId
+        FROM online_orders WHERE id = :id LIMIT 1 FOR UPDATE
+      ''', {'id': sourceId});
+      return rows.isEmpty ? null : rows.first;
+    } catch (_) {
+      final rows = await _dbService.query('''
+        SELECT id, customerId, status,
+               NULL AS couponCode, NULL AS couponDiscount, NULL AS posOrderId
+        FROM online_orders WHERE id = :id LIMIT 1 FOR UPDATE
+      ''', {'id': sourceId});
+      return rows.isEmpty ? null : rows.first;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _lockCoupon(String code) async {
+    try {
+      final rows = await _dbService.query('''
+        SELECT id, coupon_code, customer_id, discount_value, expires_at, status,
+               reserved_online_order_id, reserved_until
+        FROM reward_coupon WHERE coupon_code = :code LIMIT 1 FOR UPDATE
+      ''', {'code': code.toUpperCase()});
+      return rows.isEmpty
+          ? null
+          : {...rows.first, '_supportsReservation': true};
+    } catch (_) {
+      final rows = await _dbService.query('''
+        SELECT id, coupon_code, customer_id, discount_value, expires_at, status,
+               NULL AS reserved_online_order_id, NULL AS reserved_until
+        FROM reward_coupon WHERE coupon_code = :code LIMIT 1 FOR UPDATE
+      ''', {'code': code.toUpperCase()});
+      return rows.isEmpty
+          ? null
+          : {...rows.first, '_supportsReservation': false};
     }
   }
 

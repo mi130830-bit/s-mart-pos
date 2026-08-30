@@ -549,8 +549,7 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
           supplierId: _selectedSupplierId,
           unitId: _selectedUnitId,
           categoryId: widget.product?.categoryId,
-          imageUrl:
-              _pickedImage?.path ?? widget.product?.imageUrl, // Save Image
+          imageUrl: widget.product?.imageUrl, // Keep existing imageUrl initially
           expiryDate: _expiryDate,
           shelfLocation: _shelfCtrl.text,
           isActive: _isActiveProduct,
@@ -560,6 +559,25 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
         final productId = await widget.repo.saveProduct(newProduct);
 
         if (productId > 0) {
+          String? finalImageUrl = widget.product?.imageUrl;
+
+          // If a new local image was picked, upload it via API so it gets saved to backend storage & MySQL
+          if (_pickedImage != null) {
+            try {
+              final uploadedUrl = await ApiService().uploadProductImage(
+                productId,
+                File(_pickedImage!.path),
+              );
+              if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+                finalImageUrl = uploadedUrl;
+                debugPrint(
+                    '✅ Uploaded desktop product image for #$productId: $uploadedUrl');
+              }
+            } catch (e) {
+              debugPrint('⚠️ Error uploading desktop product image: $e');
+            }
+          }
+
           // Check if we need to save tiers
           for (var tier in _priceTiers) {
             tier.productId = productId; // Ensure linked to saved product
@@ -582,7 +600,10 @@ extension ProductFormActionsExtension on _ProductFormDialogState {
           AlertService.show(
               context: context, message: 'บันทึกสำเร็จ', type: 'success');
           try {
-            Navigator.of(context).pop(newProduct.copyWith(id: productId));
+            Navigator.of(context).pop(newProduct.copyWith(
+              id: productId,
+              imageUrl: finalImageUrl,
+            ));
           } catch (e) {
             debugPrint('⚠️ Navigator pop (result) failed: $e');
           }

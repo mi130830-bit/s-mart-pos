@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ร้าน ส.บริการ | Shop Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/shop/" aria-label="กลับไปหน้าร้าน"><span class="brand-mark">ส</span><span>ร้าน ส.บริการ <small>SHOP ADMIN</small></span></a>
+      <div class="top-actions"><span class="connection-dot"></span><span id="saveStatus">พร้อมจัดการหน้าร้าน</span><a class="store-link" href="/shop/">ดูหน้าร้าน ↗</a><button id="logoutButton" class="store-link hidden" type="button">ออกจากระบบ</button></div>
+    </header>
+
+    <section id="authPanel" class="auth-panel">
+      <div class="auth-card"><span class="auth-icon">ส</span><p class="eyebrow">ADMIN ACCESS</p><h1>เข้าสู่ระบบจัดการร้าน</h1><p>ใช้บัญชีผู้ดูแลร้านเพื่อจัดสินค้าเด่นบนหน้า Shop</p><form id="loginForm"><input id="username" autocomplete="username" placeholder="ชื่อผู้ใช้" required><input id="password" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" required><button class="primary-button" type="submit">เข้าสู่ระบบ</button></form><div id="loginError" class="login-error"></div></div>
+    </section>
+    <main id="adminApp" class="hidden">
+      <nav class="admin-tabs" aria-label="เมนูผู้ดูแล">
+        <button class="active" data-admin-tab="featured">⭐ สินค้าเด่น</button>
+        <button data-admin-tab="rewards">🎁 รางวัล & คูปอง</button>
+        <button data-admin-tab="tier">👑 ระดับสมาชิก</button>
+        <button data-admin-tab="members">👥 สมาชิก LINE</button>
+      </nav>
+      <div id="featuredAdminPanel" data-admin-panel="featured">
+      <section class="intro">
+        <div><p class="eyebrow">STORE CONTENT</p><h1>จัดสินค้าเด่นให้ลูกค้าเห็นง่ายขึ้น</h1><p class="intro-copy">เลือกสินค้าที่อยากให้ขึ้นหน้าแรก แยกตามหมวดได้เลย ไม่ต้องแก้ไฟล์เอง</p></div>
+        <div class="intro-card"><span>สินค้าเด่นทั้งหมด</span><strong id="selectedCount">0</strong><small>รายการที่กำลังแสดงบนหน้า Shop</small></div>
+      </section>
+
+      <section class="toolbar">
+        <p class="toolbar-note">เลือกสินค้าเด่นให้แต่ละหัวข้อ แล้วกดบันทึกเมื่อพร้อม</p>
+        <button id="saveButton" class="primary-button">บันทึกสินค้าเด่น</button>
+      </section>
+
+      <section id="notice" class="notice hidden"></section>
+      <section class="content-grid">
+        <aside class="category-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">SHOP CATEGORIES</p>
+              <h2>เลือกตามหมวดหน้าร้าน</h2>
+              <p class="panel-hint">ดึงจากหมวดสินค้าและจำนวนคงเหลือใน POS โดยตรง</p>
+            </div>
+          </div>
+          <div id="categoryList" class="category-list"></div>
+        </aside>
+        <section class="products-panel"><div class="panel-heading"><div><p class="eyebrow">POS PRODUCTS</p><h2 id="productsTitle">เลือกหมวดเพื่อดูสินค้า</h2></div><label class="section-search"><span>⌕</span><input id="productSearch" type="search" placeholder="ค้นหาสินค้าในหมวดที่เลือก" aria-label="ค้นหาสินค้า"><button id="clearSearch" type="button" class="clear-search hidden" aria-label="ล้างคำค้นหา">×</button></label></div><p class="panel-hint">แสดงสินค้าที่เปิดใช้งานจริงในหมวด POS ที่เลือกทันที ไม่ต้องเลือกสินค้าก่อน</p><div id="productsGrid" class="products-grid"><div class="loading">กำลังโหลดสินค้า...</div></div></section>
+      </section>
+      </div>
+
+      <!-- Category Add / Edit Modal -->
+      <div id="categoryModal" class="modal-backdrop hidden">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3 id="categoryModalTitle">เพิ่มหมวดหมู่ใหม่</h3>
+            <button id="closeCategoryModal" type="button" class="close-modal" aria-label="ปิด">×</button>
+          </div>
+          <form id="categoryForm">
+            <input type="hidden" id="modalCatId">
+            <label class="modal-label">
+              <span>ไอคอน Emoji</span>
+              <div class="emoji-picker-row">
+                <input id="modalCatEmoji" class="emoji-input" maxlength="4" value="📦" required>
+                <div class="quick-emojis">
+                  <button type="button" class="quick-emoji">🪨</button>
+                  <button type="button" class="quick-emoji">🏗️</button>
+                  <button type="button" class="quick-emoji">🚰</button>
+                  <button type="button" class="quick-emoji">⚡</button>
+                  <button type="button" class="quick-emoji">🏠</button>
+                  <button type="button" class="quick-emoji">🪚</button>
+                  <button type="button" class="quick-emoji">🎨</button>
+                  <button type="button" class="quick-emoji">🔨</button>
+                  <button type="button" class="quick-emoji">🧱</button>
+                  <button type="button" class="quick-emoji">✨</button>
+                  <button type="button" class="quick-emoji">⭐</button>
+                  <button type="button" class="quick-emoji">🔥</button>
+                </div>
+              </div>
+            </label>
+            <label class="modal-label">
+              <span>ชื่อหมวดหมู่ *</span>
+              <input id="modalCatName" class="text-input" maxlength="60" placeholder="เช่น เหล็ก & ลวด หรือ เครื่องมือช่าง" required>
+            </label>
+            <div class="modal-actions">
+              <button type="button" id="cancelCategoryModal" class="cancel-button">ยกเลิก</button>
+              <button type="submit" class="primary-button">บันทึกหมวดหมู่</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Rewards & Coupons Admin Panel -->
+      <section id="rewardsAdminPanel" class="admin-section hidden" data-admin-panel="rewards">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">REWARD & COUPON MANAGEMENT</p>
+            <h2>จัดการของรางวัลและคูปองแลกแต้ม</h2>
+            <p class="panel-hint">เพิ่ม แก้ไข หรือปิดใช้งานของรางวัลและคูปองส่วนลดที่ลูกค้าใช้แต้มแลกได้</p>
+          </div>
+          <div class="top-actions">
+            <button id="addRewardBtn" class="primary-button" type="button">+ เพิ่มรางวัล / คูปองใหม่</button>
+            <button id="refreshRewardsBtn" class="store-link" type="button">🔄 รีเฟรช</button>
+          </div>
+        </div>
+
+        <div class="rewards-subtabs" style="display:flex;gap:8px;margin-bottom:16px;">
+          <button type="button" class="view-tab active" id="subtabRewardsList" onclick="switchRewardsSubtab('list')">🎁 รายการรางวัล & คูปองทั้งหมด</button>
+          <button type="button" class="view-tab" id="subtabRedemptionsList" onclick="switchRewardsSubtab('redemptions')">📋 ประวัติการแลกแต้มของลูกค้า</button>
+        </div>
+
+        <div id="rewardsListContainer">
+          <div id="rewardsAdminGrid" class="products-grid">
+            <div class="loading">กำลังโหลดรายการของรางวัล...</div>
+          </div>
+        </div>
+
+        <div id="redemptionsListContainer" class="hidden">
+          <div id="redemptionsAdminList" class="admin-list">
+            <div class="loading">กำลังโหลดประวัติการแลกแต้ม...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Reward / Coupon Add & Edit Modal -->
+      <div id="rewardModal" class="modal-backdrop hidden">
+        <div class="modal-card" style="width:min(520px,100%);">
+          <div class="modal-header">
+            <h3 id="rewardModalTitle">เพิ่มของรางวัล / คูปองใหม่</h3>
+            <button id="closeRewardModal" type="button" class="close-modal" aria-label="ปิด">×</button>
+          </div>
+          <form id="rewardForm">
+            <input type="hidden" id="modalRewardId">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <label class="modal-label">
+                <span>รูปแบบการรับสิทธิ์ *</span>
+                <select id="modalClaimType" class="text-input" style="height:44px;" required onchange="toggleRewardTypeFields()">
+                  <option value="POINTS_REDEEM">💎 ใช้แต้มแลก (Points)</option>
+                  <option value="FREE_CLAIM">🎁 แจกฟรี (ลูกค้ากดรับได้เลย)</option>
+                </select>
+              </label>
+              <label class="modal-label" id="claimLimitWrap">
+                <span>จำกัดสิทธิ์ต่อคน *</span>
+                <select id="modalClaimLimit" class="text-input" style="height:44px;">
+                  <option value="0">ไม่จำกัด (แลกได้เรื่อยๆ)</option>
+                  <option value="1">จำกัด 1 ใบ / คน</option>
+                  <option value="2">จำกัด 2 ใบ / คน</option>
+                  <option value="3">จำกัด 3 ใบ / คน</option>
+                  <option value="5">จำกัด 5 ใบ / คน</option>
+                  <option value="10">จำกัด 10 ใบ / คน</option>
+                </select>
+              </label>
+            </div>
+            <label class="modal-label">
+              <span>ประเภทรางวัล / คูปอง *</span>
+              <select id="modalRewardType" class="text-input" style="height:44px;" required onchange="toggleRewardTypeFields()">
+                <option value="DISCOUNT_COUPON">🎟️ คูปองส่วนลดเงินสด (บาท)</option>
+                <option value="GIFT">🎁 ของพรีเมียม / สินค้าสมนาคุณ</option>
+                <option value="FREE_DELIVERY">🚚 คูปองส่งฟรี / ส่วนลดค่าจัดส่ง</option>
+              </select>
+            </label>
+            <label class="modal-label">
+              <span>ชื่อของรางวัล / คูปอง *</span>
+              <input id="modalRewardName" class="text-input" maxlength="150" placeholder="เช่น เสื้อยืดช่าง S-Mart หรือ คูปองส่วนลด 100 บาท" required>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <label class="modal-label" id="pointPriceWrap">
+                <span>แต้มที่ต้องใช้แลก (Points) *</span>
+                <input id="modalPointPrice" type="number" min="0" max="999999" class="text-input" placeholder="เช่น 50" required>
+              </label>
+              <label class="modal-label" id="discountValueWrap">
+                <span>มูลค่าส่วนลด (บาท)</span>
+                <input id="modalDiscountValue" type="number" min="0" max="100000" step="0.5" class="text-input" placeholder="เช่น 100">
+              </label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <label class="modal-label">
+                <span>จำนวนสต็อกคงเหลือ *</span>
+                <input id="modalStockQuantity" type="number" min="0" max="99999" class="text-input" placeholder="เช่น 20" required>
+              </label>
+              <label class="modal-label">
+                <span>สถานะเปิดใช้งาน</span>
+                <select id="modalIsActive" class="text-input" style="height:44px;">
+                  <option value="1">✅ เปิดใช้งาน (Active)</option>
+                  <option value="0">❌ ปิดชั่วคราว (Inactive)</option>
+                </select>
+              </label>
+            </div>
+            <label class="modal-label">
+              <span>ลิงก์รูปภาพ (Image URL)</span>
+              <input id="modalImageUrl" class="text-input" placeholder="https://... หรือเว้นว่างเพื่อใช้ไอคอนอัตโนมัติ">
+            </label>
+            <label class="modal-label">
+              <span>รายละเอียด / เงื่อนไขการแลก</span>
+              <textarea id="modalRewardDesc" rows="3" class="text-input" style="height:auto;padding:8px 12px;" placeholder="เช่น แลกรับได้ที่เคาน์เตอร์หน้าร้าน หรือใช้เป็นส่วนลดท้ายบิล"></textarea>
+            </label>
+            <div class="modal-actions">
+              <button type="button" id="cancelRewardModal" class="cancel-button">ยกเลิก</button>
+              <button type="submit" class="primary-button">บันทึกข้อมูลรางวัล</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <section id="tierAdminPanel" class="admin-section hidden" data-admin-panel="tier">
+        <div class="panel-heading"><div><p class="eyebrow">LOYALTY SETTINGS</p><h2>ตั้งค่าลูกค้าประจำอัตโนมัติ</h2></div></div>
+        <form id="tierSettingsForm" class="settings-form">
+          <label class="switch-row"><span><strong>เปิดระบบอัตโนมัติ</strong><small>คำนวณสิทธิ์จากยอดชำระจริงในเดือน</small></span><input id="tierEnabled" type="checkbox"></label>
+          <label>ยอดขั้นต่ำต่อเดือน (บาท)<input id="tierThreshold" type="number" min="0" max="100000000" step="0.01" required></label>
+          <label>ตัวคูณแต้ม<input id="tierMultiplier" type="number" min="1" max="20" step="0.1" required></label>
+          <h3>สิทธิ์ช่างรับเหมา</h3>
+          <label>ยอดชำระจริงระดับช่าง Pro (บาท)<input id="contractorThreshold1" type="number" min="0" max="100000000" step="0.01" required></label>
+          <label>ตัวคูณช่าง Pro<input id="contractorMultiplier1" type="number" min="1" max="10" step="0.1" required></label>
+          <label>ยอดชำระจริงระดับช่าง Pro+ (บาท)<input id="contractorThreshold2" type="number" min="0" max="100000000" step="0.01" required></label>
+          <label>ตัวคูณช่าง Pro+<input id="contractorMultiplier2" type="number" min="1" max="10" step="0.1" required></label>
+          <label>ข้อความสิทธิประโยชน์ (ไทย)<input id="tierBenefitTh" maxlength="255" required></label>
+          <label>Benefit text (English)<input id="tierBenefitEn" maxlength="255" required></label>
+          <button class="primary-button" type="submit">บันทึกการตั้งค่า</button>
+        </form>
+      </section>
+
+      <section id="membersAdminPanel" class="admin-section hidden" data-admin-panel="members">
+        <div class="panel-heading"><div><p class="eyebrow">MEMBERSHIP CENTER</p><h2>ศูนย์จัดการสมาชิกบนเว็บ</h2><p class="panel-hint">ข้อมูลยังอยู่ในฐาน POS หลัก แต่สมัคร ค้นหา ผูก LINE และอนุมัติคำขอ ทำจากหน้านี้ได้เลย</p></div><button id="refreshPending" class="store-link" type="button">รีเฟรชคิว</button></div>
+        <div class="member-admin-grid">
+          <form id="quickCreateForm" class="settings-form"><h3>สร้างสมาชิกด่วน</h3><label>ชื่อ *<input id="quickName" maxlength="120" placeholder="ชื่อสมาชิก" required></label><label>เบอร์โทร *<input id="quickPhone" maxlength="20" inputmode="tel" placeholder="เบอร์โทร" required></label><label>ที่อยู่<textarea id="quickAddress" maxlength="2000" rows="3" placeholder="ไม่จำเป็นต้องกรอกตอนนี้"></textarea></label><label>ที่อยู่จัดส่ง<textarea id="quickShippingAddress" maxlength="2000" rows="3" placeholder="ถ้าเหมือนที่อยู่ด้านบน ไม่ต้องกรอก"></textarea></label><button class="primary-button" type="submit">สร้างสมาชิก</button><div id="quickCreateResult"></div></form>
+          <form id="memberSearchForm" class="settings-form"><h3>ค้นหาสมาชิก</h3><input id="memberSearchInput" minlength="2" maxlength="100" placeholder="ชื่อ เบอร์ หรือรหัสสมาชิก" required><button class="primary-button" type="submit">ค้นหา</button><div id="memberSearchResults" class="admin-list"></div></form>
+        </div>
+        <div class="panel-heading"><div><h3>คำขอรอตรวจสอบ</h3><p class="panel-hint">การอนุมัติกรณีกู้บัญชีต้องใช้สิทธิ์ผู้จัดการขึ้นไป</p></div></div>
+        <div id="pendingRequests" class="admin-list"><div class="loading">กำลังโหลด...</div></div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="admin.js?v=20260829-v24"></script>
+</body>
+</html>

@@ -67,7 +67,15 @@ extension StockLedgerExtension on StockRepository {
   }) async {
     List<String>? targetTypes;
     if (isAdjustment) {
-      targetTypes = ['ADJUST_ADD', 'ADJUST_SUB', 'ADJUST_FIX'];
+      targetTypes = [
+        'ADJUST_ADD',
+        'ADJUST_SUB',
+        'ADJUST_FIX',
+        'ADJUST_FIX_APP',
+        'ADJUST_CORRECT',
+      ];
+    } else if (type == 'STOCK_IN') {
+      targetTypes = ['STOCK_IN', 'STOCK_IN_APP', 'PURCHASE_IN'];
     } else if (type != null) {
       targetTypes = [type];
     }

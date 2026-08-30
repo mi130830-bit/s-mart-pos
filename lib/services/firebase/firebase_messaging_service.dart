@@ -10,6 +10,22 @@ import '../../repositories/notification_repository.dart';
 import '../../repositories/sales_repository.dart';
 import '../printing/receipt_service.dart';
 
+/// Builds an internal endpoint from the configured API URL without duplicating
+/// the `/api/v1` prefix.
+Uri buildInternalApiEndpointUri(String configuredApiUrl, String endpoint) {
+  var apiBase = configuredApiUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+  while (apiBase.endsWith('/api/v1/api/v1')) {
+    apiBase = apiBase.substring(0, apiBase.length - '/api/v1'.length);
+  }
+  if (!apiBase.endsWith('/api/v1')) {
+    apiBase = '$apiBase/api/v1';
+  }
+
+  var relativePath = endpoint.trim().replaceFirst(RegExp(r'^/+'), '');
+  relativePath = relativePath.replaceFirst(RegExp(r'^api/v1/+'), '');
+  return Uri.parse('$apiBase/$relativePath');
+}
+
 /// Service dedicated to LINE pushing notifications, retry queues, and background log processor.
 class FirebaseMessagingService {
   /// Sends standard LINE text notification.
@@ -28,7 +44,8 @@ class FirebaseMessagingService {
         lineUserId = res.first['line_user_id']?.toString();
       }
     } catch (e) {
-      LoggerService.error('FirebaseMessaging', 'Failed to resolve Line User ID', e);
+      LoggerService.error(
+          'FirebaseMessaging', 'Failed to resolve Line User ID', e);
       return false;
     }
 
@@ -36,7 +53,8 @@ class FirebaseMessagingService {
 
     // 2. Prepare Payload
     final apiUrl = SettingsService().apiUrl;
-    final Uri url = Uri.parse('$apiUrl/line/push-message');
+    final url =
+        buildInternalApiEndpointUri(apiUrl, 'line-internal/push-message');
     final body = jsonEncode({
       'lineUserId': lineUserId,
       'message': message,
@@ -70,7 +88,8 @@ class FirebaseMessagingService {
         lineUserId = res.first['line_user_id']?.toString();
       }
     } catch (e) {
-      LoggerService.error('FirebaseMessaging', 'Failed to resolve Line User ID', e);
+      LoggerService.error(
+          'FirebaseMessaging', 'Failed to resolve Line User ID', e);
       return false;
     }
 
@@ -78,7 +97,7 @@ class FirebaseMessagingService {
 
     // 2. Prepare Payload
     final apiUrl = SettingsService().apiUrl;
-    final Uri url = Uri.parse('$apiUrl/line/push-image');
+    final url = buildInternalApiEndpointUri(apiUrl, 'line-internal/push-image');
     final body = jsonEncode({
       'lineUserId': lineUserId,
       'filename': filename,
@@ -124,13 +143,13 @@ class FirebaseMessagingService {
     }
 
     try {
-      LoggerService.info(
-          'FirebaseMessaging', 'Sending $messageType -> $lineUserId (LogID: $logId)');
+      LoggerService.info('FirebaseMessaging',
+          'Sending $messageType -> $lineUserId (LogID: $logId)');
 
       final response = await http
           .post(
             url,
-            headers: {'Content-Type': 'application/json'},
+            headers: SettingsService().internalApiHeaders,
             body: body,
           )
           .timeout(timeout);
@@ -145,9 +164,7 @@ class FirebaseMessagingService {
     } catch (e) {
       LoggerService.error('FirebaseMessaging', 'Immediate Send Failed', e);
 
-      repo.updateLog(logId,
-          status: 'RETRYING',
-          errorMessage: e.toString());
+      repo.updateLog(logId, status: 'RETRYING', errorMessage: e.toString());
 
       return false;
     }
@@ -160,8 +177,8 @@ class FirebaseMessagingService {
 
     if (pendingLogs.isEmpty) return;
 
-    LoggerService.info(
-        'FirebaseMessaging', 'Processing ${pendingLogs.length} pending notifications...');
+    LoggerService.info('FirebaseMessaging',
+        'Processing ${pendingLogs.length} pending notifications...');
 
     for (final log in pendingLogs) {
       try {
@@ -179,7 +196,8 @@ class FirebaseMessagingService {
 
         if (type == 'RECEIPT_IMAGE') {
           try {
-            final orderId = int.tryParse(log['order_id']?.toString() ?? '0') ?? 0;
+            final orderId =
+                int.tryParse(log['order_id']?.toString() ?? '0') ?? 0;
             if (orderId == 0) throw Exception("Invalid Order ID");
 
             final salesRepo = SalesRepository();
@@ -195,10 +213,14 @@ class FirebaseMessagingService {
               'phone': order['phone'] ?? '',
             });
 
-            final double total = double.tryParse(order['total']?.toString() ?? '0') ?? 0;
-            final double grandTotal = double.tryParse(order['grandTotal']?.toString() ?? '0') ?? 0;
-            final double received = double.tryParse(order['received']?.toString() ?? '0') ?? 0;
-            final double changeAmount = double.tryParse(order['changeAmount']?.toString() ?? '0') ?? 0;
+            final double total =
+                double.tryParse(order['total']?.toString() ?? '0') ?? 0;
+            final double grandTotal =
+                double.tryParse(order['grandTotal']?.toString() ?? '0') ?? 0;
+            final double received =
+                double.tryParse(order['received']?.toString() ?? '0') ?? 0;
+            final double changeAmount =
+                double.tryParse(order['changeAmount']?.toString() ?? '0') ?? 0;
 
             final imageBytes = await ReceiptService().captureReceiptImage(
               orderId: orderId,
@@ -210,12 +232,17 @@ class FirebaseMessagingService {
               customer: customer,
             );
 
-            if (imageBytes == null) throw Exception("Failed to generate receipt image");
+            if (imageBytes == null) {
+              throw Exception("Failed to generate receipt image");
+            }
 
             final base64Image = base64Encode(imageBytes);
-            
+
             final apiUrl = SettingsService().apiUrl;
-            final url = Uri.parse('$apiUrl/api/v1/line/push-receipt-image');
+            final url = buildInternalApiEndpointUri(
+              apiUrl,
+              'line-internal/push-receipt-image',
+            );
             final body = jsonEncode({
               'lineUserId': lineUserId,
               'orderId': orderId.toString(),
@@ -233,7 +260,7 @@ class FirebaseMessagingService {
               body: body,
               existingLogId: id,
             );
-            
+
             continue;
           } catch (e) {
             await repo.markAsFailed(id, 'Failed to recreate receipt: $e');
@@ -246,10 +273,16 @@ class FirebaseMessagingService {
         String body;
 
         if (type == 'IMAGE') {
-          url = Uri.parse('$apiUrl/line/push-image');
+          url = buildInternalApiEndpointUri(
+            apiUrl,
+            'line-internal/push-image',
+          );
           body = jsonEncode({'lineUserId': lineUserId, 'filename': content});
         } else {
-          url = Uri.parse('$apiUrl/line/push-message');
+          url = buildInternalApiEndpointUri(
+            apiUrl,
+            'line-internal/push-message',
+          );
           body = jsonEncode({'lineUserId': lineUserId, 'message': content});
         }
 
@@ -264,7 +297,8 @@ class FirebaseMessagingService {
           existingLogId: id,
         );
       } catch (e) {
-        LoggerService.error('FirebaseMessaging', 'Error processing pending log', e);
+        LoggerService.error(
+            'FirebaseMessaging', 'Error processing pending log', e);
       }
     }
   }
@@ -277,7 +311,8 @@ class FirebaseMessagingService {
     required String message,
   }) async {
     final apiUrl = SettingsService().apiUrl;
-    final Uri url = Uri.parse('$apiUrl/line/push-message');
+    final url =
+        buildInternalApiEndpointUri(apiUrl, 'line-internal/push-message');
     final body = jsonEncode({'lineUserId': lineUserId, 'message': message});
 
     return await _sendWithRetry(

@@ -4,9 +4,12 @@ import '../services/mysql_service.dart';
 import '../models/billing_note.dart';
 import '../models/billing_note_item.dart';
 import '../repositories/debtor_repository.dart';
+import '../services/sales/loyalty_award_service.dart';
 
 class BillingRepository {
   final MySQLService _dbService = MySQLService();
+  late final LoyaltyAwardService _loyaltyAwardService =
+      LoyaltyAwardService(db: _dbService);
 
   Future<void> initTable() async {
     const sqlMain = '''
@@ -127,6 +130,24 @@ class BillingRepository {
     await _dbService.execute('START TRANSACTION;');
 
     try {
+      final currentRows = await _dbService.query(
+        'SELECT status FROM billing_notes WHERE id = :id LIMIT 1 FOR UPDATE',
+        {'id': id},
+      );
+      if (currentRows.isEmpty) {
+        throw StateError('ไม่พบใบวางบิลที่ต้องการเปลี่ยนสถานะ');
+      }
+      final currentStatus = currentRows.first['status']?.toString() ?? '';
+      if (currentStatus == newStatus) {
+        await _dbService.execute('COMMIT;');
+        return true;
+      }
+      if (currentStatus == 'PAID' && newStatus != 'PAID') {
+        throw StateError(
+          'ไม่สามารถเปลี่ยนใบวางบิลที่ชำระแล้วกลับเป็นสถานะอื่นได้ '
+          'เนื่องจากยังไม่มีขั้นตอนย้อนยอดรับชำระและแต้มอย่างปลอดภัย',
+        );
+      }
       // 1. Update Status & Payment Date
       String sql = 'UPDATE billing_notes SET status = :st WHERE id = :id';
       if (newStatus == 'PAID') {
@@ -194,6 +215,10 @@ class BillingRepository {
                 await _dbService.execute(
                     "UPDATE `order` SET status = 'COMPLETED', paymentMethod = 'credit' WHERE id = :oid",
                     {'oid': oid});
+                await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+                  orderId: oid,
+                  source: 'BILLING_NOTE',
+                );
               }
             }
           }
@@ -203,6 +228,9 @@ class BillingRepository {
       // ✅ Commit Everything Together
       await _dbService.execute('COMMIT;');
       return true;
+    } on StateError {
+      await _dbService.execute('ROLLBACK;');
+      rethrow;
     } catch (e) {
       await _dbService.execute('ROLLBACK;');
       debugPrint('Error updating billing note status: $e');

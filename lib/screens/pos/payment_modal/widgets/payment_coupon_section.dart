@@ -5,6 +5,7 @@ import '../../../../repositories/reward_repository.dart';
 class PaymentCouponSection extends StatelessWidget {
   final TextEditingController couponCtrl;
   final bool couponApplied;
+  final bool couponLocked;
   final bool isValidatingCoupon;
   final CouponValidationResult? couponResult;
   final VoidCallback onClearCoupon;
@@ -15,6 +16,7 @@ class PaymentCouponSection extends StatelessWidget {
     super.key,
     required this.couponCtrl,
     required this.couponApplied,
+    required this.couponLocked,
     required this.isValidatingCoupon,
     required this.couponResult,
     required this.onClearCoupon,
@@ -35,13 +37,19 @@ class PaymentCouponSection extends StatelessWidget {
               textCapitalization: TextCapitalization.characters,
               enabled: !couponApplied,
               decoration: InputDecoration(
-                labelText: '🎟️ รหัสคูปองส่วนลด',
+                labelText: couponLocked
+                    ? '🔒 คูปองจองจากออเดอร์ออนไลน์'
+                    : '🎟️ รหัสคูปองส่วนลด',
                 hintText: 'สแกน QR หรือพิมพ์รหัส เช่น SMR-XXXX-XXXX',
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.discount_outlined),
                 suffixIcon: couponApplied
                     ? IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
+                        tooltip: couponLocked
+                            ? 'ต้องยกเลิกออเดอร์ออนไลน์เพื่อคืนคูปอง'
+                            : 'ล้างคูปอง',
+                        icon: Icon(couponLocked ? Icons.lock : Icons.close,
+                            color: couponLocked ? Colors.orange : Colors.red),
                         onPressed: onClearCoupon,
                       )
                     : null,
@@ -61,9 +69,8 @@ class PaymentCouponSection extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: couponApplied || isValidatingCoupon
-                ? null
-                : onValidateCoupon,
+            onPressed:
+                couponApplied || isValidatingCoupon ? null : onValidateCoupon,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.deepPurple,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

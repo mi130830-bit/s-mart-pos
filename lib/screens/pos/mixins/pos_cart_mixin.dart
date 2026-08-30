@@ -49,7 +49,6 @@ extension PosCartExtension on PosStateNotifier {
       _cartService.updateItemComment(index, comment);
 
   Future<void> clearCart({bool returnStock = false}) async {
-    _cartService.clearCart();
     _currentCustomer = null;
     _billDiscount = 0.0;
     _isPercentDiscount = false;
@@ -57,6 +56,9 @@ extension PosCartExtension on PosStateNotifier {
     _pointsToRedeem = 0;
     _couponDiscountAmount = 0.0;
     _appliedCouponCode = null;
+    _sourceOnlineOrderId = null;
+    _sourceReservedCouponCode = null;
+    _cartService.clearCart();
     _invalidateCalcCache();
     _notify();
   }
@@ -106,7 +108,7 @@ extension PosCartExtension on PosStateNotifier {
         await addProductToCart(exactMatch, quantity: quantity);
         return ScanResult(status: ScanStatus.success, product: exactMatch);
       }
-      
+
       return ScanResult(status: ScanStatus.notFound);
     } catch (e) {
       debugPrint('Scan Error: $e');

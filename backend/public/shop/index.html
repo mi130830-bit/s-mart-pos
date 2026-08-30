@@ -1,0 +1,1915 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ร้าน ส.บริการ ท่าข้าม | แค็ตตาล็อกและสั่งซื้อสินค้า</title>
+
+    <!-- Google Fonts: Noto Sans Thai & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- LINE LIFF SDK -->
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link rel="stylesheet" href="/shop/shop.css?v=20260829-v22">
+    <link rel="stylesheet" href="/shop/paint-studio.css?v=20260829-v22">
+    <link rel="stylesheet" href="/shop/metalsheet-studio.css?v=20260829-v22">
+
+    <!-- Embedded White-Green Theme Stylesheet -->
+    <style>
+        :root {
+            --primary: #059669;           /* Emerald Green */
+            --primary-hover: #047857;     /* Deep Emerald */
+            --primary-light: #ecfdf5;     /* Mint Tint */
+            --primary-subtle: #d1fae5;    /* Soft Green */
+            --primary-dark: #065f46;      /* Forest Slate Green */
+            --primary-bg: #f0fdf4;        /* Ultra Light Mint */
+            --line-green: #06c755;
+            --line-green-hover: #05b04c;
+            --accent: #10b981;
+            --bg-main: #f8faf9;           /* Crisp Minty White */
+            --bg-surface: #ffffff;        /* Pure White */
+            --bg-card: #ffffff;
+            --bg-subtle: #f0fdf4;
+            --text-main: #0f172a;         /* Deep Charcoal */
+            --text-muted: #475569;
+            --text-light: #94a3b8;
+            --border: #e2e8f0;
+            --border-green: #a7f3d0;
+            --border-strong: #cbd5e1;
+            --border-focus: #059669;
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
+            --radius-full: 9999px;
+            --shadow-xs: 0 1px 3px rgba(5, 150, 105, 0.04);
+            --shadow-sm: 0 2px 8px rgba(5, 150, 105, 0.06);
+            --shadow-md: 0 6px 18px rgba(5, 150, 105, 0.08);
+            --shadow-lg: 0 12px 30px rgba(5, 150, 105, 0.12);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Noto Sans Thai', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding-bottom: 90px;
+            overflow-x: hidden;
+        }
+
+        .background-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(90px);
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.5;
+        }
+
+        .background-orb-one {
+            width: 320px;
+            height: 320px;
+            top: -80px;
+            right: -80px;
+            background: radial-gradient(circle, #a7f3d0, transparent 70%);
+        }
+
+        .background-orb-two {
+            width: 380px;
+            height: 380px;
+            bottom: 100px;
+            left: -100px;
+            background: radial-gradient(circle, #6ee7b7, transparent 70%);
+        }
+
+        .app-wrapper {
+            max-width: 640px;
+            margin: 0 auto;
+            background-color: var(--bg-surface);
+            min-height: 100vh;
+            box-shadow: 0 0 40px rgba(5, 150, 105, 0.07);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 1. STORE HEADER */
+        .store-header-section {
+            background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+            border-bottom: 1px solid var(--border-green);
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            backdrop-filter: blur(12px);
+        }
+
+        .navbar-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            gap: 12px;
+        }
+
+        .brand-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-badge {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #10b981, var(--primary-dark));
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3);
+            flex-shrink: 0;
+        }
+
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .store-badge {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--primary-dark);
+            background: var(--primary-subtle);
+            padding: 2px 7px;
+            border-radius: var(--radius-sm);
+            display: inline-block;
+            width: fit-content;
+            margin-bottom: 2px;
+            border: 1px solid var(--border-green);
+        }
+
+        .brand-text h1 {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+            color: var(--primary-dark);
+            line-height: 1.15;
+        }
+
+        .brand-text .tagline {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #ffffff;
+            padding: 4px 12px 4px 6px;
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1.5px solid var(--border-green);
+            box-shadow: var(--shadow-xs);
+            flex-shrink: 0;
+        }
+
+        .user-badge:active {
+            transform: scale(0.97);
+            background: var(--primary-light);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-full);
+            object-fit: cover;
+            background: #d1fae5;
+            border: 1.5px solid var(--primary);
+        }
+
+        .user-meta {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+
+        .user-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-main);
+            max-width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-tier {
+            font-size: 10px;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .store-announcement {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: #ecfdf5;
+            padding: 7px 16px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            border-top: 1px dashed var(--border-green);
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .announcement-divider {
+            color: #6ee7b7;
+        }
+
+        /* 2. SECTION CONTAINERS */
+        .page-content {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            padding: 16px 14px 24px;
+        }
+
+        .section-container {
+            background: #ffffff;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            padding: 16px 14px;
+            position: relative;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .section-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-icon {
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
+            background: var(--primary-light);
+            border: 1px solid var(--border-green);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-xs);
+        }
+
+        .section-tag {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--primary);
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .section-head h2 {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: -0.3px;
+        }
+
+        .badge-pill {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            background: #f8fafc;
+            color: var(--text-muted);
+            border-radius: var(--radius-full);
+            border: 1px solid var(--border);
+        }
+
+        .badge-pill.highlight-pill {
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border-color: var(--border-green);
+        }
+
+        .count-badge {
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 700;
+            background: var(--primary-light);
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            border: 1px solid var(--border-green);
+        }
+
+        /* 2. FEATURED SECTION */
+        .featured-section-block {
+            background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+            border-color: var(--border-green);
+        }
+
+        .featured-carousel {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+            scrollbar-width: none;
+        }
+
+        .featured-carousel::-webkit-scrollbar {
+            display: none;
+        }
+
+        .featured-card {
+            min-width: 145px;
+            max-width: 145px;
+            background: #ffffff;
+            border-radius: var(--radius-md);
+            border: 1.5px solid var(--border-green);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 12px rgba(5, 150, 105, 0.06);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .featured-card:active {
+            transform: scale(0.97);
+        }
+
+        /* 3. SEARCH & PRODUCT CATALOG */
+        .search-box-wrapper {
+            margin-bottom: 12px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f8fafc;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 10px 14px;
+            transition: all 0.2s ease;
+        }
+
+        .search-box:focus-within {
+            border-color: var(--border-focus);
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+        }
+
+        .search-box input {
+            border: none;
+            background: transparent;
+            outline: none;
+            width: 100%;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        .clear-search-btn {
+            background: #e2e8f0;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .category-nav {
+            position: sticky;
+            top: 56px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 40;
+            padding: 6px 0 10px;
+            margin-bottom: 12px;
+        }
+
+        .category-scroll {
+            display: grid;
+            grid-template-rows: repeat(2, 36px);
+            grid-auto-flow: column;
+            grid-auto-columns: max-content;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 2px 10px;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            cursor: grab;
+        }
+
+        .category-scroll:active {
+            cursor: grabbing;
+        }
+
+        .category-scroll::-webkit-scrollbar,
+        .featured-carousel::-webkit-scrollbar {
+            height: 6px;
+            display: block;
+        }
+
+        .category-scroll::-webkit-scrollbar-track,
+        .featured-carousel::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 999px;
+        }
+
+        .category-scroll::-webkit-scrollbar-thumb,
+        .featured-carousel::-webkit-scrollbar-thumb {
+            background: #a7f3d0;
+            border-radius: 999px;
+        }
+
+        .category-scroll::-webkit-scrollbar-thumb:hover,
+        .featured-carousel::-webkit-scrollbar-thumb:hover {
+            background: #10b981;
+        }
+
+        .cat-pill {
+            white-space: nowrap;
+            padding: 8px 14px;
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: #ffffff;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .cat-pill.active {
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
+            box-shadow: 0 3px 10px rgba(5, 150, 105, 0.3);
+        }
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .product-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+        }
+
+        .product-card {
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 7px 7px 9px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-xs);
+            transition: all 0.2s ease;
+        }
+
+        .product-card:hover {
+            border-color: var(--border-green);
+            box-shadow: var(--shadow-md);
+        }
+
+        .product-img-wrapper {
+            width: 100%;
+            height: 70px !important;
+            max-height: 70px !important;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            background: #f8fafc;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #f1f5f9;
+        }
+
+        .product-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .product-placeholder-icon {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            gap: 3px;
+            padding: 4px;
+            text-align: center;
+        }
+
+        .placeholder-emoji {
+            font-size: 22px;
+            line-height: 1;
+            filter: drop-shadow(0 2px 4px rgba(5, 150, 105, 0.15));
+        }
+
+        .placeholder-cat-label {
+            font-size: 9px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            background: rgba(255, 255, 255, 0.92);
+            padding: 1px 6px;
+            border-radius: var(--radius-full);
+            border: 1px solid var(--border-green);
+            white-space: nowrap;
+            max-width: 90%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .product-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .product-name {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--text-main);
+            line-height: 1.3;
+            margin-bottom: 4px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            height: 33px;
+        }
+
+        .product-price-row {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .product-price {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--primary-dark);
+        }
+
+        .product-unit {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Add to Cart Actions & Cute Centered Stepper */
+        .card-actions, .product-card-footer {
+            width: 100%;
+            margin-top: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn-add-cart {
+            width: 100%;
+            height: 38px;
+            padding: 0 12px;
+            background: #ecfdf5;
+            border: 1.5px solid #10b981;
+            color: #059669;
+            font-weight: 800;
+            font-size: 13px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 2px 5px rgba(16, 185, 129, 0.1);
+        }
+
+        .btn-add-cart:hover:not(:disabled) {
+            background: #10b981;
+            color: #ffffff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+        }
+
+        .btn-add-cart:active:not(:disabled) {
+            transform: scale(0.96);
+        }
+
+        .btn-add-cart:disabled {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            color: #94a3b8;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Cute Pill Stepper */
+        .grid-qty-stepper, .qty-stepper {
+            width: 100%;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f0fdf4;
+            border: 1.5px solid #6ee7b7;
+            border-radius: 999px;
+            padding: 3px 4px;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.12);
+            transition: all 0.2s ease;
+        }
+
+        .grid-qty-stepper button, .qty-stepper .qty-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: #10b981;
+            color: #ffffff;
+            font-weight: 900;
+            font-size: 17px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(5, 150, 105, 0.25);
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            flex-shrink: 0;
+        }
+
+        .grid-qty-stepper button:hover:not(:disabled), .qty-stepper .qty-btn:hover:not(:disabled) {
+            background: #059669;
+            transform: scale(1.1);
+            box-shadow: 0 3px 7px rgba(5, 150, 105, 0.35);
+        }
+
+        .grid-qty-stepper button:active:not(:disabled), .qty-stepper .qty-btn:active:not(:disabled) {
+            transform: scale(0.9);
+        }
+
+        .grid-qty-stepper button:disabled, .qty-stepper .qty-btn:disabled {
+            background: #cbd5e1;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .grid-qty-stepper span, .qty-stepper .qty-val, .grid-qty-stepper input, .qty-stepper input {
+            flex: 1;
+            width: 100%;
+            min-width: 0;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 900;
+            color: #065f46;
+            letter-spacing: -0.2px;
+            background: transparent;
+            border: none;
+            outline: none;
+            padding: 0 2px;
+            user-select: none;
+        }
+
+        .grid-qty-stepper input:focus {
+            background: #ffffff;
+            border-radius: 4px;
+            box-shadow: 0 0 0 1.5px #10b981;
+        }
+
+        .grid-qty-stepper input::-webkit-outer-spin-button,
+        .grid-qty-stepper input::-webkit-inner-spin-button,
+        .cart-item-stepper input::-webkit-outer-spin-button,
+        .cart-item-stepper input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .grid-qty-stepper input[type=number],
+        .cart-item-stepper input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .no-products-msg {
+            text-align: center;
+            padding: 30px 10px;
+            color: var(--text-muted);
+            grid-column: 1 / -1;
+        }
+
+        .empty-icon {
+            font-size: 44px;
+            margin-bottom: 8px;
+        }
+
+        /* 4. IN-PAGE CART */
+        .cart-items-block {
+            border-color: var(--border-green);
+            background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+        }
+
+        .inpage-cart-container {
+            background: #ffffff;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            padding: 12px;
+        }
+
+        .cart-items-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .cart-item-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            gap: 12px;
+        }
+
+        .cart-item-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .cart-item-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 2px;
+        }
+
+        .cart-item-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .cart-item-sub strong {
+            color: var(--primary-dark);
+        }
+
+        .cart-item-stepper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .cart-item-stepper button {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1px solid var(--border-strong);
+            background: #ffffff;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cart-item-stepper span, .cart-item-stepper input {
+            font-size: 14px;
+            font-weight: 800;
+            width: 44px;
+            height: 28px;
+            text-align: center;
+            border: 1px solid var(--border-strong);
+            border-radius: 6px;
+            background: #ffffff;
+            color: #0f172a;
+            padding: 0 4px;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .cart-item-stepper input:focus {
+            border-color: #10b981;
+            box-shadow: 0 0 0 1px #10b981;
+        }
+
+        .empty-cart-state {
+            text-align: center;
+            padding: 24px 10px;
+            color: var(--text-muted);
+        }
+
+        .empty-cart-icon {
+            font-size: 38px;
+            margin-bottom: 6px;
+            opacity: 0.6;
+        }
+
+        .empty-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+
+        .empty-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* 5. CHECKOUT & PRICE SUMMARY */
+        .checkout-summary-block {
+            border-color: var(--border-green);
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 8px;
+        }
+
+        .delivery-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .delivery-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: #ffffff;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .delivery-card.active {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            box-shadow: 0 2px 8px rgba(5, 150, 105, 0.15);
+        }
+
+        .deliv-icon {
+            font-size: 22px;
+        }
+
+        .deliv-text strong {
+            font-size: 12px;
+            color: var(--text-main);
+            display: block;
+        }
+
+        .deliv-text small {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .customer-info-box {
+            background: #f8fafc;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .info-header h4 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .input-field-group {
+            margin-bottom: 10px;
+        }
+
+        .input-field-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .input-field-group input,
+        .input-field-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-main);
+            background: #ffffff;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .input-field-group input:focus,
+        .input-field-group textarea:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+        }
+
+        .gps-field-wrapper {
+            margin-top: 8px;
+            background: #ffffff;
+            border: 1.5px dashed var(--border-green);
+            border-radius: var(--radius-sm);
+            padding: 10px;
+        }
+
+        .gps-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .gps-header-row label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0;
+        }
+
+        .btn-get-gps {
+            background: #ecfdf5;
+            border: 1px solid #10b981;
+            color: #047857;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-get-gps:active {
+            background: #10b981;
+            color: #ffffff;
+        }
+
+        .gps-input-container {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .gps-input-container input {
+            flex: 1;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .btn-view-map {
+            background: #f0fdf4;
+            border: 1px solid var(--border-green);
+            color: var(--primary-dark);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 9px 10px;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .gps-status-notice {
+            font-size: 11px;
+            color: #059669;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .gps-status-notice.error {
+            color: #dc2626;
+        }
+
+        .price-summary-card {
+            background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%);
+            border-radius: var(--radius-md);
+            border: 1.5px solid var(--border-green);
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+
+        .price-summary-header h4 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 10px;
+        }
+
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .price-figure {
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .free-badge {
+            font-size: 11px;
+            font-weight: 700;
+            color: #047857;
+            background: #d1fae5;
+            padding: 2px 6px;
+            border-radius: var(--radius-sm);
+        }
+
+        .price-divider {
+            height: 1px;
+            background: var(--border-green);
+            margin: 10px 0;
+        }
+
+        .total-row {
+            font-size: 15px;
+            color: var(--text-main);
+            margin-bottom: 0;
+        }
+
+        .tax-note {
+            display: block;
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: normal;
+        }
+
+        .total-price-figure {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--primary-dark);
+        }
+
+        .order-action-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .btn-confirm-order {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--line-green), #059669);
+            border: none;
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 800;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            box-shadow: 0 6px 18px rgba(6, 199, 85, 0.35);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .order-policy-note {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        /* FLOATING QUICK BAR */
+        .cart-floating-bar {
+            position: fixed;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 28px);
+            max-width: 612px;
+            background: linear-gradient(135deg, #065f46, #047857);
+            color: #ffffff;
+            padding: 10px 16px;
+            border-radius: var(--radius-full);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 10px 25px rgba(4, 120, 87, 0.4);
+            z-index: 50;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .cart-summary-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .cart-badge-icon {
+            position: relative;
+            font-size: 22px;
+        }
+
+        .cart-count-badge {
+            position: absolute;
+            top: -6px;
+            right: -8px;
+            background: #ef4444;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: var(--radius-full);
+            border: 2px solid #065f46;
+        }
+
+        .cart-price-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .cart-price-info .label {
+            font-size: 10px;
+            color: #a7f3d0;
+        }
+
+        .cart-price-info .price-val {
+            font-size: 16px;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .checkout-btn {
+            background: #ffffff;
+            border: none;
+            color: var(--primary-dark);
+            font-size: 12px;
+            font-weight: 800;
+            padding: 8px 14px;
+            border-radius: var(--radius-full);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .skeleton-card {
+            height: 180px;
+            background: linear-gradient(90deg, #f0fdf4 25%, #dcfce7 50%, #f0fdf4 75%);
+            background-size: 200% 100%;
+            border-radius: var(--radius-md);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Focus the shop on picking products. Supporting panels open only on demand. */
+        .shop-quick-actions { display: flex; gap: 10px; margin-top: 12px; }
+        .quick-action-button { flex: 1; min-height: 44px; border: 1px solid var(--border-green); border-radius: var(--radius-md); background: var(--primary-light); color: var(--primary-dark); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+        .quick-action-button:active { transform: scale(.98); background: var(--primary-subtle); }
+        .featured-section-block { padding: 0; background: transparent; border: 0; box-shadow: none; }
+        .featured-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-green); border-radius: var(--radius-md); background: var(--primary-light); color: var(--primary-dark); font: inherit; text-align: left; cursor: pointer; }
+        .featured-trigger strong { display: block; font-size: 13px; }
+        .featured-trigger small { display: block; margin-top: 2px; color: var(--text-muted); font-size: 11px; font-weight: 500; }
+        .featured-trigger .trigger-arrow { font-size: 18px; }
+        .shop-sheet-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 42, .42); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+        .shop-sheet-backdrop.is-open { opacity: 1; pointer-events: auto; }
+        .featured-sheet { position: fixed; z-index: 80; left: 50%; bottom: 0; width: min(640px, 100%); max-height: 78vh; padding: 18px 14px calc(18px + env(safe-area-inset-bottom)); overflow-y: auto; border-radius: 22px 22px 0 0; background: #fff; box-shadow: 0 -12px 30px rgba(15, 23, 42, .18); transform: translate(-50%, 105%); transition: transform .24s ease; }
+        .featured-sheet.is-open { transform: translate(-50%, 0); }
+        .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+        .sheet-head h2 { font-size: 17px; color: var(--text-main); }
+        .sheet-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--bg-subtle); color: var(--text-main); font-size: 22px; cursor: pointer; }
+        .stock-out-badge { display: inline-flex; align-items: center; width: fit-content; margin-top: 4px; padding: 2px 7px; border-radius: var(--radius-full); background: #fef2f2; color: #dc2626; font-size: 10px; font-weight: 800; }
+        .product-card.is-out-of-stock, .featured-card.is-out-of-stock { opacity: .72; }
+        .product-card.is-out-of-stock .product-img, .featured-card.is-out-of-stock .product-img { filter: grayscale(.65); }
+        .btn-add-cart:disabled { cursor: not-allowed; background: #e2e8f0; color: #64748b; box-shadow: none; }
+        .qty-input, .cart-qty-input { width: 48px; min-width: 0; height: 30px; border: 0; background: transparent; color: var(--primary-dark); font: inherit; font-size: 13px; font-weight: 800; text-align: center; outline: none; }
+        .qty-input::-webkit-inner-spin-button, .qty-input::-webkit-outer-spin-button, .cart-qty-input::-webkit-inner-spin-button, .cart-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .qty-input, .cart-qty-input { appearance: textfield; -moz-appearance: textfield; }
+        .cart-item-remove { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: #fef2f2; color: #dc2626; font-size: 14px; cursor: pointer; }
+        .cart-item-remove:hover { background: #fee2e2; }
+
+        @media (max-width: 959px) {
+            .shop-sidebar-column { display: contents; }
+            .page-content { gap: 12px; padding: 12px 12px 112px; }
+            .catalog-search-block { padding: 14px 12px; }
+            .catalog-search-block .section-head { align-items: flex-start; }
+            .catalog-search-block .section-title-wrap .section-tag { display: none; }
+            .catalog-search-block .section-icon { display: none; }
+            .catalog-search-block h2 { font-size: 16px; }
+            .product-grid { grid-template-columns: 1fr; gap: 8px; }
+            .product-card { min-height: 92px; padding: 8px; flex-direction: row; align-items: center; gap: 10px; }
+            .product-img-wrapper { width: 76px; height: 76px !important; max-height: 76px !important; margin: 0; flex: 0 0 76px; }
+            .product-info { min-width: 0; }
+            .product-name { height: auto; min-height: 32px; margin-bottom: 2px; }
+            .product-price-row { margin-bottom: 5px; }
+            .card-actions { position: absolute; right: 10px; bottom: 10px; }
+            .product-card { position: relative; padding-right: 118px; }
+            .btn-add-cart { min-width: 104px; height: 32px; padding: 0 9px; font-size: 11px; }
+            .qty-stepper { height: 32px; }
+            .qty-input { width: 42px; }
+            .qty-btn { width: 30px; height: 30px; }
+            .cart-item-remove { flex: 0 0 30px; }
+            .cart-items-block { display: none; position: fixed; z-index: 80; left: 50%; bottom: 0; width: min(640px, 100%); max-height: 78vh; padding: 18px 14px calc(18px + env(safe-area-inset-bottom)); overflow-y: auto; border-radius: 22px 22px 0 0; box-shadow: 0 -12px 30px rgba(15, 23, 42, .18); }
+            .cart-items-block.is-open { display: block; transform: translateX(-50%); }
+            .cart-items-block .section-head { margin-bottom: 12px; }
+            .cart-sheet-close { display: inline-flex; }
+            .cart-sheet-continue { display: block; width: 100%; margin-top: 12px; padding: 13px; border: 0; border-radius: var(--radius-md); background: var(--primary); color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+            .checkout-summary-block { display: none; }
+            .checkout-summary-block.checkout-active { display: block; }
+        }
+        @media (min-width: 960px) {
+            body { padding-bottom: 24px; }
+            .app-wrapper { max-width: 1380px; box-shadow: none; }
+            .page-content { display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; gap: 20px; padding: 18px 24px 30px; }
+            .catalog-search-block { grid-column: 1; padding: 14px 16px; min-width: 0; }
+            .catalog-search-block .section-head { margin-bottom: 10px; }
+            .catalog-search-block .section-tag, .catalog-search-block .section-icon { display: none; }
+            .catalog-search-block h2 { font-size: 17px; }
+            .catalog-search-block .search-box-wrapper { margin-bottom: 10px; }
+            .catalog-search-block .shop-quick-actions { display: none; }
+            .featured-section-block { margin: 0 0 12px; }
+            .featured-trigger { padding: 10px 14px; }
+            .shop-sidebar-column {
+                grid-column: 2;
+                position: sticky;
+                top: 16px;
+                max-height: calc(100vh - 32px);
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding-right: 2px;
+            }
+            .shop-sidebar-column::-webkit-scrollbar { width: 5px; }
+            .shop-sidebar-column::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+            .shop-sidebar-column::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            .cart-items-block { position: static; max-height: none; overflow: visible; }
+            .cart-items-block .inpage-cart-container { max-height: 280px; overflow-y: auto; }
+            .cart-sheet-close, .cart-sheet-continue { display: none; }
+            .checkout-summary-block { position: static; max-height: none; overflow: visible; display: block !important; }
+            .cart-floating-bar { display: none !important; }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Decorative background elements -->
+    <div class="background-orb background-orb-one"></div>
+    <div class="background-orb background-orb-two"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- 1. ส่วนบน: ชื่อร้าน & โปรไฟล์สมาชิก -->
+        <header class="store-header-section">
+            <div class="navbar-top">
+                <div class="brand-container">
+                    <div class="logo-badge">🛒</div>
+                    <div class="brand-text">
+                        <span class="store-badge" id="storeBadge">ร้าน ส.บริการ</span>
+                        <h1 id="storeName">ร้าน ส.บริการ ท่าข้าม</h1>
+                        <p class="tagline" id="storeTagline">จำหน่ายวัสดุก่อสร้าง อุปกรณ์ไฟฟ้าและประปา</p>
+                    </div>
+                </div>
+
+                <div class="user-badge" id="userBadge" onclick="openProfileInfo()">
+                    <img id="userAvatar" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="โปรไฟล์สมาชิก" class="user-avatar">
+                    <div class="user-meta">
+                        <span id="userName" class="user-name">กำลังโหลดข้อมูล...</span>
+                        <span id="userTier" class="user-tier">ลูกค้าทั่วไป</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Store Notice / Banner -->
+            <div class="store-announcement">
+                <div class="announcement-item">
+                    <span>⚡ บริการจัดส่งถึงหน้างาน</span>
+                </div>
+                <div class="announcement-divider">•</div>
+                <div class="announcement-item">
+                    <span>💳 สมาชิกสะสมแต้มได้</span>
+                </div>
+                <div class="announcement-divider">•</div>
+                <div class="announcement-item">
+                    <span>📍 ปักหมุด GPS นำทางแม่นยำ</span>
+                </div>
+            </div>
+            <button type="button" id="membershipBanner" class="membership-banner hidden">🔗 สมัครหรือผูกสมาชิกเพื่อรับแต้มและสิทธิพิเศษ</button>
+        </header>
+
+        <main class="page-content tab-panel active" id="shopTab" data-tab-panel="shop">
+
+            <!-- 3. ปุ่มค้นหา & หมวดหมู่สินค้า & แค็ตตาล็อก -->
+            <section class="section-container catalog-search-block">
+                <div class="section-head">
+                    <div class="section-title-wrap">
+                        <span class="section-icon">🔍</span>
+                        <div>
+                            <span class="section-tag">เลือกซื้อสินค้า</span>
+                            <h2>ค้นหาและเลือกดูตามหมวดหมู่</h2>
+                        </div>
+                    </div>
+                    <span id="productCount" class="count-badge">0 รายการ</span>
+                </div>
+
+                <!-- Search Input Bar -->
+                <div class="search-box-wrapper">
+                    <div class="search-box">
+                        <span class="search-icon">🔎</span>
+                        <input type="text" id="searchInput" placeholder="พิมพ์ค้นหา เช่น ปูน, ท่อ PVC, สี, สายไฟ, น็อต..." autocomplete="off">
+                        <button id="clearSearchBtn" class="clear-search-btn hidden" aria-label="ล้างคำค้น">✕</button>
+                    </div>
+                </div>
+
+                <!-- Category Pills Nav -->
+                <nav class="category-nav" aria-label="ตัวกรองหมวดหมู่สินค้า">
+                    <div class="category-scroll" id="categoryList">
+                        <button class="cat-pill active" data-cat="all">⭐ สินค้าแนะนำ</button>
+                    </div>
+                </nav>
+
+                <div class="shop-quick-actions">
+                    <button class="quick-action-button" type="button" onclick="openPaintStudio()">🎨 สั่งผสมสี Beger 2in1</button>
+                    <button class="quick-action-button" type="button" onclick="openMetalSheetStudio()">🔨 สั่งตัดเมทัลชีท</button>
+                    <button class="quick-action-button" type="button" onclick="openFeaturedSheet()">✨ สินค้าแนะนำ</button>
+                    <button class="quick-action-button" type="button" onclick="openCartSheet()">🛒 ตะกร้าของฉัน</button>
+                </div>
+
+                <!-- Beger Cool 2in1 Paint Studio Banner -->
+                <div id="paintStudioBanner" class="paint-studio-banner" style="display: none;">
+                    <div class="paint-banner-info">
+                        <div class="paint-banner-badge">🎨</div>
+                        <div class="paint-banner-text">
+                            <h3>สั่งผสมสี Beger Cool 2in1</h3>
+                            <p>กึ่งเงา (Semi-Gloss) · สั่งผสมเฉดสีตามเบอร์ได้ทันที</p>
+                        </div>
+                    </div>
+                    <button type="button" class="paint-open-btn" onclick="openPaintStudio()">เลือกเบอร์สี</button>
+                </div>
+
+                <!-- Metal Sheet Studio Banner -->
+                <div id="metalSheetStudioBanner" class="paint-studio-banner metal-studio-banner" style="display: none;">
+                    <div class="paint-banner-info">
+                        <div class="paint-banner-badge">🔨</div>
+                        <div class="paint-banner-text">
+                            <h3>สั่งตัดเมทัลชีทตามขนาด (ลอน 760)</h3>
+                            <p>ระบุความยาวต่อแผ่น x จำนวนแผ่น · คำนวณราคาต่อเมตรอัตโนมัติ</p>
+                        </div>
+                    </div>
+                    <button type="button" class="metal-open-btn" onclick="openMetalSheetStudio()">📐 สั่งตัดคลิกที่นี่</button>
+                </div>
+
+                <!-- Product Grid -->
+                <div class="product-grid" id="productGrid">
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                </div>
+
+                <div id="noProducts" class="no-products-msg hidden">
+                    <div class="empty-icon">🔎</div>
+                    <h3>ไม่พบสินค้าที่ตรงกับการค้นหา</h3>
+                    <p>ลองค้นหาด้วยชื่ออื่น หรือเลือกดูหมวดหมู่อื่นดูนะครับ</p>
+                </div>
+
+                <!-- Recommendations stay below the shopping task, by choice. -->
+                <section class="featured-section-block" id="featuredSection">
+                    <button class="featured-trigger" type="button" onclick="openFeaturedSheet()">
+                        <span><strong>✨ สินค้าแนะนำและสินค้ามาใหม่</strong><small>เลื่อนลงมาดูของที่ร้านคัดมาให้</small></span>
+                        <span class="trigger-arrow">›</span>
+                    </button>
+                </section>
+            </section>
+
+            <!-- Right Column: Sticky Cart & Order Summary -->
+            <aside class="shop-sidebar-column" id="shopSidebar">
+                <!-- 4. ตะกร้าสินค้าของคุณ (In-page Cart Items) -->
+                <section class="section-container cart-items-block" id="cartItemsBlock">
+                <div class="section-head">
+                    <div class="section-title-wrap">
+                        <span class="section-icon">🛒</span>
+                        <div>
+                            <span class="section-tag">รายการที่เลือก</span>
+                            <h2>ตะกร้าสินค้าของคุณ</h2>
+                        </div>
+                    </div>
+                    <span class="badge-pill highlight-pill" id="cartSectionItemCount">0 ชิ้น</span>
+                    <button class="sheet-close cart-sheet-close" type="button" onclick="closeCartSheet()" aria-label="ปิดตะกร้า">×</button>
+                </div>
+
+                <div class="inpage-cart-container">
+                    <div class="cart-items-list" id="inpageCartItemsList">
+                        <div class="empty-cart-state" id="emptyCartState">
+                            <div class="empty-cart-icon">🛒</div>
+                            <p class="empty-title">ยังไม่มีสินค้าในตะกร้า</p>
+                            <p class="empty-desc">กดปุ่ม <strong>[ + ใส่ตะกร้า ]</strong> จากรายการสินค้าด้านบนเพื่อเริ่มสั่งซื้อ</p>
+                        </div>
+                    </div>
+                </div>
+                <button class="cart-sheet-continue" type="button" onclick="openCheckout()">ดำเนินการสั่งซื้อ</button>
+            </section>
+
+            <!-- 5. ข้อมูลการจัดส่ง & สรุปราคา & ยืนยันคำสั่งซื้อ -->
+            <section class="section-container checkout-summary-block" id="checkoutBlock">
+                <div class="section-head">
+                    <div class="section-title-wrap">
+                        <span class="section-icon">📋</span>
+                        <div>
+                            <span class="section-tag">ขั้นตอนสุดท้าย</span>
+                            <h2>ข้อมูลจัดส่ง & สรุปยอดสั่งซื้อ</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delivery Type Options -->
+                <div class="form-group">
+                    <label class="form-label">🛵 เลือกรูปแบบการรับสินค้า</label>
+                    <div class="delivery-options">
+                        <label class="delivery-card active" id="optDelivery" onclick="setDeliveryType('delivery')">
+                            <input type="radio" name="delivType" value="delivery" checked hidden>
+                            <span class="deliv-icon">🚚</span>
+                            <div class="deliv-text">
+                                <strong>จัดส่งถึงหน้างาน / บ้าน</strong>
+                                <small>มีบริการรถส่งของถึงที่</small>
+                            </div>
+                        </label>
+                        <label class="delivery-card" id="optPickup" onclick="setDeliveryType('pickup')">
+                            <input type="radio" name="delivType" value="pickup" hidden>
+                            <span class="deliv-icon">🏪</span>
+                            <div class="deliv-text">
+                                <strong>รับเองที่หน้าร้าน</strong>
+                                <small>เตรียมของรอรับที่ร้าน</small>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Customer Details & GPS Form -->
+                <div class="customer-info-box">
+                    <div class="info-header">
+                        <span class="info-icon">📍</span>
+                        <h4>ข้อมูลผู้สั่งซื้อ & พิกัดสถานที่</h4>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="custNameInput">ชื่อผู้ติดต่อ / ชื่อช่าง *</label>
+                        <input type="text" id="custNameInput" placeholder="เช่น ช่างสมชาย, บริษัท ก่อสร้าง...">
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="custPhoneInput">เบอร์โทรศัพท์ติดต่อ *</label>
+                        <input type="tel" id="custPhoneInput" placeholder="08x-xxx-xxxx (สำหรับเจ้าหน้าที่ติดต่อยืนยัน)">
+                    </div>
+
+                    <div class="input-field-group" id="addressGroup">
+                        <label for="custAddressInput">ที่อยู่จัดส่ง / รายละเอียดหน้างาน * <small style="color: #059669; font-weight: normal; font-size: 11px;">(เพื่อสะดวกต่อการส่งของพนักงาน ขอบคุณครับ)</small></label>
+                        <textarea id="custAddressInput" rows="2" placeholder="ระบุบ้านเลขที่, ซอย, ถนน, ตำบล หรือจุดสังเกตหน้างาน (เพื่อสะดวกต่อการส่งของพนักงาน ขอบคุณครับ)"></textarea>
+
+                        <!-- GPS Location Coordinates -->
+                        <div class="gps-field-wrapper">
+                            <div class="gps-header-row">
+                                <label for="custGpsInput">📍 พิกัดแผนที่ (GPS / Google Maps)</label>
+                                <button type="button" class="btn-get-gps" id="btnGetGps" onclick="getCurrentGpsLocation()">
+                                    <span>📡 ปักหมุดตำแหน่งปัจจุบัน</span>
+                                </button>
+                            </div>
+                            <div class="gps-input-container">
+                                <input type="text" id="custGpsInput" placeholder="แตะปุ่มปักหมุด หรือใส่พิกัด เช่น 13.7563, 100.5018">
+                                <a id="gpsMapLink" class="btn-view-map hidden" target="_blank" title="เปิดดูบน Google Maps" rel="noopener">🗺️ ดูแผนที่</a>
+                            </div>
+                            <div id="gpsStatusNotice" class="gps-status-notice hidden"></div>
+                        </div>
+                    </div>
+
+                    <div class="input-field-group">
+                        <label for="custNotesInput">หมายเหตุเพิ่มเติม (ถ้ามี)</label>
+                        <input type="text" id="custNotesInput" placeholder="เช่น ส่งช่วงบ่าย, โทรแจ้งก่อนส่ง">
+                    </div>
+                </div>
+
+                <!-- Heavy Goods Exception Notice -->
+                <div class="heavy-goods-notice hidden" id="heavyGoodsNotice">
+                    <span>⚠️</span>
+                    <div>
+                        <strong>สินค้าหนัก/ขนาดใหญ่พิเศษ (เสา, วงบ่อ, บล็อก):</strong> ระยะทางเกิน 6 กม. จะมีค่าเที่ยวรถเฉพาะ เจ้าหน้าที่จะติดต่อยืนยันก่อนจัดส่งครับ
+                    </div>
+                </div>
+
+                <!-- Price Summary Card -->
+                <div class="price-summary-card">
+                    <div class="price-summary-header">
+                        <h4>💰 สรุปยอดเงินคำสั่งซื้อ</h4>
+                    </div>
+                    <div class="price-row">
+                        <span>ยอดรวมสินค้า (<span id="summaryItemCount">0</span> ชิ้น)</span>
+                        <span class="price-figure" id="summarySubtotal">฿0.00</span>
+                    </div>
+                    <div class="price-row">
+                        <span>ค่าบริการจัดส่ง (ประเมิน)</span>
+                        <span class="free-badge" id="summaryShipping">ประเมินตามระยะทาง</span>
+                    </div>
+                    <div class="coupon-select-row">
+                        <label for="checkoutCouponSelect">🎟️ คูปองส่วนลด</label>
+                        <select id="checkoutCouponSelect" aria-label="เลือกคูปองส่วนลด">
+                            <option value="">ไม่ใช้คูปอง</option>
+                        </select>
+                        <small id="selectedCouponHint">เข้าสู่ระบบสมาชิกเพื่อเลือกคูปอง</small>
+                    </div>
+                    <div class="shipping-disclaimer-note" id="shippingDisclaimer">
+                        ℹ️ *ค่าจัดส่งเป็นการประเมินเบื้องต้น อาจปรับลดหรือยืดหยุ่นได้ตามรอบรถและหน้างานจริง เจ้าหน้าที่จะติดต่อยืนยันยอดสุดท้ายอีกครั้งครับ
+                    </div>
+                    <div class="price-divider"></div>
+                    <div class="price-row total-row">
+                        <div>
+                            <strong>ยอดรวมสุทธิโดยประมาณ</strong>
+                            <small class="tax-note">(รวมภาษีมูลค่าเพิ่มแล้ว)</small>
+                        </div>
+                        <strong class="total-price-figure" id="summaryTotal">฿0.00</strong>
+                    </div>
+                </div>
+
+                <!-- Order Action Button -->
+                <div class="order-action-wrap">
+                    <button class="btn-confirm-order" id="btnSubmitOrder" onclick="submitOrder()">
+                        <span>💬 ยืนยันการสั่งซื้อ (ส่งเข้า LINE ร้าน)</span>
+                    </button>
+                    <p class="order-policy-note">🔒 ข้อมูลของคุณปลอดภัย เจ้าหน้าที่จะติดต่อกลับเพื่อยืนยันรายการจัดส่ง</p>
+                </div>
+            </section>
+            </aside>
+
+        </main>
+
+        <div id="shopSheetBackdrop" class="shop-sheet-backdrop" onclick="closeShopSheets()"></div>
+        <aside id="featuredSheet" class="featured-sheet" role="dialog" aria-modal="true" aria-labelledby="featuredSheetTitle" aria-hidden="true">
+            <div class="sheet-head">
+                <div><span class="section-tag">คัดสรรพิเศษ</span><h2 id="featuredSheetTitle">สินค้าแนะนำ</h2></div>
+                <button class="sheet-close" type="button" onclick="closeFeaturedSheet()" aria-label="ปิดสินค้าแนะนำ">×</button>
+            </div>
+            <div class="featured-carousel" id="featuredCarousel">
+                <div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>
+            </div>
+        </aside>
+
+        <main class="member-page tab-panel" id="rewardsTab" data-tab-panel="rewards" hidden>
+            <div id="rewardsUserHeader"></div>
+            <div class="rewards-category-nav" style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;">
+                <button type="button" class="view-tab active" id="rewTabAll" onclick="filterRewardType('ALL')">🎁 ทั้งหมด</button>
+                <button type="button" class="view-tab" id="rewTabFreeClaim" onclick="filterRewardType('FREE_CLAIM')">🎁 คูปองเก็บฟรี</button>
+                <button type="button" class="view-tab" id="rewTabCoupons" onclick="filterRewardType('DISCOUNT_COUPON')">🎟️ คูปองส่วนลด</button>
+                <button type="button" class="view-tab" id="rewTabGifts" onclick="filterRewardType('GIFT')">🏆 ของพรีเมียม</button>
+                <button type="button" class="view-tab" id="rewTabMyCoupons" onclick="filterRewardType('MY_COUPONS')">📦 คูปองของฉัน <span id="myCouponsBadge" style="background:#059669;color:#fff;padding:1px 6px;border-radius:999px;font-size:10px;margin-left:2px;display:none;">0</span></button>
+            </div>
+            <div id="rewardsContent" class="member-grid">
+                <div class="member-empty">กำลังโหลดของรางวัลและคูปอง...</div>
+            </div>
+            <div id="myCouponsListContainer" class="history-list hidden">
+                <div class="member-empty">ยังไม่มีคูปองที่แลกไว้</div>
+            </div>
+        </main>
+
+        <main class="member-page tab-panel" id="historyTab" data-tab-panel="history" hidden>
+            <section class="member-hero"><p class="section-tag">HISTORY</p><h2>ประวัติและติดตาม</h2><p>คำสั่งซื้อออนไลน์และรายการแลกรางวัลอยู่ในที่เดียว</p></section>
+            <div id="historyContent" class="history-list"><div class="member-empty">ยังไม่มีประวัติ</div></div>
+        </main>
+
+        <main class="member-page tab-panel" id="memberTab" data-tab-panel="member" hidden>
+            <div id="memberProfileHub">
+                <div class="member-empty">กำลังตรวจสอบข้อมูลสมาชิก...</div>
+            </div>
+        </main>
+
+        <!-- Bottom Floating Quick Cart Bar -->
+        <div class="cart-floating-bar hidden" id="cartFloatingBar" onclick="openCartSheet()">
+            <div class="cart-summary-left">
+                <div class="cart-badge-icon">
+                    <span>🛒</span>
+                    <span class="cart-count-badge" id="cartTotalCount">0</span>
+                </div>
+                <div class="cart-price-info">
+                    <span class="label">ยอดรวมในตะกร้า</span>
+                    <span class="price-val" id="cartTotalPrice">฿0.00</span>
+                </div>
+            </div>
+            <button class="checkout-btn" type="button">
+                <span>ไปที่ตะกร้า / สรุปราคา</span>
+                <span class="arrow">⬇️</span>
+            </button>
+        </div>
+
+        <nav class="unified-bottom-nav" aria-label="เมนูหลัก">
+            <button type="button" class="tab-button active" data-tab="shop"><span>🛒</span><small>สั่งซื้อ</small></button>
+            <button type="button" class="tab-button" data-tab="rewards"><span>🎁</span><small>แลกรางวัล/คูปอง</small></button>
+            <button type="button" class="tab-button" data-tab="history"><span>📋</span><small>ประวัติ</small></button>
+            <button type="button" class="tab-button" data-tab="member"><span>👤</span><small>สมาชิก</small></button>
+        </nav>
+
+        <!-- Paint Mixer Modal / Studio for Beger Cool 2in1 -->
+        <div id="paintStudioModal" class="paint-modal-backdrop hidden" onclick="if(event.target===this) closePaintStudio()">
+            <div class="paint-modal-card">
+                <div class="paint-modal-header">
+                    <div class="paint-header-left">
+                        <span class="paint-badge-icon">🎨</span>
+                        <div>
+                            <h3>สั่งผสมสี Beger Cool 2in1</h3>
+                            <p>กึ่งเงา (Semi-Gloss) · ผสมรองพื้นในตัว ทาภายนอก/ใน</p>
+                        </div>
+                    </div>
+                    <button type="button" class="close-paint-modal" onclick="closePaintStudio()" aria-label="ปิด">✕</button>
+                </div>
+                
+                <div class="paint-modal-body">
+                    <!-- External Link to Beger Color Chart -->
+                    <a href="https://www.beger.co.th/th/search_color_shade" target="_blank" rel="noopener" class="beger-catalog-btn">
+                        <span>🎨 ค้นหาเฉดสีออนไลน์บนเว็บ Beger (คลิกที่นี่ ↗)</span>
+                        <small>เลือกดูเฉดสีที่ถูกใจ แล้วนำรหัสสีมากรอกด้านล่างได้เลยครับ</small>
+                    </a>
+
+                    <!-- Size Selector -->
+                    <div class="paint-field-group">
+                        <label class="paint-field-label">1. เลือกขนาดบรรจุ</label>
+                        <div class="paint-size-selector">
+                            <label class="paint-size-option" id="optPaintQuarterGL" onclick="selectPaintSize(6555, '1/4 แกลลอน (~0.9 ลิตร)', this)">
+                                <strong>1/4 แกลลอน</strong>
+                                <small>~0.9 ลิตร (กระป๋อง)</small>
+                            </label>
+                            <label class="paint-size-option active" id="optPaint1GL" onclick="selectPaintSize(6549, '1 แกลลอน (~3.5 ลิตร)', this)">
+                                <strong>1 แกลลอน</strong>
+                                <small>~3.5 ลิตร (แกลลอน)</small>
+                            </label>
+                            <label class="paint-size-option" id="optPaint25GL" onclick="selectPaintSize(6550, '2.5 แกลลอน (~9 ลิตร)', this)">
+                                <strong>2.5 แกลลอน</strong>
+                                <small>~9 ลิตร (ถังกลาง)</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Color Code Input -->
+                    <div class="paint-field-group">
+                        <label class="paint-field-label" for="paintColorCodeInput">2. ระบุรหัสเฉดสี (Color Code) *</label>
+                        <div class="paint-code-input-wrapper">
+                            <input type="text" id="paintColorCodeInput" placeholder="เช่น 054-2, OW-4-3 หรือชื่อสี" maxlength="50" autocomplete="off" oninput="checkPaintCodeLookup()">
+                            <span id="paintLookupBadge" class="paint-lookup-badge pending">รอเช็คราคา</span>
+                        </div>
+                        <p class="paint-field-hint" id="paintLookupHint">ℹ️ หากเป็นรหัสสีที่ยังไม่มีในระบบด่วน ทางร้านจะโทรติดต่อกลับเพื่อพูดคุยรายละเอียดและแจ้งราคาให้ทราบโดยตรงครับ</p>
+                    </div>
+
+                    <!-- Quantity -->
+                    <div class="paint-field-group">
+                        <label class="paint-field-label">3. จำนวนที่ต้องการ (ถัง)</label>
+                        <div class="paint-qty-row">
+                            <button type="button" class="paint-qty-btn" onclick="adjustPaintQty(-1)">-</button>
+                            <input type="number" id="paintQtyInput" min="1" max="100" value="1" readonly>
+                            <button type="button" class="paint-qty-btn" onclick="adjustPaintQty(1)">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Paint Color Accuracy & No Return Disclaimer -->
+                    <div class="paint-disclaimer-card">
+                        <div class="disclaimer-header">
+                            <span class="disclaimer-icon">⚠️</span>
+                            <strong>ข้อแนะนำและเงื่อนไขการสั่งผสมสี</strong>
+                        </div>
+                        <ul class="disclaimer-list">
+                            <li>📱 <strong>การแสดงผลเฉดสี:</strong> สีที่แสดงบนหน้าจอมือถือ/คอมพิวเตอร์ อาจมีความคลาดเคลื่อนจากสีจริงเล็กน้อย ขึ้นอยู่กับชนิดและการตั้งค่าหน้าจอของแต่ละอุปกรณ์</li>
+                            <li>🚫 <strong>เงื่อนไขการเปลี่ยน/คืน:</strong> สีผสมคอมพิวเตอร์เป็นสินค้าสั่งผลิตเฉพาะบุคคล <strong>ทางร้านไม่รับเปลี่ยน คืน หรือเคลมทุกกรณี</strong> หากเฉดสีไม่ตรงกับที่คาดหวังจากการสั่งซื้อออนไลน์</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="paint-modal-footer">
+                    <button type="button" class="paint-cancel-btn" onclick="closePaintStudio()">ยกเลิก</button>
+                    <button type="button" id="addPaintToCartBtn" class="paint-submit-btn" onclick="confirmPaintToCart()">+ เพิ่มลงในตะกร้า</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metal Sheet Custom Ordering Studio -->
+        <div id="metalSheetStudioModal" class="paint-modal-backdrop hidden" onclick="if(event.target===this) closeMetalSheetStudio()">
+            <div class="paint-modal-card metal-modal-card">
+                <div class="paint-modal-header metal-modal-header">
+                    <div class="paint-header-left">
+                        <span class="paint-badge-icon">🔨</span>
+                        <div>
+                            <h3>สั่งตัดเมทัลชีทตามขนาด (ลอน 760)</h3>
+                            <p>ระบุความยาวต่อแผ่นและจำนวนแผ่น · คำนวณราคาต่อเมตรอัตโนมัติ</p>
+                        </div>
+                    </div>
+                    <button type="button" class="close-paint-modal" onclick="closeMetalSheetStudio()" aria-label="ปิด">✕</button>
+                </div>
+                
+                <div class="paint-modal-body">
+                    <!-- Profile & Thickness Selector -->
+                    <div class="paint-field-group">
+                        <label class="paint-field-label">1. เลือกประเภทและความหนาแผ่น</label>
+                        <div class="metal-type-selector">
+                            <label class="metal-type-option active" id="optMsAZ030" onclick="selectMetalType('MS-760-AZ030', this)">
+                                <strong>อลูซิงค์ 0.30 มม.</strong>
+                                <span class="metal-price-tag" id="priceTagMsAZ030">฿80.00 / ม.</span>
+                            </label>
+                            <label class="metal-type-option" id="optMsAZ035" onclick="selectMetalType('MS-760-AZ035', this)">
+                                <strong>อลูซิงค์ 0.35 มม.</strong>
+                                <span class="metal-price-tag" id="priceTagMsAZ035">฿95.00 / ม.</span>
+                            </label>
+                            <label class="metal-type-option" id="optMsCOL035" onclick="selectMetalType('MS-760-COL035', this)">
+                                <strong>เคลือบสี 0.35 มม.</strong>
+                                <span class="metal-price-tag" id="priceTagMsCOL035">฿105.00 / ม.</span>
+                            </label>
+                            <label class="metal-type-option" id="optMsCOL040" onclick="selectMetalType('MS-760-COL040', this)">
+                                <strong>เคลือบสี 0.40 มม.</strong>
+                                <span class="metal-price-tag" id="priceTagMsCOL040">฿120.00 / ม.</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Color Selector (Show if Color Coated is chosen) -->
+                    <div class="paint-field-group" id="metalColorGroup" style="display: none;">
+                        <label class="paint-field-label">2. เลือกเฉดสีเมทัลชีท</label>
+                        <div class="metal-color-selector">
+                            <label class="metal-color-option active" onclick="selectMetalColor('น้ำเงิน', this)">
+                                <span class="color-dot" style="background-color: #1976D2;"></span>
+                                <span>น้ำเงิน</span>
+                            </label>
+                            <label class="metal-color-option" onclick="selectMetalColor('เขียวบางกอก', this)">
+                                <span class="color-dot" style="background-color: #388E3C;"></span>
+                                <span>เขียว</span>
+                            </label>
+                            <label class="metal-color-option" onclick="selectMetalColor('แดงสด', this)">
+                                <span class="color-dot" style="background-color: #D32F2F;"></span>
+                                <span>แดง</span>
+                            </label>
+                            <label class="metal-color-option" onclick="selectMetalColor('น้ำตาล', this)">
+                                <span class="color-dot" style="background-color: #5D4037;"></span>
+                                <span>น้ำตาล</span>
+                            </label>
+                            <label class="metal-color-option" onclick="selectMetalColor('ดำด้าน', this)">
+                                <span class="color-dot" style="background-color: #212121;"></span>
+                                <span>ดำด้าน</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Insulation Option -->
+                    <div class="paint-field-group">
+                        <label class="paint-field-label">3. ฉนวนกันความร้อน (ตัวเลือกเสริม)</label>
+                        <div class="metal-insulation-selector">
+                            <label class="metal-insulation-option active" onclick="selectMetalInsulation('NONE', 0, this)">
+                                <strong>ไม่ติดฉนวน</strong>
+                                <small>แผ่นมาตรฐาน</small>
+                            </label>
+                            <label class="metal-insulation-option" onclick="selectMetalInsulation('MS-OPT-PE5MM', 25.0, this)">
+                                <strong>บุฉนวน PE (5 มม.)</strong>
+                                <small id="priceTagPe">+฿25.00 / ม.</small>
+                            </label>
+                            <label class="metal-insulation-option" onclick="selectMetalInsulation('MS-OPT-PU25MM', 70.0, this)">
+                                <strong>บุฉนวน PU (25 มม.)</strong>
+                                <small id="priceTagPu">+฿70.00 / ม.</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Cutting Dimensions & Quantity (Multi-Length Cut List) -->
+                    <div class="metal-calc-box">
+                        <div class="cut-list-header">
+                            <label class="paint-field-label">4. รายการตัดแผ่น (ระบุความยาวและจำนวนได้หลายขนาด) *</label>
+                            <button type="button" class="add-cut-row-btn" onclick="addCutRow()">+ เพิ่มขนาดความยาว</button>
+                        </div>
+
+                        <!-- Dynamic Cut Rows Container -->
+                        <div id="metalCutListContainer" class="metal-cut-list">
+                            <!-- Populated dynamically by JS -->
+                        </div>
+
+                        <!-- Live Summary Box -->
+                        <div class="metal-summary-badge">
+                            <div class="summary-line">
+                                <span>📐 สรุปรายการตัด:</span>
+                                <strong id="msCutSummaryBadge">1 ขนาด · 10 แผ่น · รวม 35.00 เมตร</strong>
+                            </div>
+                            <div class="summary-line total-price-line">
+                                <span>💰 ยอดประเมินรวม:</span>
+                                <strong id="msTotalPriceBadge" class="price-highlight">฿2,800.00</strong>
+                            </div>
+                            <div class="summary-subtext" id="msCalcBreakdownText">
+                                (ความยาวรวม 35.00 ม. x ฿80.00/ม.)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Notes -->
+                    <div class="paint-field-group">
+                        <label class="paint-field-label" for="msCustomNote">6. หมายเหตุเพิ่มเติม (ถ้ามี)</label>
+                        <input type="text" id="msCustomNote" class="form-input" placeholder="เช่น ขอตัดปลายเฉียง, สกรูแปเหล็ก 1 กล่อง">
+                    </div>
+
+                    <!-- Metal Sheet Disclaimer -->
+                    <div class="paint-disclaimer-card metal-disclaimer">
+                        <div class="disclaimer-header">
+                            <span class="disclaimer-icon">⚠️</span>
+                            <strong>ข้อแนะนำและเงื่อนไขการสั่งตัดเมทัลชีท</strong>
+                        </div>
+                        <ul class="disclaimer-list">
+                            <li>📏 <strong>สินค้าสั่งผลิตตามขนาด:</strong> แผ่นเมทัลชีทสั่งตัดตามความยาวเฉพาะบุคคล <strong>ไม่สามารถเปลี่ยน คืน หรือยกเลิกได้หลังเริ่มกระบวนการตัดแผ่น</strong></li>
+                            <li>🚚 <strong>การจัดส่ง:</strong> กรณีความยาวต่อแผ่น <strong>เกิน 6.00 เมตร</strong> โปรดตรวจสอบทางเข้า-ออกหน้างาน และทางโค้งสำหรับรถบรรทุกขนส่ง</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="paint-modal-footer">
+                    <button type="button" class="paint-cancel-btn" onclick="closeMetalSheetStudio()">ยกเลิก</button>
+                    <button type="button" id="addMetalSheetToCartBtn" class="paint-submit-btn metal-submit-btn" onclick="confirmMetalSheetToCart()">+ เพิ่มลงในตะกร้า</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="/shop/shop-member.js?v=20260829-v30"></script>
+    <script src="/shop/cart.js?v=20260829-v30"></script>
+    <script src="/shop/paint-studio.js?v=20260829-v30"></script>
+    <script src="/shop/metalsheet-studio.js?v=20260829-v30"></script>
+    <script src="/shop/shop.js?v=20260829-v30"></script>
+</body>
+
+</html>

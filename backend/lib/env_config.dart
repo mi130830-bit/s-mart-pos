@@ -25,6 +25,17 @@ class EnvConfig {
   /// Get Line Channel Access Token
   String get lineChannelToken => _env['LINE_CHANNEL_TOKEN'] ?? '';
 
+  /// LINE Login channel used to verify LIFF ID tokens server-side.
+  /// No fallback is allowed because a LIFF ID is not a security authority.
+  String get lineLoginChannelId =>
+      (_env['LINE_LOGIN_CHANNEL_ID'] ?? _env['LIFF_CHANNEL_ID'] ?? '').trim();
+
+  /// Messaging API channel secret used to authenticate the exact webhook body.
+  String get lineChannelSecret => (_env['LINE_CHANNEL_SECRET'] ?? '').trim();
+
+  /// Shared deployment secret for non-user service callbacks.
+  String get internalApiSecret => (_env['INTERNAL_API_SECRET'] ?? '').trim();
+
   /// Get writable data directory for storing dynamic files (like bills).
   /// Never writes inside C:\Program Files\ to avoid Access Denied errors.
   String get writableDir {

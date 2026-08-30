@@ -1,0 +1,408 @@
+/* ==========================================================================
+   PAINT STUDIO STYLES (Beger Cool 2in1)
+   ========================================================================== */
+
+.paint-studio-banner {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border-radius: var(--radius-lg, 16px);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.25);
+    margin-bottom: 16px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.paint-banner-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.paint-banner-badge {
+    font-size: 28px;
+    background: rgba(255, 255, 255, 0.2);
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.paint-banner-text h3 {
+    font-size: 15px;
+    font-weight: 800;
+    margin: 0 0 2px 0;
+    color: #ffffff;
+}
+
+.paint-banner-text p {
+    font-size: 12px;
+    margin: 0;
+    color: #e0f2fe;
+    opacity: 0.95;
+}
+
+.paint-open-btn {
+    background: #ffffff;
+    color: #0369a1;
+    border: none;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 10px 18px;
+    border-radius: 9999px;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.paint-open-btn:hover {
+    background: #f0f9ff;
+    transform: translateY(-1px);
+}
+
+/* Paint Modal */
+.paint-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(6px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.paint-modal-backdrop.hidden {
+    display: none !important;
+}
+
+.paint-modal-card {
+    background: #ffffff;
+    border-radius: var(--radius-lg, 16px);
+    width: 100%;
+    max-width: 500px;
+    max-height: 92vh;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.paint-modal-header {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.paint-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.paint-badge-icon {
+    font-size: 26px;
+    background: rgba(255, 255, 255, 0.2);
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.paint-header-left h3 {
+    font-size: 16px;
+    font-weight: 800;
+    margin: 0 0 2px 0;
+    color: #ffffff;
+}
+
+.paint-header-left p {
+    font-size: 11px;
+    margin: 0;
+    color: #e0f2fe;
+}
+
+.close-paint-modal {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #ffffff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.close-paint-modal:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.paint-modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.beger-catalog-btn {
+    display: flex;
+    flex-direction: column;
+    background: #f0f9ff;
+    border: 1.5px dashed #0284c7;
+    border-radius: 12px;
+    padding: 10px 14px;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.beger-catalog-btn:hover {
+    background: #e0f2fe;
+    transform: translateY(-1px);
+}
+
+.beger-catalog-btn span {
+    color: #0369a1;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.beger-catalog-btn small {
+    color: #64748b;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.paint-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.paint-field-label {
+    font-size: 13px;
+    font-weight: 800;
+    color: #1e293b;
+}
+
+.paint-size-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.paint-size-option {
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 8px;
+    text-align: center;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: #ffffff;
+    transition: all 0.2s;
+}
+
+.paint-size-option:hover {
+    border-color: #0284c7;
+    background: #f0f9ff;
+}
+
+.paint-size-option.active {
+    border-color: #0284c7;
+    background: #f0f9ff;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+}
+
+.paint-size-option strong {
+    font-size: 13px;
+    color: #0f172a;
+}
+
+.paint-size-option small {
+    font-size: 10px;
+    color: #64748b;
+}
+
+.paint-size-option.active strong {
+    color: #0284c7;
+}
+
+.paint-code-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.paint-code-input-wrapper input {
+    width: 100%;
+    padding: 10px 100px 10px 12px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.paint-code-input-wrapper input:focus {
+    outline: none;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.paint-lookup-badge {
+    position: absolute;
+    right: 8px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.paint-lookup-badge.pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.paint-lookup-badge.found {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.paint-field-hint {
+    font-size: 11px;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.paint-qty-row {
+    display: flex;
+    align-items: center;
+    width: 130px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.paint-qty-btn {
+    width: 38px;
+    height: 38px;
+    border: none;
+    background: #f1f5f9;
+    font-size: 18px;
+    font-weight: 800;
+    color: #1e293b;
+    cursor: pointer;
+}
+
+.paint-qty-btn:hover {
+    background: #e2e8f0;
+}
+
+.paint-qty-row input {
+    flex: 1;
+    border: none;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    width: 40px;
+}
+
+.paint-disclaimer-card {
+    background: #fffbeb;
+    border: 1.5px solid #fde68a;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.disclaimer-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #92400e;
+}
+
+.disclaimer-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.disclaimer-list li {
+    font-size: 11px;
+    color: #78350f;
+    line-height: 1.4;
+}
+
+.paint-modal-footer {
+    padding: 14px 20px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.paint-cancel-btn {
+    padding: 10px 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    cursor: pointer;
+}
+
+.paint-submit-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+    transition: all 0.2s;
+}
+
+.paint-submit-btn:hover {
+    background: #0284c7;
+    transform: translateY(-1px);
+}

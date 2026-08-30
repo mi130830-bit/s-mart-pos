@@ -132,9 +132,14 @@ class PriceCalculationService {
     // Recalculate Total
     // total = (price * quantity) - discount
     final rawTotal = item.price * item.quantity;
-    final netTotal = rawTotal - item.discount;
+    final effectiveDiscount =
+        item.discount > rawTotal ? rawTotal : (item.discount < Decimal.zero ? Decimal.zero : item.discount);
+    final netTotal = rawTotal - effectiveDiscount;
 
-    return item.copyWith(total: netTotal);
+    return item.copyWith(
+      discount: effectiveDiscount,
+      total: netTotal,
+    );
   }
 
   /// ✅ คำนวณโปรโมชั่น — Priority-Only (apply แค่โปรอันดับสูงสุดที่ qualify)

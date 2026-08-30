@@ -88,9 +88,10 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
     if (session.selectedPaymentType == PaymentType.qr) {
       double qrAmount = currentInput.toDouble();
       if (qrAmount <= 0) {
-        if (totalCaptured < grandTotal) {
-          qrAmount = (grandTotal - totalPaidInList).toDouble();
-        }
+        qrAmount = (grandTotal - totalPaidInList).toDouble();
+      }
+      if (qrAmount <= 0) {
+        qrAmount = grandTotal.toDouble();
       }
       posState.showPaymentQr(qrAmount);
     } else {
@@ -263,7 +264,7 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
       } else if (baseUrl.endsWith('/')) {
         baseUrl = baseUrl.substring(0, baseUrl.length - 1);
       }
-      final url = Uri.parse('$baseUrl/api/v1/line/push-receipt-image');
+      final url = Uri.parse('$baseUrl/api/v1/line-internal/push-receipt-image');
 
       LoggerService.info('PaymentModal',
           '📤 [Line] Sending receipt image for #$orderId → $lineUserId');
@@ -504,6 +505,7 @@ mixin PaymentModalControllerMixin<T extends ConsumerStatefulWidget>
               payments: paymentsSnapshot,
               cashierName: cashierNameStr,
               receiptService: receiptService,
+              remark: noteCtrl.text.trim(),
               onBarcodeScanned: (barcode, _) {
                 Future.delayed(const Duration(milliseconds: 150), () {
                   LoggerService.info('PaymentModal',

@@ -10,8 +10,17 @@ extension ProductStockHistoryTabExtension on _ProductFormDialogState {
       // ดึงจาก stockledger เฉพาะ PURCHASE_IN / STOCK_IN / ADJUST_ADD
       final raw = await repo.getStockMovements(widget.product!.id);
       final filtered = raw
-          .where((r) => ['PURCHASE_IN', 'STOCK_IN', 'ADJUST_ADD', 'RETURN_IN', 'ADJUST_CORRECT', 'ADJUST_SUB', 'ADJUST_FIX']
-              .contains(r['transactionType']?.toString()))
+          .where((r) => [
+                'PURCHASE_IN',
+                'STOCK_IN',
+                'STOCK_IN_APP',
+                'ADJUST_ADD',
+                'RETURN_IN',
+                'ADJUST_CORRECT',
+                'ADJUST_SUB',
+                'ADJUST_FIX',
+                'ADJUST_FIX_APP',
+              ].contains(r['transactionType']?.toString()))
           .toList();
       if (mounted) setState(() => _stockInHistory = filtered);
     } catch (e) {

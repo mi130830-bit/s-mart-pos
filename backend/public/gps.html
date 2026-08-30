@@ -382,9 +382,9 @@
                     <span class="badge-online">เปิดร้าน</span></div>
                     <a href="https://www.google.com/maps/dir/?api=1&destination=${STORE_LAT},${STORE_LNG}" target="_blank" style="display:block;margin-top:10px;text-align:center;padding:6px;background:rgba(99,102,241,0.2);border-radius:6px;color:#c7d2fe;text-decoration:none;font-weight:600;border:1px solid rgba(99,102,241,0.5);">📍 นำทางมาร้าน</a>`);
 
-    // วงกลมรัศมี 200m รอบร้าน
+    // วงกลมรัศมี 100m รอบร้าน
     L.circle([STORE_LAT, STORE_LNG], {
-        radius: 200,
+        radius: 100,
         color: '#6366f1', fillColor: '#6366f1',
         fillOpacity: 0.07, weight: 1.5, dashArray: '6,4'
     }).addTo(map);

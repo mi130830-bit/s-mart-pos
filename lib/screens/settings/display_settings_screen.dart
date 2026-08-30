@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,10 +22,24 @@ class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
   bool _autoOpenDisplay = false;
   bool _isLoading = true;
 
+  // LINE OA Settings
+  final TextEditingController _lineOaUrlCtrl = TextEditingController();
+  final TextEditingController _lineOaIdCtrl = TextEditingController();
+  String? _lineOaQrBase64;
+  bool _showLineOaOnDisplay = true;
+  bool _showLineOaOnReceipt = true;
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _lineOaUrlCtrl.dispose();
+    _lineOaIdCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -31,6 +48,11 @@ class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
     setState(() {
       _darkMode = prefs.getBool('dark_mode') ?? false;
       _autoOpenDisplay = prefs.getBool('auto_open_customer_display') ?? false;
+      _lineOaUrlCtrl.text = prefs.getString('line_oa_url') ?? '';
+      _lineOaIdCtrl.text = prefs.getString('line_oa_id') ?? '';
+      _lineOaQrBase64 = prefs.getString('line_oa_qr_image_base64');
+      _showLineOaOnDisplay = prefs.getBool('show_line_oa_on_display') ?? true;
+      _showLineOaOnReceipt = prefs.getBool('show_line_oa_on_receipt') ?? true;
       _isLoading = false;
     });
   }
@@ -39,13 +61,54 @@ class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('dark_mode', _darkMode);
     await prefs.setBool('auto_open_customer_display', _autoOpenDisplay);
+    await prefs.setString('line_oa_url', _lineOaUrlCtrl.text.trim());
+    await prefs.setString('line_oa_id', _lineOaIdCtrl.text.trim());
+    if (_lineOaQrBase64 != null) {
+      await prefs.setString('line_oa_qr_image_base64', _lineOaQrBase64!);
+    } else {
+      await prefs.remove('line_oa_qr_image_base64');
+    }
+    await prefs.setBool('show_line_oa_on_display', _showLineOaOnDisplay);
+    await prefs.setBool('show_line_oa_on_receipt', _showLineOaOnReceipt);
+
+    // Notify customer display to reload settings
+    try {
+      await CustomerDisplayService().reloadSettings();
+    } catch (_) {}
 
     if (!mounted) return;
     AlertService.show(
       context: context,
-      message: 'บันทึกการตั้งค่าหน้าจอเรียบร้อย',
+      message: 'บันทึกการตั้งค่าเรียบร้อยแล้ว',
       type: 'success',
     );
+  }
+
+  Future<void> _pickLineOaQrImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 600,
+        imageQuality: 75,
+      );
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _lineOaQrBase64 = base64Encode(bytes);
+        });
+        await _saveSettings();
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
+
+  void _removeLineOaQrImage() async {
+    setState(() {
+      _lineOaQrBase64 = null;
+    });
+    await _saveSettings();
   }
 
   Future<void> _openCustomerDisplay() async {
@@ -206,6 +269,193 @@ class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
                         onTap: _openCustomerDisplay,
                       ),
                     ],
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                // ── LINE Official Account (LINE OA) Card ──
+                _buildSectionHeader('LINE Official Account (LINE OA) & QR Code',
+                    Icons.qr_code_2, const Color(0xFF059669)),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('แสดง QR LINE OA ที่หน้าจอลูกค้า'),
+                          subtitle: const Text(
+                              'แสดงอัตโนมัติที่ช่องขวาล่าง และสลับเป็น PromptPay เมื่อชำระเงิน'),
+                          secondary: const Icon(Icons.monitor,
+                              color: Color(0xFF059669)),
+                          value: _showLineOaOnDisplay,
+                          onChanged: (val) {
+                            setState(() => _showLineOaOnDisplay = val);
+                            _saveSettings();
+                          },
+                        ),
+                        const Divider(),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title:
+                              const Text('พิมพ์ QR LINE OA ที่ท้ายสลิปใบเสร็จ 80mm'),
+                          subtitle: const Text(
+                              'พิมพ์ QR สมัครสมาชิก/สั่งของออนไลน์ที่ท้ายใบเสร็จ'),
+                          secondary: const Icon(Icons.receipt_long,
+                              color: Color(0xFF059669)),
+                          value: _showLineOaOnReceipt,
+                          onChanged: (val) {
+                            setState(() => _showLineOaOnReceipt = val);
+                            _saveSettings();
+                          },
+                        ),
+                        const Divider(),
+                        const SizedBox(height: 8),
+
+                        // Form Inputs
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 6,
+                              child: Column(
+                                children: [
+                                  TextFormField(
+                                    controller: _lineOaUrlCtrl,
+                                    decoration: const InputDecoration(
+                                      labelText: 'LINE OA Link / URL',
+                                      hintText: 'https://lin.ee/xxxxx',
+                                      prefixIcon: Icon(Icons.link,
+                                          color: Color(0xFF059669)),
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextFormField(
+                                    controller: _lineOaIdCtrl,
+                                    decoration: const InputDecoration(
+                                      labelText: 'LINE ID (ข้อความแสดงใต้ QR)',
+                                      hintText: '@smartpos',
+                                      prefixIcon: Icon(Icons.chat_bubble_outline,
+                                          color: Color(0xFF059669)),
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: _pickLineOaQrImage,
+                                        icon: const Icon(Icons.upload_file),
+                                        label: const Text(
+                                            'อัปโหลดรูป QR Code'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              const Color(0xFF059669),
+                                          foregroundColor: Colors.white,
+                                        ),
+                                      ),
+                                      if (_lineOaQrBase64 != null) ...[
+                                        const SizedBox(width: 8),
+                                        TextButton.icon(
+                                          onPressed: _removeLineOaQrImage,
+                                          icon: const Icon(Icons.delete_outline,
+                                              color: Colors.red),
+                                          label: const Text('ลบรูป',
+                                              style: TextStyle(
+                                                  color: Colors.red)),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+
+                            // QR Preview Box
+                            Expanded(
+                              flex: 4,
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'ตัวอย่าง QR บนหน้าจอ/สลิป',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF64748B)),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    if (_lineOaQrBase64 != null)
+                                      Image.memory(
+                                        base64Decode(_lineOaQrBase64!),
+                                        width: 110,
+                                        height: 110,
+                                        fit: BoxFit.contain,
+                                      )
+                                    else if (_lineOaUrlCtrl.text.isNotEmpty)
+                                      QrImageView(
+                                        data: _lineOaUrlCtrl.text.trim(),
+                                        size: 110,
+                                        backgroundColor: Colors.white,
+                                      )
+                                    else
+                                      Container(
+                                        width: 110,
+                                        height: 110,
+                                        color: Colors.grey.shade200,
+                                        child: const Center(
+                                          child: Icon(Icons.qr_code,
+                                              size: 48,
+                                              color: Colors.grey),
+                                        ),
+                                      ),
+                                    if (_lineOaIdCtrl.text.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'LINE: ${_lineOaIdCtrl.text.trim()}',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF059669)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: _saveSettings,
+                            icon: const Icon(Icons.save),
+                            label: const Text('บันทึกการตั้งค่า LINE OA'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF059669),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

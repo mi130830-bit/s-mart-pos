@@ -32,6 +32,8 @@ class ReprintDialog extends StatelessWidget {
   /// The controller closes the dialog and forwards the barcode to POS.
   final void Function(String barcode, BuildContext ctx)? onBarcodeScanned;
 
+  final String? remark;
+
   const ReprintDialog({
     super.key,
     required this.orderId,
@@ -45,10 +47,15 @@ class ReprintDialog extends StatelessWidget {
     required this.payments,
     required this.cashierName,
     required this.receiptService,
+    this.remark,
     this.onBarcodeScanned,
   });
 
   void _print80mm(BuildContext ctx) {
+    final String effectiveRemark = (remark != null && remark!.trim().isNotEmpty)
+        ? '${remark!.trim()} (สำเนา)'
+        : 'ใบเสร็จรับเงิน (สำเนา)';
+
     receiptService.printReceipt(
       orderId: orderId,
       items: items,
@@ -60,12 +67,16 @@ class ReprintDialog extends StatelessWidget {
       change: change,
       payments: payments,
       cashierName: cashierName,
-      remark: 'ใบเสร็จรับเงิน (สำเนา)',
+      remark: effectiveRemark,
     );
     Navigator.pop(ctx);
   }
 
   void _printA5(BuildContext ctx) {
+    final String effectiveRemark = (remark != null && remark!.trim().isNotEmpty)
+        ? '${remark!.trim()} (สำเนา)'
+        : 'ใบเสร็จรับเงิน (สำเนา)';
+
     receiptService.printReceipt(
       orderId: orderId,
       items: items,
@@ -77,7 +88,7 @@ class ReprintDialog extends StatelessWidget {
       change: change,
       payments: payments,
       cashierName: cashierName,
-      remark: 'ใบเสร็จรับเงิน (สำเนา)',
+      remark: effectiveRemark,
       pageFormatOverride: PdfPageFormat.a5,
       useCashBillSettings: true,
     );

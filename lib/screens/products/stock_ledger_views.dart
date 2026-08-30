@@ -559,6 +559,7 @@ class _GenericStockHistoryListState extends State<GenericStockHistoryList> {
   Color _getTypeColor(String type) {
     if (type.contains('IN') || type.contains('ADD')) return Colors.green;
     if (type.contains('OUT') || type.contains('SUB')) return Colors.red;
+    if (type.contains('FIX')) return Colors.blue;
     return Colors.grey;
   }
 
@@ -574,6 +575,14 @@ class _GenericStockHistoryListState extends State<GenericStockHistoryList> {
         return 'ปรับลด';
       case 'ADJUST_FIX':
         return 'ปรับยอด (Count)';
+      case 'ADJUST_FIX_APP':
+        return 'ตรวจนับ (S-Link)';
+      case 'STOCK_IN':
+        return 'รับเข้า';
+      case 'STOCK_IN_APP':
+        return 'รับเข้า (S-Link)';
+      case 'ADJUST_CORRECT':
+        return 'แก้ไขยอด (Revert)';
       case 'RETURN_IN':
         return 'รับคืน';
       default:

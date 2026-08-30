@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:decimal/decimal.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../models/order_item.dart';
 import '../../../models/customer.dart';
@@ -49,6 +51,18 @@ class CashReceiptHandler {
       Uint8List bytes;
 
       if (isThermal) {
+        final prefs = await SharedPreferences.getInstance();
+        final showLineOa = prefs.getBool('show_line_oa_on_receipt') ?? true;
+        final lineOaUrl = prefs.getString('line_oa_url');
+        final lineOaId = prefs.getString('line_oa_id');
+        final lineOaQrBase64 = prefs.getString('line_oa_qr_image_base64');
+        Uint8List? lineOaQrBytes;
+        if (lineOaQrBase64 != null && lineOaQrBase64.isNotEmpty) {
+          try {
+            lineOaQrBytes = base64Decode(lineOaQrBase64);
+          } catch (_) {}
+        }
+
         bytes = await ThermalReceiptPdf.generate(
           orderId: orderId,
           items: items,
@@ -62,7 +76,12 @@ class CashReceiptHandler {
           pageFormat: pageFormat,
           shopInfo: shopInfo,
           cashierName: cashierName,
+          remark: remark,
           shopLogoBytes: shopLogoBytes,
+          showLineOa: showLineOa,
+          lineOaUrl: lineOaUrl,
+          lineOaId: lineOaId,
+          lineOaQrBytes: lineOaQrBytes,
         );
       } else {
         final isContinuous = pageFormat.width > 200 * PdfPageFormat.mm;

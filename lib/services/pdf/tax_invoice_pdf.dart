@@ -17,6 +17,7 @@ class TaxInvoicePdf {
     required Customer customer,
     required PdfPageFormat pageFormat,
     required ShopInfo shopInfo,
+    String? remark,
     Uint8List? shopLogoBytes,
   }) async {
     final font = await PdfHelper.getFontRegular();
@@ -116,7 +117,7 @@ class TaxInvoicePdf {
 
                   // --- FOOTER (Every Page) ---
                   _buildFooter(total, vatAmount, grandTotal, moneyFmt, font,
-                      fontBold, globalFontSize, spaceBeforeSignature),
+                      fontBold, globalFontSize, spaceBeforeSignature, remark: remark),
                 ],
               ),
             );
@@ -324,13 +325,27 @@ class TaxInvoicePdf {
       pw.Font font,
       pw.Font fontBold,
       double globalFontSize,
-      double spaceBeforeSignature) {
+      double spaceBeforeSignature,
+      {String? remark}) {
     return pw.Column(
       children: [
-        // Aggregates
+        // Aggregates & Remarks
         pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.end,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
+            pw.Expanded(
+              child: (remark != null && remark.trim().isNotEmpty)
+                  ? pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('หมายเหตุ: ${remark.trim()}',
+                            style: pw.TextStyle(
+                                font: font, fontSize: globalFontSize)),
+                      ],
+                    )
+                  : pw.SizedBox(),
+            ),
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
@@ -349,7 +364,7 @@ class TaxInvoicePdf {
         // Signatures
         pw.SizedBox(
             height:
-                20), // Extra spacing logic from DeliveryNote? No, DeliveryNote uses _buildSignatureBox which has internal text.
+                20),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
           children: [

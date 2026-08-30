@@ -30,12 +30,20 @@ extension PosOrderExtension on PosStateNotifier {
 
   Future<void> showPaymentQr(double amount) async {
     final globalSettings = SettingsService();
-    final mode = globalSettings.getString('payment_qr_mode') ?? 'dynamic';
     String qrData = '';
-    if (mode == 'dynamic') {
-      final promptPayId = globalSettings.promptPayId;
-      if (promptPayId.isNotEmpty) {
-        qrData = PromptPayHelper.generatePayload(promptPayId, amount: amount);
+
+    // Check promptpay_id first, then fallback to bank_account if configured
+    String promptPayId = globalSettings.promptPayId.trim();
+    if (promptPayId.isEmpty) {
+      promptPayId = (globalSettings.getString('bank_account') ?? '').trim();
+    }
+
+    if (promptPayId.isNotEmpty) {
+      try {
+        qrData = PromptPayHelper.generatePayload(promptPayId,
+            amount: amount > 0 ? amount : null);
+      } catch (e) {
+        debugPrint('PromptPay Generate Error: $e');
       }
     }
     await _hardwareService.showQrCode(
@@ -65,6 +73,7 @@ extension PosOrderExtension on PosStateNotifier {
         pointRedemptionBase: pointRedemptionBase,
         couponCode: _appliedCouponCode,
         couponDiscountAmount: _couponDiscountAmount,
+        sourceOnlineOrderId: _sourceOnlineOrderId,
         activePromotions: _activePromotions,
         currentTier: currentTier,
       );

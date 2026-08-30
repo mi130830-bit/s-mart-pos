@@ -36,6 +36,7 @@ import 'services/alert_service.dart';
 import 'services/hr/attendance_sync_service.dart';
 import 'services/hr/advance_sync_service.dart';
 import 'services/hr/fingerprint_attendance_service.dart';
+import 'services/ai/face_receptionist_service.dart';
 
 void main(List<String> args) {
   runZonedGuarded(
@@ -203,6 +204,10 @@ void main(List<String> args) {
           // ✅ Start fingerprint background listener (Global, no UI needed)
           // ⚠️ Fail-Safe: ถ้าไม่มีอุปกรณ์ต่ออยู่จะ Skip เงียบๆ ไม่ทำให้แอปพัง
           FingerprintAttendanceService().start();
+
+          // ✅ Start Face AI Receptionist Camera (Background/Headless)
+          // ⚠️ Fail-Safe: ถ้าไม่มีกล้อง Webcam ต่ออยู่จะ Skip เงียบๆ ไม่ทำให้แอปพัง
+          FaceReceptionistService().start();
         } catch (e) {
           debugPrint('⚠️ [Background Init Error]: $e');
         }
@@ -225,14 +230,28 @@ class PosApp extends ConsumerStatefulWidget {
   ConsumerState<PosApp> createState() => _PosAppState();
 }
 
-class _PosAppState extends ConsumerState<PosApp> {
+class _PosAppState extends ConsumerState<PosApp> with WindowListener {
   @override
   void initState() {
     super.initState();
+    windowManager.addListener(this);
     _setupWindow();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authProvider.notifier).tryAutoLogin();
     });
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    FaceReceptionistService().stop();
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    await FaceReceptionistService().stop();
+    await windowManager.destroy();
   }
 
   Future<void> _setupWindow() async {

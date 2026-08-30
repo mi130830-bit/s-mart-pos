@@ -66,6 +66,8 @@ class PosState {
   final int pointsToRedeem;
   final double couponDiscountAmount;
   final String? appliedCouponCode;
+  final int? sourceOnlineOrderId;
+  final bool sourceCouponLocked;
   final int currentBranchId;
   final String shopName;
   final bool allowNegativeStock;
@@ -92,6 +94,8 @@ class PosState {
     this.pointsToRedeem = 0,
     this.couponDiscountAmount = 0.0,
     this.appliedCouponCode,
+    this.sourceOnlineOrderId,
+    this.sourceCouponLocked = false,
     this.currentBranchId = 1,
     this.shopName = '',
     this.allowNegativeStock = true,
@@ -125,6 +129,8 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
       pointsToRedeem: _pointsToRedeem,
       couponDiscountAmount: _couponDiscountAmount,
       appliedCouponCode: _appliedCouponCode,
+      sourceOnlineOrderId: _sourceOnlineOrderId,
+      sourceCouponLocked: isSourceCouponLocked,
       currentBranchId: _currentBranchId,
       shopName: _shopName,
       allowNegativeStock: _allowNegativeStock,
@@ -204,8 +210,15 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
   // ✅ Coupon Discount State
   double _couponDiscountAmount = 0.0;
   String? _appliedCouponCode;
+  int? _sourceOnlineOrderId;
+  String? _sourceReservedCouponCode;
   double get couponDiscountAmount => _couponDiscountAmount;
   String? get appliedCouponCode => _appliedCouponCode;
+  int? get sourceOnlineOrderId => _sourceOnlineOrderId;
+  bool get isSourceCouponLocked =>
+      _sourceOnlineOrderId != null &&
+      _sourceReservedCouponCode != null &&
+      _sourceReservedCouponCode == _appliedCouponCode;
 
   final int _currentBranchId = 1;
   int get currentBranchId => _currentBranchId;
@@ -316,6 +329,8 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
     _pointsToRedeem = 0;
     _couponDiscountAmount = 0.0;
     _appliedCouponCode = null;
+    _sourceOnlineOrderId = null;
+    _sourceReservedCouponCode = null;
     _cartService.clearCart();
   }
 
@@ -332,6 +347,25 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
         discountVal: _billDiscount,
         isPercent: _isPercentDiscount,
         userId: _authUser?.id.toString());
+    final prefs = await SharedPreferences.getInstance();
+    final prefix = _authUser?.id != null ? '${_authUser!.id}_' : '';
+    if (_sourceOnlineOrderId == null) {
+      await prefs.remove('${prefix}cart_source_online_order_id');
+      await prefs.remove('${prefix}cart_source_coupon_code');
+      await prefs.remove('${prefix}cart_source_coupon_discount');
+    } else {
+      await prefs.setInt(
+          '${prefix}cart_source_online_order_id', _sourceOnlineOrderId!);
+      if (_sourceReservedCouponCode == null) {
+        await prefs.remove('${prefix}cart_source_coupon_code');
+        await prefs.remove('${prefix}cart_source_coupon_discount');
+      } else {
+        await prefs.setString(
+            '${prefix}cart_source_coupon_code', _sourceReservedCouponCode!);
+        await prefs.setDouble(
+            '${prefix}cart_source_coupon_discount', _couponDiscountAmount);
+      }
+    }
   }
 
   Future<void> _loadCartFromPrefs() async {
@@ -355,9 +389,34 @@ class PosStateNotifier extends AutoDisposeNotifier<PosState> {
     _billDiscount = prefs.getDouble('${prefix}cart_discount') ?? 0.0;
     _isPercentDiscount =
         prefs.getBool('${prefix}cart_is_percent_discount') ?? false;
+    _sourceOnlineOrderId = prefs.getInt('${prefix}cart_source_online_order_id');
+    _sourceReservedCouponCode =
+        prefs.getString('${prefix}cart_source_coupon_code');
+    if (_sourceOnlineOrderId != null && _sourceReservedCouponCode != null) {
+      _appliedCouponCode = _sourceReservedCouponCode;
+      _couponDiscountAmount =
+          prefs.getDouble('${prefix}cart_source_coupon_discount') ?? 0.0;
+    }
 
     await _cartService.loadCartFromPrefs((loadedItems) {},
         userId: _authUser?.id.toString());
+  }
+
+  Future<void> attachOnlineOrderSource(
+    int orderId, {
+    String? reservedCouponCode,
+    double reservedCouponDiscount = 0.0,
+  }) async {
+    _sourceOnlineOrderId = orderId;
+    _sourceReservedCouponCode = reservedCouponCode?.trim().toUpperCase();
+    if (_sourceReservedCouponCode != null) {
+      _pointsToRedeem = 0;
+      _appliedCouponCode = _sourceReservedCouponCode;
+      _couponDiscountAmount = reservedCouponDiscount;
+    }
+    _invalidateCalcCache();
+    await _saveCartToPrefs();
+    _notify();
   }
 
   // --- Held Bills ---

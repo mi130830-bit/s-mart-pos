@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/point_reward.dart';
 import '../services/mysql_service.dart';
+import '../services/sales/coupon_eligibility_rules.dart';
 
 class RedemptionRecord {
   final int id;
@@ -66,6 +67,9 @@ class CouponValidationResult {
   final String? rewardName;
   final String? customerName;
   final DateTime? expiresAt;
+  final String? status;
+  final int? reservedOnlineOrderId;
+  final DateTime? reservedUntil;
 
   CouponValidationResult.valid({
     required this.couponCode,
@@ -73,6 +77,9 @@ class CouponValidationResult {
     required this.rewardName,
     required this.customerName,
     required this.expiresAt,
+    this.status,
+    this.reservedOnlineOrderId,
+    this.reservedUntil,
   })  : isValid = true,
         error = null;
 
@@ -82,7 +89,10 @@ class CouponValidationResult {
         discountValue = null,
         rewardName = null,
         customerName = null,
-        expiresAt = null;
+        expiresAt = null,
+        status = null,
+        reservedOnlineOrderId = null,
+        reservedUntil = null;
 }
 
 class RewardRepository {
@@ -253,23 +263,46 @@ class RewardRepository {
 
   // Phase 2: Validate a coupon code (called from POS payment)
   Future<CouponValidationResult> validateCoupon(String code,
-      {required int customerId}) async {
+      {required int customerId, int? sourceOnlineOrderId}) async {
     if (!_dbService.isConnected()) await _dbService.connect();
     try {
       // Auto-expire
       await _dbService.execute(
           "UPDATE reward_coupon SET status = 'EXPIRED' WHERE expires_at < NOW() AND status = 'ACTIVE'");
 
-      final results = await _dbService.query('''
-        SELECT rc.coupon_code, rc.discount_value, rc.expires_at, rc.status,
-               pr.name as reward_name,
-               c.firstName, c.lastName, c.phone
-        FROM reward_coupon rc
-        JOIN point_reward pr ON rc.reward_id = pr.id
-        JOIN customer c ON rc.customer_id = c.id
-        WHERE rc.coupon_code = :code AND rc.customer_id = :customerId
-        LIMIT 1
-      ''', {'code': code.toUpperCase(), 'customerId': customerId});
+      List<Map<String, dynamic>> results;
+      try {
+        results = await _dbService.query('''
+          SELECT rc.coupon_code, rc.discount_value, rc.expires_at, rc.status,
+                 rc.reserved_online_order_id, rc.reserved_until,
+                 o.couponCode AS source_coupon_code,
+                 o.couponDiscount AS source_coupon_discount,
+                 o.customerId AS source_customer_id,
+                 pr.name as reward_name,
+                 c.firstName, c.lastName, c.phone
+          FROM reward_coupon rc
+          JOIN point_reward pr ON rc.reward_id = pr.id
+          JOIN customer c ON rc.customer_id = c.id
+          LEFT JOIN online_orders o ON o.id = rc.reserved_online_order_id
+          WHERE rc.coupon_code = :code AND rc.customer_id = :customerId
+          LIMIT 1
+        ''', {'code': code.toUpperCase(), 'customerId': customerId});
+      } catch (_) {
+        // Old databases support ordinary ACTIVE coupons only.
+        results = await _dbService.query('''
+          SELECT rc.coupon_code, rc.discount_value, rc.expires_at, rc.status,
+                 NULL AS reserved_online_order_id, NULL AS reserved_until,
+                 NULL AS source_coupon_code, NULL AS source_coupon_discount,
+                 NULL AS source_customer_id,
+                 pr.name as reward_name,
+                 c.firstName, c.lastName, c.phone
+          FROM reward_coupon rc
+          JOIN point_reward pr ON rc.reward_id = pr.id
+          JOIN customer c ON rc.customer_id = c.id
+          WHERE rc.coupon_code = :code AND rc.customer_id = :customerId
+          LIMIT 1
+        ''', {'code': code.toUpperCase(), 'customerId': customerId});
+      }
 
       if (results.isEmpty) {
         return CouponValidationResult.invalid('ไม่พบคูปองนี้ในระบบ');
@@ -282,21 +315,56 @@ class RewardRepository {
       if (status == 'EXPIRED') {
         return CouponValidationResult.invalid('คูปองนี้หมดอายุแล้ว');
       }
+      final reservedOnlineOrderId =
+          int.tryParse(r['reserved_online_order_id']?.toString() ?? '');
+      final reservedUntil =
+          DateTime.tryParse(r['reserved_until']?.toString() ?? '');
+      if (!CouponEligibilityRules.canUse(
+        status: status,
+        requestedSourceOnlineOrderId: sourceOnlineOrderId,
+        reservedOnlineOrderId: reservedOnlineOrderId,
+        reservedUntil: reservedUntil,
+        now: DateTime.now(),
+      )) {
+        return CouponValidationResult.invalid(
+            'คูปองนี้ถูกสำรองไว้สำหรับออเดอร์ออนไลน์อื่น หรือหมดเวลาสำรองแล้ว');
+      }
+
+      var applicableDiscount =
+          double.tryParse(r['discount_value']?.toString() ?? '0') ?? 0;
+      if (status.toUpperCase() == 'RESERVED') {
+        final sourceCode = r['source_coupon_code']?.toString().toUpperCase();
+        final sourceCustomerId =
+            int.tryParse(r['source_customer_id']?.toString() ?? '');
+        final sourceDiscount =
+            double.tryParse(r['source_coupon_discount']?.toString() ?? '');
+        if (sourceCode != code.toUpperCase() ||
+            sourceCustomerId != customerId ||
+            sourceDiscount == null ||
+            sourceDiscount <= 0 ||
+            sourceDiscount > applicableDiscount + 0.01) {
+          return CouponValidationResult.invalid(
+              'ข้อมูลส่วนลดคูปองที่สำรองไว้ไม่ตรงกับออเดอร์ออนไลน์');
+        }
+        applicableDiscount = sourceDiscount;
+      }
 
       final fname = r['firstName']?.toString() ?? '';
       final lname = r['lastName']?.toString() ?? '';
 
       return CouponValidationResult.valid(
         couponCode: r['coupon_code']?.toString(),
-        discountValue:
-            double.tryParse(r['discount_value']?.toString() ?? '0') ?? 0,
+        discountValue: applicableDiscount,
         rewardName: r['reward_name']?.toString(),
         customerName: '$fname $lname'.trim(),
         expiresAt: DateTime.tryParse(r['expires_at']?.toString() ?? ''),
+        status: status.toUpperCase(),
+        reservedOnlineOrderId: reservedOnlineOrderId,
+        reservedUntil: reservedUntil,
       );
     } catch (e) {
       debugPrint('Error validating coupon: $e');
-      return CouponValidationResult.invalid('เกิดข้อผิดพลาด: $e');
+      return CouponValidationResult.invalid('ไม่สามารถตรวจสอบคูปองได้');
     }
   }
 
@@ -305,11 +373,17 @@ class RewardRepository {
     if (!_dbService.isConnected()) await _dbService.connect();
     try {
       await _dbService.execute(
-        "UPDATE reward_coupon SET status = 'USED', used_at = NOW(), order_id = :orderId WHERE coupon_code = '${code.toUpperCase()}'",
-        {'orderId': orderId},
+        '''UPDATE reward_coupon
+           SET status = 'USED', used_at = NOW(), order_id = :orderId
+           WHERE coupon_code = :code''',
+        {'orderId': orderId, 'code': code.toUpperCase()},
       );
       await _dbService.execute(
-        "UPDATE reward_redemption rr JOIN reward_coupon rc ON rc.redemption_id = rr.id SET rr.status = 'FULFILLED' WHERE rc.coupon_code = '${code.toUpperCase()}'",
+        '''UPDATE reward_redemption rr
+           JOIN reward_coupon rc ON rc.redemption_id = rr.id
+           SET rr.status = 'FULFILLED'
+           WHERE rc.coupon_code = :code''',
+        {'code': code.toUpperCase()},
       );
       return true;
     } catch (e) {

@@ -18,6 +18,8 @@ import '../../../../repositories/product_price_tier_repository.dart';
 import '../../../../services/alert_service.dart';
 import '../../../../services/barcode_product_lookup_service.dart';
 import '../../../../utils/barcode_utils.dart';
+import '../../../../utils/product_image_helper.dart';
+import '../../../../services/api_service.dart';
 import '../../widgets/product_search_dialog_for_select.dart';
 import '../../widgets/supplier_search_dialog.dart';
 import '../../widgets/component_row.dart';

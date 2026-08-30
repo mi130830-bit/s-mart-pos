@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>โปรแกรมคำนวณวัสดุก่อสร้าง V19 (แก้สเปคฝ้า)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #f1f5f9; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; height: 250px; margin: 0 auto; }
+        .nav-item.active { border-bottom: 3px solid #dc2626; color: #dc2626; font-weight: 600; }
+        .void-table th, .void-table td { padding: 0.5rem; text-align: left; font-size: 0.875rem; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="text-slate-800 pb-20">
+
+    <!-- Navbar -->
+    <nav class="bg-white shadow-md sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🏗️</span>
+                    <div>
+                        <h1 class="font-bold text-lg text-red-700">ConCal V19 <span class="text-xs font-normal text-slate-500">| ปรับสเปคฝ้า</span></h1>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Tabs -->
+    <div class="bg-red-50 border-b border-red-100 overflow-x-auto scrollbar-hide">
+        <div class="max-w-6xl mx-auto px-4 flex space-x-6 whitespace-nowrap py-3 text-sm md:text-base">
+            <button class="nav-item active" onclick="switchTab('ceiling')">1. ฝ้าเพดาน (อัปเดต)</button>
+            <button class="nav-item" onclick="switchTab('roof')">2. หลังคา</button>
+            <button class="nav-item" onclick="switchTab('concrete')">3. คอนกรีต</button>
+            <button class="nav-item" onclick="switchTab('wall')">4. ผนัง</button>
+            <button class="nav-item" onclick="switchTab('paint')">5. งานสี</button>
+            <button class="nav-item text-orange-600" onclick="switchTab('summary')">📊 สรุป (BOQ)</button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+        <!-- SECTION: CEILING (V19 - Updated Specs) -->
+        <section id="section-ceiling" class="block animate-fade-in">
+             <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-600">
+                    <h3 class="text-lg font-bold mb-4 text-blue-800">1. คำนวณฝ้าเพดาน (สเปคใหม่)</h3>
+                    
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-sm font-medium">กว้าง (ม.)</label><input type="number" id="ceil-w" class="w-full border p-2 rounded focus:ring-blue-500" placeholder="0.00"></div>
+                            <div><label class="text-sm font-medium">ยาว (ม.)</label><input type="number" id="ceil-l" class="w-full border p-2 rounded focus:ring-blue-500" placeholder="0.00"></div>
+                        </div>
+                        
+                        <div>
+                            <label class="text-sm font-medium">ระบบฝ้า</label>
+                            <select id="ceil-type" class="w-full border p-2 rounded mt-1 bg-slate-50">
+                                <option value="tbar">ฝ้าทีบาร์ (60x60)</option>
+                                <option value="smooth">ฝ้าฉาบเรียบ (ยิปซั่ม)</option>
+                            </select>
+                        </div>
+
+                        <!-- Specs Info Box -->
+                        <div class="bg-blue-50 p-3 rounded text-xs text-blue-800 space-y-1">
+                            <strong>สเปคคำนวณ:</strong>
+                            <div id="spec-info-tbar">
+                                • ทีเมนยาว 4.0 ม. (วางระยะ 0.60 ม.)<br>
+                                • ทีซอยยาว 0.6 ม.<br>
+                                • ฉากริมยาว 4.0 ม.
+                            </div>
+                            <div id="spec-info-smooth" class="hidden">
+                                • ซีไลน์ยาว 4.0 ม.<br>
+                                • ฉากริมยาว 2.4 ม.
+                            </div>
+                        </div>
+
+                        <button onclick="calculateCeiling()" class="w-full bg-blue-600 text-white py-3 rounded-lg shadow hover:bg-blue-700 font-bold text-lg mt-2">คำนวณวัสดุ</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h4 class="font-bold text-slate-800 text-lg">รายการวัสดุ</h4>
+                        <span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">พื้นที่: <span id="res-ceil-area">0</span> ตร.ม.</span>
+                    </div>
+                    
+                    <div id="res-ceil-content" class="space-y-3 text-sm">
+                        <div class="text-center text-slate-400 py-4">กรุณากรอกขนาดและกดคำนวณ</div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-dashed text-[10px] text-slate-400">
+                        *สูตรคำนวณเผื่อเศษตัดตก 5-10% แล้ว<br>
+                        *ทีบาร์คิดแบบวางเมนถี่ (0.60ม.) เพื่อใช้ทีซอย 0.6ม. อย่างเดียว
+                    </div>
+
+                    <button onclick="addToSummary('ceiling')" class="w-full mt-4 border border-blue-600 text-blue-600 py-2 rounded-lg hover:bg-blue-50 font-medium hidden" id="btn-add-ceil">+ บันทึกลงรายการสรุป</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: ROOF (V16) -->
+        <section id="section-roof" class="hidden animate-fade-in">
+             <div class="grid lg:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-md border-l-4 border-red-600">
+                    <h3 class="text-lg font-bold mb-2 text-red-800">2. คำนวณหลังคา</h3>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4 bg-red-50 p-3 rounded-lg border border-red-100"><div><label class="block text-sm font-bold text-red-900 mb-1">A. กว้าง (ม.)</label><input type="number" id="roof-w" class="w-full border p-2 rounded text-center"></div><div><label class="block text-sm font-bold text-red-900 mb-1">B. ยาวลาดเอียง</label><input type="number" id="roof-l" class="w-full border p-2 rounded text-center"></div></div>
+                        <div class="grid grid-cols-2 gap-4"><div><label class="text-sm">เผื่อชายคา</label><select id="roof-add" class="w-full border p-2 rounded"><option value="0">ไม่เผื่อ</option><option value="0.5" selected>+0.50 ม.</option><option value="1.0">+1.00 ม.</option></select></div><div><label class="text-sm">วัสดุ</label><select id="roof-type" class="w-full border p-2 rounded" onchange="updateSteelOptions()"><option value="metal">เมทัลชีท</option><option value="zinc">สังกะสี</option><option value="tile_cpac">ซีแพค</option><option value="tile_lon">ลอนคู่</option></select></div></div>
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <h4 class="text-sm font-bold text-slate-700 mb-3 border-b pb-1">⚙️ สเปคเหล็ก</h4>
+                            <div class="mb-3"><label class="text-xs text-red-600 font-bold block mb-1">อะเส</label><select id="steel-ase-type" class="w-full border p-2 rounded text-sm"><option value="2C-100">2C-100</option><option value="C-100">C-100</option><option value="BOX-4x4">กล่อง 4x4</option></select></div>
+                            <div class="mb-3"><label class="text-xs text-slate-500 block mb-1">จันทัน</label><select id="steel-rafter-type" class="w-full border p-2 rounded text-sm"><option value="C-100">C-100</option><option value="C-125">C-125</option><option value="BOX-4x2">กล่อง 4x2</option></select></div>
+                            <div><label class="text-xs text-slate-500 block mb-1">แป</label><select id="steel-purlin-type" class="w-full border p-2 rounded text-sm"><option value="C-75">C-75</option><option value="BOX-1.5">กล่อง 1.5</option><option value="BLUE">แปสำเร็จ</option></select></div>
+                            <p class="text-[10px] text-blue-500 mt-2 italic" id="purlin-note">*ระยะแปเมทัลชีท @1.00 ม.</p>
+                        </div>
+                        <button onclick="calculateRoof()" class="w-full bg-red-600 text-white py-3 rounded-lg shadow font-bold">คำนวณ</button>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2"><h4 class="font-bold text-slate-800 text-lg">รายการวัสดุ</h4><span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">พื้นที่: <span id="res-roof-area">0</span> ตร.ม.</span></div>
+                    <div id="res-roof-sheet-view" class="hidden mb-6"><div class="bg-red-50 p-6 rounded-xl border-2 border-red-200 text-center relative"><div class="absolute top-0 right-0 bg-red-500 text-white text-[10px] px-2 py-1">สั่งตัด</div><div class="text-xl font-bold text-slate-800">ขนาด/ยาว <span id="res-roof-len-final" class="text-red-600">0.00</span> ม. <span id="res-roof-qty-final" class="text-red-600">0</span> แผ่น</div></div></div>
+                    <div id="res-roof-tile-view" class="hidden text-center py-6 mb-6"><span class="text-4xl font-bold text-blue-600" id="res-roof-tile-count">0</span> <span class="text-lg text-slate-600">แผ่น</span></div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h5 class="font-bold text-slate-800 mb-3">🏗️ เหล็กโครงสร้าง (6 ม.)</h5>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex justify-between"><span>อะเส <span id="res-spec-ase" class="text-xs text-red-500"></span></span><span class="font-bold text-red-600" id="res-qty-ase">0 เส้น</span></li>
+                            <li class="flex justify-between"><span>จันทัน <span id="res-spec-rafter" class="text-xs text-blue-500"></span></span><span class="font-bold text-red-600" id="res-qty-rafter">0 เส้น</span></li>
+                            <li class="flex justify-between"><span>แป <span id="res-spec-purlin" class="text-xs text-blue-500"></span></span><span class="font-bold text-red-600" id="res-qty-purlin">0 เส้น</span></li>
+                        </ul>
+                        <div class="mt-2 text-xs text-right text-slate-500">สกรู: <span id="res-roof-screw" class="font-bold">0</span> ตัว</div>
+                    </div>
+                    <button onclick="addToSummary('roof')" class="w-full mt-6 border border-red-600 text-red-600 py-2 rounded-lg hover:bg-red-50 font-medium">+ บันทึก</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: CONCRETE (V17) -->
+        <section id="section-concrete" class="hidden animate-fade-in">
+             <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-600">
+                    <h3 class="text-lg font-bold mb-4 text-blue-800">3. งานคอนกรีต</h3>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4"><div><label class="text-sm">กว้าง</label><input type="number" id="conc-w" class="w-full border p-2 rounded"></div><div><label class="text-sm">ยาว</label><input type="number" id="conc-l" class="w-full border p-2 rounded"></div></div>
+                        <div><label class="text-sm">หนา(ซม.)</label><input type="number" id="conc-h" class="w-full border p-2 rounded" placeholder="10"></div>
+                        <div class="bg-blue-50 p-3 rounded border border-blue-100"><label class="text-sm font-bold text-blue-800 mb-1 block">เผื่อวัสดุ (Waste)</label><select id="conc-waste" class="w-full border p-2 rounded text-sm"><option value="1.00">0%</option><option value="1.05" selected>5%</option><option value="1.10">10%</option></select></div>
+                        <div class="flex items-center gap-2 mt-2"><input type="checkbox" id="conc-mesh-auto" class="w-5 h-5 text-blue-600 rounded" checked><label for="conc-mesh-auto" class="text-sm font-medium text-slate-700">Wire Mesh อัตโนมัติ</label></div>
+                        <div><label class="text-sm font-medium text-slate-700">สูตรผสม</label><select id="conc-type" class="w-full border p-2 rounded"><option value="standard">มาตรฐาน</option><option value="lean">หยาบ</option></select></div>
+                        <button onclick="calculateConcrete()" class="w-full bg-blue-600 text-white py-3 rounded-lg shadow font-bold">คำนวณ</button>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow border">
+                     <h4 class="font-bold text-slate-800 mb-2">ปริมาณวัสดุ</h4>
+                     <div class="text-3xl font-bold text-blue-500 mb-2"><span id="res-conc-vol">0.00</span> <span class="text-sm text-slate-500">คิว</span></div>
+                     <div class="space-y-3 text-sm border-t pt-4">
+                        <div id="res-mesh-container" class="hidden space-y-2 mb-4"><div class="bg-blue-50 p-3 rounded-lg border border-blue-200"><h5 class="font-bold text-blue-800 text-xs mb-2">🕸️ Wire Mesh</h5><ul id="res-mesh-list" class="space-y-1 pl-2"></ul></div></div>
+                        <div class="space-y-2 pt-2"><li class="flex justify-between"><span>ปูนแดง 50kg</span><span class="font-bold" id="res-conc-cem">0 ถุง</span></li><li class="flex justify-between"><span>ทราย</span><span class="font-bold" id="res-conc-sand">0 คิว</span></li><li class="flex justify-between"><span>หิน 3/4</span><span class="font-bold" id="res-conc-stone">0 คิว</span></li></div>
+                    </div>
+                    <button onclick="addToSummary('concrete')" class="w-full mt-6 border border-blue-600 text-blue-600 py-2 rounded text-sm hover:bg-blue-50 font-medium">+ บันทึก</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: WALL (V16) -->
+        <section id="section-wall" class="hidden animate-fade-in">
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-bold mb-4 text-blue-800">4. งานผนัง (ปูน 40กก.)</h3>
+                    <div class="space-y-3">
+                        <div class="bg-slate-50 p-3 rounded border"><span class="text-xs font-bold text-blue-600 block mb-2">ด้าน 1</span><div class="grid grid-cols-2 gap-3"><input type="number" id="wall-l-1" class="w-full border p-1 rounded text-sm" placeholder="ยาว"><input type="number" id="wall-h-1" class="w-full border p-1 rounded text-sm" placeholder="สูง"></div></div>
+                        <div class="bg-white p-3 rounded border"><span class="text-xs font-bold text-slate-500 block mb-2">ด้าน 2-4</span><div class="grid grid-cols-3 gap-2"><input type="number" id="wall-l-2" class="border p-1 rounded text-xs"><input type="number" id="wall-l-3" class="border p-1 rounded text-xs"><input type="number" id="wall-l-4" class="border p-1 rounded text-xs"></div><div class="grid grid-cols-3 gap-2 mt-1"><input type="number" id="wall-h-2" class="border p-1 rounded text-xs"><input type="number" id="wall-h-3" class="border p-1 rounded text-xs"><input type="number" id="wall-h-4" class="border p-1 rounded text-xs"></div></div>
+                    </div>
+                    <select id="wall-type" class="w-full border p-2 rounded mt-4"><option value="block">อิฐบล็อก</option><option value="red">อิฐมอญแดง</option><option value="light">อิฐมวลเบา</option></select>
+                    <div class="bg-orange-50 p-3 rounded border mt-4"><span class="text-xs font-bold text-orange-800">หักช่องเปิด</span><div class="grid grid-cols-3 gap-2 mt-1"><input id="wall-void-w" class="border p-1 text-sm"><input id="wall-void-h" class="border p-1 text-sm"><input id="wall-void-q" class="border p-1 text-sm"></div><button onclick="addVoidItem('wall')" class="w-full bg-orange-200 text-orange-800 text-xs py-1 rounded mt-2">+ เพิ่ม</button><div id="wall-void-list" class="text-xs mt-2 text-slate-500"></div><div class="text-right text-xs font-bold text-orange-700 mt-1">รวมหัก: <span id="wall-void-total">0</span> ตร.ม.</div></div>
+                    <button onclick="calculateWall()" class="w-full bg-blue-600 text-white py-3 rounded-lg shadow mt-4">คำนวณ</button>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border"><div class="flex justify-between mb-4"><span class="font-bold">พื้นที่สุทธิ</span><span class="font-bold text-blue-600"><span id="res-wall-area">0.00</span> ตร.ม.</span></div><ul class="space-y-3 text-sm border-t pt-4"><li class="flex justify-between"><span>🧱 อิฐ</span><span class="font-bold text-lg" id="res-wall-count">0 ก้อน</span></li><li class="bg-blue-50 p-2 rounded"><div class="flex justify-between"><span>💧 ปูนก่อ 40kg</span><span class="font-bold" id="res-wall-mortar">0 ถุง</span></div><div class="text-right text-[10px]" id="res-wall-mortar-kg">0 kg</div></li><li class="bg-yellow-50 p-2 rounded"><div class="flex justify-between"><span>✨ ปูนฉาบ 40kg</span><span class="font-bold" id="res-wall-plaster">0 ถุง</span></div><div class="text-right text-[10px]" id="res-wall-plaster-kg">0 kg</div></li></ul><button onclick="addToSummary('wall')" class="w-full mt-6 border border-blue-600 text-blue-600 py-2 rounded hover:bg-blue-50">+ บันทึก</button></div>
+            </div>
+        </section>
+
+        <!-- SECTION: PAINT -->
+        <section id="section-paint" class="hidden animate-fade-in">
+             <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-purple-500">
+                    <h3 class="text-lg font-bold mb-4 text-purple-800">5. งานสี</h3>
+                    <div class="space-y-3">
+                        <div class="bg-purple-50 p-3 rounded border"><span class="text-xs font-bold text-purple-600">ด้าน 1</span><div class="grid grid-cols-2 gap-3"><input type="number" id="paint-w-1" class="border p-1 text-sm"><input type="number" id="paint-h-1" class="border p-1 text-sm"></div></div>
+                        <div class="bg-white p-3 rounded border"><span class="text-xs font-bold text-slate-500">ด้าน 2-4</span><div class="grid grid-cols-3 gap-2"><input type="number" id="paint-w-2" class="border p-1 text-sm"><input type="number" id="paint-w-3" class="border p-1 text-sm"><input type="number" id="paint-w-4" class="border p-1 text-sm"></div><div class="grid grid-cols-3 gap-2 mt-1"><input type="number" id="paint-h-2" class="border p-1 text-sm"><input type="number" id="paint-h-3" class="border p-1 text-sm"><input type="number" id="paint-h-4" class="border p-1 text-sm"></div></div>
+                    </div>
+                    <select id="paint-type" class="w-full border p-2 rounded mt-4"><option value="int">ภายใน</option><option value="ext">ภายนอก</option></select>
+                    <div class="bg-purple-50 p-3 rounded border mt-4"><span class="text-xs font-bold text-purple-800">หักช่องเปิด</span><div class="grid grid-cols-3 gap-2 mt-1"><input id="paint-void-w" class="border p-1 text-sm"><input id="paint-void-h" class="border p-1 text-sm"><input id="paint-void-q" class="border p-1 text-sm"></div><button onclick="addVoidItem('paint')" class="w-full bg-purple-200 text-purple-800 text-xs py-1 rounded mt-2">+ เพิ่ม</button><div id="paint-void-list" class="text-xs mt-2 text-slate-500"></div><div class="text-right text-xs font-bold text-purple-700 mt-1">รวมหัก: <span id="paint-void-total">0</span> ตร.ม.</div></div>
+                    <button onclick="calculatePaint()" class="w-full bg-purple-600 text-white py-3 rounded-lg shadow mt-4">คำนวณ</button>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border"><div class="flex justify-between items-center mb-6"><h4 class="font-bold text-slate-800">ปริมาณสี</h4><div class="text-right"><div class="text-xs text-slate-500">พื้นที่จริง</div><div class="text-xl font-bold text-purple-600"><span id="res-paint-area">0.00</span> ตร.ม.</div></div></div><div class="space-y-4"><div class="p-3 bg-slate-50 rounded border"><h5 class="font-bold text-slate-700 text-sm">รองพื้น (1 เที่ยว)</h5><div class="text-right font-bold text-lg text-slate-800" id="res-paint-primer">0 แกลลอน</div></div><div class="p-3 bg-purple-50 rounded border"><h5 class="font-bold text-purple-800 text-sm">ทับหน้า (2 เที่ยว)</h5><div class="text-right font-bold text-lg text-purple-700" id="res-paint-top">0 แกลลอน</div></div></div><button onclick="addToSummary('paint')" class="w-full mt-6 border border-purple-600 text-purple-600 py-2 rounded hover:bg-purple-50">+ บันทึก</button></div>
+            </div>
+        </section>
+
+        <!-- Summary -->
+        <section id="section-summary" class="hidden animate-fade-in">
+            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-orange-500">
+                <div class="flex justify-between mb-4"><h2 class="text-xl font-bold">สรุป (BOQ)</h2><button onclick="clearAll()" class="text-red-500 text-sm underline">ล้าง</button></div>
+                <div class="chart-container mb-6"><canvas id="summaryChart"></canvas></div>
+                <div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-slate-100 text-slate-600"><tr><th class="p-2">หมวด</th><th class="p-2">รายการ</th><th class="p-2 text-right">จำนวน</th><th class="p-2 text-right">หน่วย</th></tr></thead><tbody id="summary-table-body"><tr><td colspan="4" class="p-4 text-center text-slate-400">ว่างเปล่า</td></tr></tbody></table></div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        let appState = { summaryList: [], chartInstance: null, voids: { wall: [], paint: [] } };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`section-${tabId}`).classList.remove('hidden');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const map = { 'ceiling':0, 'roof':1, 'concrete':2, 'wall':3, 'paint':4, 'summary':5 };
+            document.querySelectorAll('.nav-item')[map[tabId]].classList.add('active');
+            
+            // Toggle Spec Info
+            const type = document.getElementById('ceil-type').value;
+            if(tabId === 'ceiling') {
+                document.getElementById('spec-info-tbar').classList.toggle('hidden', type !== 'tbar');
+                document.getElementById('spec-info-smooth').classList.toggle('hidden', type !== 'smooth');
+            }
+            
+            if(tabId === 'summary') renderSummaryTable();
+        }
+
+        // Listener for Ceiling Type change
+        document.getElementById('ceil-type').addEventListener('change', function() {
+            document.getElementById('spec-info-tbar').classList.toggle('hidden', this.value !== 'tbar');
+            document.getElementById('spec-info-smooth').classList.toggle('hidden', this.value !== 'smooth');
+        });
+
+        // Void System
+        function addVoidItem(section) {
+            const w = parseFloat(document.getElementById(`${section}-void-w`).value);
+            const h = parseFloat(document.getElementById(`${section}-void-h`).value);
+            const q = parseFloat(document.getElementById(`${section}-void-q`).value);
+            if(!w || !h || !q) return alert("กรุณากรอกข้อมูลให้ครบ");
+            appState.voids[section].push({ id: Date.now(), w, h, q, area: w*h*q });
+            document.getElementById(`${section}-void-w`).value = ''; document.getElementById(`${section}-void-h`).value = ''; document.getElementById(`${section}-void-q`).value = '';
+            renderVoidList(section);
+        }
+        function removeVoidItem(section, id) {
+            appState.voids[section] = appState.voids[section].filter(item => item.id !== id);
+            renderVoidList(section);
+        }
+        function renderVoidList(section) {
+            const listEl = document.getElementById(`${section}-void-list`);
+            const totalEl = document.getElementById(`${section}-void-total`);
+            listEl.innerHTML = ''; let total = 0;
+            appState.voids[section].forEach(i => { 
+                total += i.area; 
+                listEl.innerHTML += `<div class="flex justify-between items-center bg-white p-2 rounded border border-slate-100 text-sm"><span>- ${i.w}x${i.h} (${i.q}ช่อง)</span><div class="flex items-center gap-2"><span class="font-bold text-slate-700">${i.area.toFixed(2)}</span><button onclick="removeVoidItem('${section}', ${i.id})" class="text-red-400 hover:text-red-600 bg-red-50 w-5 h-5 rounded-full font-bold text-xs">×</button></div></div>`; 
+            });
+            totalEl.innerText = total.toFixed(2);
+        }
+
+        // --- V19 CEILING LOGIC (Specific Lengths) ---
+        function calculateCeiling() {
+            const w = parseFloat(document.getElementById('ceil-w').value) || 0;
+            const l = parseFloat(document.getElementById('ceil-l').value) || 0;
+            const area = w * l;
+            const perimeter = (w + l) * 2;
+            const type = document.getElementById('ceil-type').value;
+
+            if (area <= 0) return;
+
+            document.getElementById('res-ceil-area').innerText = area.toFixed(2);
+            document.getElementById('btn-add-ceil').classList.remove('hidden');
+            
+            let html = '';
+            let items = [];
+
+            if (type === 'smooth') {
+                // Smooth: Gypsum 1.2x2.4 (2.88sqm)
+                // C-Line 4.0m (Lines @ 1.0m + Cross @ 0.4m)
+                // Wall Angle 2.4m
+                
+                const boards = Math.ceil((area * 1.05) / 2.88);
+                const wallAngle = Math.ceil((perimeter * 1.05) / 2.4);
+                
+                const totalLineMeters = (area / 1.0) + (area / 0.4);
+                const cLineBars = Math.ceil((totalLineMeters * 1.1) / 4.0); // 10% waste, 4m length
+                const wireSets = Math.ceil(area * 0.7);
+
+                html = `
+                    <div class="bg-blue-50 p-2 rounded flex justify-between"><span>แผ่นยิปซั่ม (1.2x2.4ม.)</span><span class="font-bold text-blue-600">${boards} แผ่น</span></div>
+                    <div class="flex justify-between mt-2"><span>ซีไลน์ (4.0ม.)</span><span class="font-bold">${cLineBars} เส้น</span></div>
+                    <div class="flex justify-between mt-1 text-sm text-slate-600"><span>ฉากริม (2.4ม.)</span><span class="font-bold">${wallAngle} เส้น</span></div>
+                    <div class="flex justify-between mt-1 text-xs text-slate-400"><span>ชุดแขวน</span><span>${wireSets} ชุด</span></div>
+                `;
+                items.push({category:'ฝ้า', item:'แผ่นยิปซั่ม', qty:boards, unit:'แผ่น'});
+                items.push({category:'ฝ้า', item:'โครง C-Line (4.0ม.)', qty:cLineBars, unit:'เส้น'});
+                items.push({category:'ฝ้า', item:'ฉากริม (2.4ม.)', qty:wallAngle, unit:'เส้น'});
+
+            } else {
+                // T-Bar (60x60)
+                // Main Tee 4.0m (Spacing 0.6m) -> To use ONLY 0.6m Cross Tees
+                // Cross Tee 0.6m
+                // Wall Angle 4.0m
+                
+                const tiles = Math.ceil((area * 1.05) / 0.36);
+                const wallAngle = Math.ceil((perimeter * 1.05) / 4.0); // 4m length
+
+                // Main Tee Calculation: Spacing 0.6m
+                // Total Main Meters = Area / 0.6
+                const totalMainMeters = area / 0.6;
+                const mainTeeBars = Math.ceil((totalMainMeters * 1.05) / 4.0); // 4m length
+
+                // Cross Tee (0.6m): 
+                // Grid 0.6x0.6 -> Cross tees connect Main tees (spaced 0.6m)
+                // Number of Cross Tees = (Total Main Length / 0.6) * 1 (approx 1 per 0.6m of main) 
+                // Better Approx: Total linear meters of cross tees = Area / 0.6
+                // Count of 0.6m pieces = (Area / 0.6) / 0.6 = Area / 0.36
+                const cross60 = Math.ceil((area / 0.36) * 1.05); // Roughly equal to number of tiles
+
+                html = `
+                    <div class="bg-blue-50 p-2 rounded flex justify-between"><span>แผ่นทีบาร์ (60x60ซม.)</span><span class="font-bold text-blue-600">${tiles} แผ่น</span></div>
+                    <div class="mt-2 space-y-1">
+                        <div class="flex justify-between"><span>ทีเมน (4.0ม.)</span><span class="font-bold text-red-600">${mainTeeBars} เส้น</span></div>
+                        <div class="flex justify-between"><span>ทีซอย (0.6ม.)</span><span class="font-bold text-slate-700">${cross60} เส้น</span></div>
+                        <div class="flex justify-between text-sm text-slate-600"><span>ฉากริม (4.0ม.)</span><span class="font-bold">${wallAngle} เส้น</span></div>
+                    </div>
+                `;
+                items.push({category:'ฝ้า', item:'แผ่นทีบาร์', qty:tiles, unit:'แผ่น'});
+                items.push({category:'ฝ้า', item:'ทีเมน (4.0ม.)', qty:mainTeeBars, unit:'เส้น'});
+                items.push({category:'ฝ้า', item:'ทีซอย (0.6ม.)', qty:cross60, unit:'เส้น'});
+                items.push({category:'ฝ้า', item:'ฉากริม (4.0ม.)', qty:wallAngle, unit:'เส้น'});
+            }
+
+            document.getElementById('res-ceil-content').innerHTML = html;
+            document.getElementById('section-ceiling').dataset.lastCalc = JSON.stringify(items);
+        }
+
+        // ... [Other Functions] ...
+        function calculateWall() {
+            let total=0; for(let i=1;i<=4;i++) total+=(parseFloat(document.getElementById(`wall-l-${i}`).value)||0)*(parseFloat(document.getElementById(`wall-h-${i}`).value)||0);
+            const voidArea = parseFloat(document.getElementById('wall-void-total').innerText)||0;
+            const area = Math.max(0, total-voidArea); document.getElementById('res-wall-area').innerText=area.toFixed(2);
+            const type=document.getElementById('wall-type').value;
+            let b=type==='block'?13:(type==='red'?135:9), m=type==='red'?3:(type==='block'?12:16); 
+            const count=Math.ceil(area*b), mortar=Math.ceil(area/m), plaster=Math.ceil(area*2/2.0); 
+            const mortarKg=mortar*40, plasterKg=plaster*40;
+            document.getElementById('res-wall-count').innerText=count+" ก้อน"; 
+            document.getElementById('res-wall-mortar').innerText=mortar+" ถุง"; document.getElementById('res-wall-mortar-kg').innerText=mortarKg.toLocaleString();
+            document.getElementById('res-wall-plaster').innerText=plaster+" ถุง"; document.getElementById('res-wall-plaster-kg').innerText=plasterKg.toLocaleString();
+            document.getElementById('section-wall').dataset.lastCalc = JSON.stringify([{category:'ผนัง',item:'อิฐ',qty:count,unit:'ก้อน'},{category:'ผนัง',item:`ปูนก่อ 40kg`,qty:mortar,unit:'ถุง'},{category:'ผนัง',item:`ปูนฉาบ 40kg`,qty:plaster,unit:'ถุง'}]);
+        }
+        function calculatePaint() {
+            let total=0; for(let i=1;i<=4;i++) total+=(parseFloat(document.getElementById(`paint-w-${i}`).value)||0)*(parseFloat(document.getElementById(`paint-h-${i}`).value)||0);
+            const voidArea = parseFloat(document.getElementById('paint-void-total').innerText)||0;
+            const area = Math.max(0, total-voidArea); document.getElementById('res-paint-area').innerText=area.toFixed(2);
+            const p=Math.ceil(area/35), t=Math.ceil(area/17);
+            document.getElementById('res-paint-primer').innerText=p+" แกลลอน"; document.getElementById('res-paint-top').innerText=t+" แกลลอน";
+            document.getElementById('section-paint').dataset.lastCalc = JSON.stringify([{category:'งานสี',item:'รองพื้น',qty:p,unit:'แกลลอน'},{category:'งานสี',item:'ทับหน้า',qty:t,unit:'แกลลอน'}]);
+        }
+        function updateSteelOptions() {
+            const roofType = document.getElementById('roof-type').value;
+            const noteEl = document.getElementById('purlin-note');
+            if(roofType === 'tile_cpac') { noteEl.innerText = "*ระยะแปซีแพค @0.32-0.34 ม."; noteEl.classList.add('text-red-500'); } 
+            else { noteEl.innerText = "*ระยะแปมาตรฐาน @1.00 ม."; noteEl.classList.remove('text-red-500'); }
+        }
+        function calculateConcrete() {
+            const w = parseFloat(document.getElementById('conc-w').value) || 0;
+            const l = parseFloat(document.getElementById('conc-l').value) || 0;
+            const h = parseFloat(document.getElementById('conc-h').value) || 0;
+            const waste = parseFloat(document.getElementById('conc-waste').value); 
+            const type = document.getElementById('conc-type').value;
+            const useMesh = document.getElementById('conc-mesh-auto').checked;
+            const baseVol = w * l * (h/100);
+            const vol = baseVol * waste; 
+            document.getElementById('res-conc-vol').innerText = vol.toFixed(2);
+            let cem, sand, stone;
+            if(type === 'standard') { cem=Math.ceil(vol*7); sand=(vol*0.5).toFixed(2); stone=(vol*0.9).toFixed(2); }
+            else { cem=Math.ceil(vol*5.5); sand=(vol*0.55).toFixed(2); stone=(vol*0.95).toFixed(2); }
+            document.getElementById('res-conc-cem').innerText = cem + " ถุง";
+            document.getElementById('res-conc-sand').innerText = sand + " คิว";
+            document.getElementById('res-conc-stone').innerText = stone + " คิว";
+            let items = [ { category:'คอนกรีต', item:'ปูนแดง 50kg', qty:cem, unit:'ถุง' }, { category:'คอนกรีต', item:'ทราย', qty:parseFloat(sand), unit:'คิว' }, { category:'คอนกรีต', item:'หิน 3/4', qty:parseFloat(stone), unit:'คิว' } ];
+            const meshContainer = document.getElementById('res-mesh-container');
+            if (useMesh) {
+                const area = w * l; const optimized = optimizeWireMesh(area);
+                if (optimized) {
+                    const list = document.getElementById('res-mesh-list'); list.innerHTML = '';
+                    if (optimized.y > 0) { list.innerHTML += `<li class="flex justify-between"><span>3x30ม.</span><span class="font-bold">${optimized.y} ม้วน</span></li>`; items.push({category:'คอนกรีต', item:'Wire Mesh 3x30ม.', qty:optimized.y, unit:'ม้วน'}); }
+                    if (optimized.x > 0) { list.innerHTML += `<li class="flex justify-between"><span>2x30ม.</span><span class="font-bold">${optimized.x} ม้วน</span></li>`; items.push({category:'คอนกรีต', item:'Wire Mesh 2x30ม.', qty:optimized.x, unit:'ม้วน'}); }
+                    meshContainer.classList.remove('hidden');
+                }
+            } else { meshContainer.classList.add('hidden'); }
+            document.getElementById('section-concrete').dataset.lastCalc = JSON.stringify(items);
+        }
+        function optimizeWireMesh(area) { if(area<=0)return null; let best={waste:Infinity}; const maxBig=Math.ceil(area/90); for(let y=0;y<=maxBig;y++){ let rem=area-(y*90); let x=rem>0?Math.ceil(rem/60):0; let total=(y*90)+(x*60); let waste=total-area; if(waste<best.waste){ best={x,y,waste,capacity:total}; } } return best; }
+        function calculateRoof() {
+            const w=parseFloat(document.getElementById('roof-w').value)||0, l=parseFloat(document.getElementById('roof-l').value)||0, add=parseFloat(document.getElementById('roof-add').value)||0;
+            const type=document.getElementById('roof-type').value;
+            const ase=document.getElementById('steel-ase-type').value, rafter=document.getElementById('steel-rafter-type').value, purlin=document.getElementById('steel-purlin-type').value;
+            if(w<=0||l<=0) return;
+            document.getElementById('res-roof-sheet-view').classList.add('hidden'); document.getElementById('res-roof-tile-view').classList.add('hidden');
+            const area = w*(l+add); document.getElementById('res-roof-area').innerText = area.toFixed(2);
+            let spacing = type==='tile_cpac'?0.33:1.0;
+            const slopeLen=l+add;
+            const purlinRow = Math.ceil(slopeLen/spacing)+1, purlinBar = Math.ceil((purlinRow*w*1.1)/6);
+            const rafterRow = Math.ceil(w/1.0)+1, rafterBar = Math.ceil((rafterRow*slopeLen*1.1)/6);
+            const aseBar = Math.ceil((w*2*1.1)/6);
+            document.getElementById('res-qty-ase').innerText = aseBar+" เส้น"; document.getElementById('res-spec-ase').innerText = `(${ase})`;
+            document.getElementById('res-qty-rafter').innerText = rafterBar+" เส้น"; document.getElementById('res-spec-rafter').innerText = `(${rafter})`;
+            document.getElementById('res-qty-purlin').innerText = purlinBar+" เส้น"; document.getElementById('res-spec-purlin').innerText = `(${purlin})`;
+            let items=[{category:'โครงเหล็ก', item:`อะเส ${ase}`, qty:aseBar, unit:'เส้น'},{category:'โครงเหล็ก', item:`จันทัน ${rafter}`, qty:rafterBar, unit:'เส้น'},{category:'โครงเหล็ก', item:`แป ${purlin}`, qty:purlinBar, unit:'เส้น'}];
+            if(type.includes('metal')||type.includes('zinc')) {
+                document.getElementById('res-roof-sheet-view').classList.remove('hidden');
+                let eff=0.76; if(type==='zinc') eff=0.63;
+                const count = Math.ceil(w/eff);
+                document.getElementById('res-roof-len-final').innerText = slopeLen.toFixed(2); document.getElementById('res-roof-qty-final').innerText = count;
+                items.push({category:'หลังคา', item:`แผ่นยาว ${slopeLen.toFixed(2)}ม.`, qty:count, unit:'แผ่น'});
+                let screw=Math.ceil(area*(type==='zinc'?8:6)); document.getElementById('res-roof-screw').innerText=screw; items.push({category:'หลังคา', item:'สกรู', qty:screw, unit:'ตัว'});
+            } else {
+                document.getElementById('res-roof-tile-view').classList.remove('hidden');
+                let fac=type==='tile_cpac'?11:2.2; const count=Math.ceil(area*fac);
+                document.getElementById('res-roof-tile-count').innerText=count;
+                items.push({category:'หลังคา', item:'กระเบื้อง', qty:count, unit:'แผ่น'});
+                let screw=Math.ceil(area*2.5); document.getElementById('res-roof-screw').innerText=screw; items.push({category:'หลังคา', item:'อุปกรณ์ยึด', qty:screw, unit:'ตัว'});
+            }
+            document.getElementById('section-roof').dataset.lastCalc = JSON.stringify(items);
+        }
+        function addToSummary(id) {
+            if(!document.getElementById(`section-${id}`).dataset.lastCalc) return alert("คำนวณก่อน");
+            JSON.parse(document.getElementById(`section-${id}`).dataset.lastCalc).forEach(n=>{
+                const e=appState.summaryList.find(o=>o.item===n.item && o.category===n.category);
+                if(e)e.qty+=n.qty; else appState.summaryList.push(n);
+            });
+            alert("บันทึกแล้ว");
+        }
+        function renderSummaryTable() {
+            const b=document.getElementById('summary-table-body'); b.innerHTML=''; let d={};
+            if(appState.summaryList.length===0){ b.innerHTML='<tr><td colspan="4" class="p-4 text-center">ไม่มีข้อมูล</td></tr>'; if(appState.chartInstance)appState.chartInstance.destroy(); return; }
+            appState.summaryList.forEach(i=>{ b.innerHTML+=`<tr><td class="p-2 border-b text-blue-600">${i.category}</td><td class="p-2 border-b">${i.item}</td><td class="p-2 border-b text-right font-bold">${i.qty}</td><td class="p-2 border-b text-right">${i.unit}</td></tr>`; d[i.category]=(d[i.category]||0)+1; });
+            const ctx=document.getElementById('summaryChart').getContext('2d'); if(appState.chartInstance)appState.chartInstance.destroy();
+            appState.chartInstance=new Chart(ctx,{type:'bar',data:{labels:Object.keys(d),datasets:[{label:'รายการ',data:Object.values(d),backgroundColor:'#3b82f6',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+        }
+        function clearAll(){ if(confirm("ลบ?")){appState.summaryList=[]; renderSummaryTable();} }
+
+        switchTab('ceiling');
+    </script>
+</body>
+</html>

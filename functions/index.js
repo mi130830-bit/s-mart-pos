@@ -29,9 +29,6 @@ exports.notifyShipping = functions.firestore
             console.log(`🚀 Stage 2 Trigger: Job ${context.params.jobId}`);
 
             try {
-                // อัปเดตแฟล็กเพื่อไม่ให้แจ้งเตือนซ้ำ
-                await change.after.ref.update({ stage2_notified: true });
-
                 const orderId = after.order_id;
                 if (!orderId) {
                     console.warn('⚠️ No order_id in job');
@@ -41,7 +38,8 @@ exports.notifyShipping = functions.firestore
                 // เรียก Backend API
                 // TODO: Update this URL every time Cloudflare Tunnel restarts (Quick Tunnel)
                 const apiUrl = 'https://api.namecheap.work';
-                const url = `${apiUrl}/api/v1/line/notify-stage2/${orderId}`;
+                const url = `${apiUrl}/api/v1/line-internal/notify-stage2/${orderId}`;
+                const internalSecret = process.env.INTERNAL_API_SECRET || functions.config().pos?.internal_api_secret || '';
 
                 console.log(`📤 Calling Backend: POST ${url}`);
 
@@ -49,11 +47,12 @@ exports.notifyShipping = functions.firestore
                     item && (item.type === 'vehicle' || item.type === 'car'));
                 const vehicleKey = vehicle?.name || vehicle?.licensePlate || '';
                 const response = await axios.post(url, { vehicle: vehicleKey }, {
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret },
                     timeout: 10000
                 });
 
                 console.log(`✅ Stage 2 Response: ${response.status} - ${response.data}`);
+                await change.after.ref.update({ stage2_notified: true });
                 return null;
             } catch (error) {
                 console.error(`❌ Stage 2 Error: ${error.message}`);
@@ -81,9 +80,6 @@ exports.notifyCompleted = functions.firestore
             console.log(`🚀 Stage 3 Trigger: Job ${context.params.jobId}`);
 
             try {
-                // อัปเดตแฟล็กเพื่อไม่ให้แจ้งเตือนซ้ำ
-                await change.after.ref.update({ stage3_notified: true });
-
                 const orderId = after.order_id;
                 if (!orderId) {
                     console.warn('⚠️ No order_id in job');
@@ -93,7 +89,8 @@ exports.notifyCompleted = functions.firestore
                 // เรียก Backend API
                 // TODO: Update this URL every time Cloudflare Tunnel restarts (Quick Tunnel)
                 const apiUrl = 'https://api.namecheap.work';
-                const url = `${apiUrl}/api/v1/line/notify-stage3/${orderId}`;
+                const url = `${apiUrl}/api/v1/line-internal/notify-stage3/${orderId}`;
+                const internalSecret = process.env.INTERNAL_API_SECRET || functions.config().pos?.internal_api_secret || '';
 
                 console.log(`📤 Calling Backend: POST ${url}`);
 
@@ -103,11 +100,12 @@ exports.notifyCompleted = functions.firestore
                 };
 
                 const response = await axios.post(url, payload, {
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret },
                     timeout: 10000
                 });
 
                 console.log(`✅ Stage 3 Response: ${response.status} - ${response.data}`);
+                await change.after.ref.update({ stage3_notified: true });
                 return null;
             } catch (error) {
                 console.error(`❌ Stage 3 Error: ${error.message}`);

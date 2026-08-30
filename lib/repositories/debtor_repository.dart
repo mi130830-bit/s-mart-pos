@@ -6,6 +6,7 @@ import '../models/customer.dart';
 import '../models/outstanding_bill.dart';
 import '../services/telegram_service.dart';
 import '../services/notification_service.dart';
+import '../services/sales/loyalty_award_service.dart';
 import 'customer_repository.dart';
 
 part 'debtor/debtor_repository_mutations.dart';
@@ -14,6 +15,8 @@ part 'debtor/debtor_repository_trash.dart';
 
 class DebtorRepository {
   final MySQLService _dbService;
+  late final LoyaltyAwardService _loyaltyAwardService =
+      LoyaltyAwardService(db: _dbService);
 
   DebtorRepository({MySQLService? dbService})
       : _dbService = dbService ?? MySQLService();

@@ -62,7 +62,8 @@ extension SalesCommandExtension on SalesRepository {
         final checkCid = await _dbService
             .query('SELECT id FROM customer WHERE id = :id', {'id': validCid});
         if (checkCid.isEmpty) {
-          LoggerService.warning('SalesRepository', 'Customer ID $validCid not found in MySQL. Fallback to Walk-in (NULL).');
+          LoggerService.warning('SalesRepository',
+              'Customer ID $validCid not found in MySQL. Fallback to Walk-in (NULL).');
           validCid = null;
         }
       }
@@ -111,7 +112,8 @@ extension SalesCommandExtension on SalesRepository {
           type: 'SALE_OUT',
           note: 'ขายหน้าร้านบิล #$orderId',
           orderId: orderId,
-          useTransaction: false, // ⚠️ สำคัญมาก: เราอยู่ใน Transaction ของ saveOrder แล้ว
+          useTransaction:
+              false, // ⚠️ สำคัญมาก: เราอยู่ใน Transaction ของ saveOrder แล้ว
         );
       }
 
@@ -134,7 +136,8 @@ extension SalesCommandExtension on SalesRepository {
       }
       // -----------------------------------------------------------------------
 
-      await _dbService.execute('COMMIT;'); // ✅ Commit หลังจากจัดการหนี้เสร็จแล้ว
+      await _dbService
+          .execute('COMMIT;'); // ✅ Commit หลังจากจัดการหนี้เสร็จแล้ว
 
       // ✅ 1.3 Queue to Isar for Background Sync
       try {
@@ -150,7 +153,8 @@ extension SalesCommandExtension on SalesRepository {
         // 🚀 Trigger Background Sync (Fire & Forget)
         SyncService().pushOrders();
       } catch (e) {
-        LoggerService.warning('SalesRepository', 'Change to Isar Queue Failed: $e');
+        LoggerService.warning(
+            'SalesRepository', 'Change to Isar Queue Failed: $e');
         // Don't fail the order if queueing fails, but log it.
       }
 
@@ -276,29 +280,33 @@ extension SalesCommandExtension on SalesRepository {
   Future<void> voidOrder(int orderId,
       {String reason = '', bool returnToStock = true}) async {
     if (!_dbService.isConnected()) await _dbService.connect();
-
-    // ดึงข้อมูลก่อนลบเพื่อเอาไปแจ้งเตือนหรือคืนสต็อก
-    final orderRes = await _dbService
-        .query('SELECT * FROM `order` WHERE id = :id', {'id': orderId});
-    if (orderRes.isEmpty) return;
-
-    // Check if already voided
-    if (orderRes.first['status'] == 'VOID') return;
-
-    // ✅ ป้องกันการ Void บิลที่มีการชำระหนี้ไปแล้ว
-    final paymentCheck = await _dbService.query(
-      "SELECT id FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'DEBT_PAYMENT' AND (isDeleted = 0 OR isDeleted IS NULL)",
-      {'oid': orderId}
-    );
-    if (paymentCheck.isNotEmpty) {
-      throw Exception('ไม่สามารถยกเลิกบิลที่ชำระหนี้แล้วได้ กรุณายกเลิกรายการรับชำระหนี้ก่อน');
-    }
-
-    double grandTotal =
-        double.tryParse(orderRes.first['grandTotal'].toString()) ?? 0.0;
-
+    var grandTotal = 0.0;
     await _dbService.execute('START TRANSACTION;');
     try {
+      final orderRes = await _dbService.query(
+        'SELECT * FROM `order` WHERE id = :id FOR UPDATE',
+        {'id': orderId},
+      );
+      if (orderRes.isEmpty || orderRes.first['status'] == 'VOID') {
+        await _dbService.execute('COMMIT;');
+        return;
+      }
+      final paymentCheck = await _dbService.query(
+        "SELECT id FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'DEBT_PAYMENT' AND (isDeleted = 0 OR isDeleted IS NULL)",
+        {'oid': orderId},
+      );
+      if (paymentCheck.isNotEmpty) {
+        throw Exception(
+            'ไม่สามารถยกเลิกบิลที่ชำระหนี้แล้วได้ กรุณายกเลิกรายการรับชำระหนี้ก่อน');
+      }
+      grandTotal =
+          double.tryParse(orderRes.first['grandTotal'].toString()) ?? 0.0;
+      await _loyaltyAwardService.reverseAwardWithinTransaction(
+        orderId: orderId,
+        reason: reason.trim().isEmpty ? 'Void order' : reason,
+        source: 'VOID_ORDER',
+      );
+
       // 8.1 คืนสต็อก (ถ้าเลือก) - Default TRUE for Void
       if (returnToStock) {
         final items = await _dbService.query(
@@ -329,33 +337,15 @@ extension SalesCommandExtension on SalesRepository {
             'DELETE FROM delivery_jobs WHERE orderId = :oid', {'oid': orderId});
       } catch (_) {}
 
-      // (B) ลบลูกหนี้/เครดิต และคืนยอดหนี้ (Revert Balance)
+      // (B) ลบลูกหนี้/เครดิต และคำนวณยอดหนี้คงเหลือใหม่จาก Ledger
       final debtTrans = await _dbService.query(
-          'SELECT amount, customerId FROM debtor_transaction WHERE orderId = :oid FOR UPDATE',
+          'SELECT DISTINCT customerId FROM debtor_transaction WHERE orderId = :oid AND (isDeleted = 0 OR isDeleted IS NULL) FOR UPDATE',
           {'oid': orderId});
-
-      for (var t in debtTrans) {
-        final double amount = double.tryParse(t['amount'].toString()) ?? 0.0;
-        final int cid = int.tryParse(t['customerId'].toString()) ?? 0;
-        if (cid > 0) {
-          // Revert balance: new = current - amount
-          await _dbService.execute(
-              'UPDATE customer SET currentDebt = currentDebt - :amt WHERE id = :id',
-              {'amt': amount, 'id': cid});
-        }
-      }
-
-      // Mark trans as VOID or Delete? Ideally mark VOID if schema supports, but for now DELETE to clear debt history impact
-      // OR better: Insert a cancelling transaction?
-      // Current logic was DELETE. soft delete implies we should keep it but mark void using `transactionType`?
-      // Let's stick to cleaning up debt transaction to avoid double counting, or use a "VOID" flag on it.
-      // Since `debtor_transaction` doesn't have `status`, DELETE is safer for consistency unless we add schema.
-      // User accepted "Void Order" -> "Keep Bill Evidence".
 
       await _dbService.execute('''
           UPDATE debtor_transaction 
           SET isDeleted = 1, deletedAt = NOW(), deleteReason = :reason 
-          WHERE orderId = :oid
+          WHERE orderId = :oid AND (isDeleted = 0 OR isDeleted IS NULL)
           ''', {'oid': orderId, 'reason': 'Void Order #$orderId'});
 
       try {
@@ -369,9 +359,34 @@ extension SalesCommandExtension on SalesRepository {
           "UPDATE `order` SET status = 'VOID', voidReason = :reason WHERE id = :id",
           {'id': orderId, 'reason': reason});
 
-      // (D) ลบ Payment Records? Or keep?
-      // Keep payment records but maybe mark them? Or just rely on Order Status.
-      // System usually sums from `order` table. If `status='VOID'`, it's excluded from sales stats.
+      // Recalculate debt accurately for all affected customers from remaining valid transactions
+      final affectedCustomerIds = <int>{};
+      if (orderRes.first['customerId'] != null) {
+        final cid = int.tryParse(orderRes.first['customerId'].toString()) ?? 0;
+        if (cid > 0) affectedCustomerIds.add(cid);
+      }
+      for (var t in debtTrans) {
+        final int cid = int.tryParse(t['customerId'].toString()) ?? 0;
+        if (cid > 0) affectedCustomerIds.add(cid);
+      }
+      for (var cid in affectedCustomerIds) {
+        final res = await _dbService.query('''
+          SELECT SUM(dt.amount) as total 
+          FROM debtor_transaction dt
+          LEFT JOIN `order` o ON dt.orderId = o.id
+          WHERE dt.customerId = :id 
+            AND (dt.isDeleted = 0 OR dt.isDeleted IS NULL)
+            AND (o.status IS NULL OR o.status != 'VOID')
+        ''', {'id': cid});
+        double totalDebt = 0.0;
+        if (res.isNotEmpty && res.first['total'] != null) {
+          totalDebt = double.tryParse(res.first['total'].toString()) ?? 0.0;
+        }
+        await _dbService.execute(
+          'UPDATE customer SET currentDebt = :debt WHERE id = :id',
+          {'debt': totalDebt, 'id': cid},
+        );
+      }
 
       await _dbService.execute('COMMIT;');
 
@@ -405,21 +420,64 @@ extension SalesCommandExtension on SalesRepository {
     try {
       await _dbService.execute('START TRANSACTION;');
 
+      final orderRows = await _dbService.query(
+        '''SELECT status, received, grandTotal, customerId FROM `order`
+           WHERE id = :id LIMIT 1 FOR UPDATE''',
+        {'id': orderId},
+      );
+      if (orderRows.isEmpty) throw Exception('ไม่พบบิล #$orderId');
+      if (orderRows.first['status']?.toString() != 'VOID') {
+        await _dbService.execute('COMMIT;');
+        return;
+      }
+      final received =
+          double.tryParse(orderRows.first['received']?.toString() ?? '0') ?? 0;
+      final grandTotal = double.tryParse(
+            orderRows.first['grandTotal']?.toString() ?? '0',
+          ) ??
+          0;
+      final fullyPaid = grandTotal > 0 && received + 0.01 >= grandTotal;
+
       // 1. Restore Order Status
       await _dbService.query(
-        "UPDATE `order` SET status = 'COMPLETED', voidReason = NULL WHERE id = :id",
-        {'id': orderId},
+        'UPDATE `order` SET status = :status, voidReason = NULL WHERE id = :id',
+        {'status': fullyPaid ? 'COMPLETED' : 'UNPAID', 'id': orderId},
       );
 
       // 2. Restore Debt Transaction (if any)
       // Reverse the soft-delete done in voidOrder
       await _dbService.query(
-        "UPDATE debtor_transaction SET isDeleted = 0, deletedAt = NULL, deleteReason = NULL WHERE transactionType = 'CREDIT_SALE' AND ref_id = :id",
+        "UPDATE debtor_transaction SET isDeleted = 0, deletedAt = NULL, deleteReason = NULL WHERE transactionType = 'CREDIT_SALE' AND orderId = :id",
         {'id': orderId},
       );
 
+      // Recalculate debt for customer
+      if (orderRows.first['customerId'] != null) {
+        final cid = int.tryParse(orderRows.first['customerId'].toString()) ?? 0;
+        if (cid > 0) {
+          final res = await _dbService.query('''
+            SELECT SUM(dt.amount) as total 
+            FROM debtor_transaction dt
+            LEFT JOIN `order` o ON dt.orderId = o.id
+            WHERE dt.customerId = :id 
+              AND (dt.isDeleted = 0 OR dt.isDeleted IS NULL)
+              AND (o.status IS NULL OR o.status != 'VOID')
+          ''', {'id': cid});
+          double totalDebt = 0.0;
+          if (res.isNotEmpty && res.first['total'] != null) {
+            totalDebt = double.tryParse(res.first['total'].toString()) ?? 0.0;
+          }
+          await _dbService.execute(
+            'UPDATE customer SET currentDebt = :debt WHERE id = :id',
+            {'debt': totalDebt, 'id': cid},
+          );
+        }
+      }
+
       // ✅ ตัดสต๊อกออกอีกครั้งเมื่อมีการกู้คืนบิล
-      final items = await _dbService.query('SELECT productId, quantity FROM orderitem WHERE orderId = :id', {'id': orderId});
+      final items = await _dbService.query(
+          'SELECT productId, quantity FROM orderitem WHERE orderId = :id',
+          {'id': orderId});
       final stockRepo = StockRepository();
       for (var item in items) {
         int pid = int.tryParse(item['productId'].toString()) ?? 0;
@@ -434,6 +492,13 @@ extension SalesCommandExtension on SalesRepository {
             useTransaction: false,
           );
         }
+      }
+
+      if (fullyPaid) {
+        await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+          orderId: orderId,
+          source: 'UNVOID_ORDER',
+        );
       }
 
       // 3. Log Activity
@@ -454,86 +519,98 @@ extension SalesCommandExtension on SalesRepository {
   // 11. เปลี่ยนบิลที่จ่ายแล้วเป็น "ยังไม่ได้จ่าย" (Mark as Unpaid)
   Future<void> markOrderAsUnpaid(int orderId) async {
     if (!_dbService.isConnected()) await _dbService.connect();
-    
-    // 1. Fetch current order
-    final orderRes = await _dbService.query(
-      'SELECT status, paymentMethod, customerId, grandTotal FROM `order` WHERE id = :id FOR UPDATE',
-      {'id': orderId}
-    );
-    if (orderRes.isEmpty) throw Exception('ไม่พบบิล #$orderId');
-    
-    final order = orderRes.first;
-    if (order['status'] == 'VOID') throw Exception('บิลถูกยกเลิกไปแล้ว ไม่สามารถเปลี่ยนสถานะได้');
-    if (order['status'] == 'UNPAID') return; // Already unpaid
-    
-    // ป้องกันการเปลี่ยนบิลที่มีการชำระหนี้ไปแล้ว
-    final paymentCheck = await _dbService.query(
-      "SELECT id FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'DEBT_PAYMENT' AND (isDeleted = 0 OR isDeleted IS NULL)",
-      {'oid': orderId}
-    );
-    if (paymentCheck.isNotEmpty) {
-      throw Exception('ไม่สามารถเปลี่ยนสถานะบิลที่ชำระหนี้แล้วได้ กรุณายกเลิกรายการรับชำระหนี้ก่อน');
-    }
-
-    final paymentMethod = order['paymentMethod']?.toString().toUpperCase() ?? '';
-    final grandTotal = double.tryParse(order['grandTotal'].toString()) ?? 0.0;
-    
+    var grandTotal = 0.0;
     await _dbService.execute('START TRANSACTION;');
     try {
+      final orderRes = await _dbService.query(
+        '''SELECT status, paymentMethod, customerId, grandTotal
+           FROM `order` WHERE id = :id FOR UPDATE''',
+        {'id': orderId},
+      );
+      if (orderRes.isEmpty) throw Exception('ไม่พบบิล #$orderId');
+      final order = orderRes.first;
+      if (order['status'] == 'VOID') {
+        throw Exception('บิลถูกยกเลิกไปแล้ว ไม่สามารถเปลี่ยนสถานะได้');
+      }
+      if (order['status'] == 'UNPAID') {
+        await _dbService.execute('COMMIT;');
+        return;
+      }
+      final paymentCheck = await _dbService.query(
+        "SELECT id FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'DEBT_PAYMENT' AND (isDeleted = 0 OR isDeleted IS NULL)",
+        {'oid': orderId},
+      );
+      if (paymentCheck.isNotEmpty) {
+        throw Exception(
+            'ไม่สามารถเปลี่ยนสถานะบิลที่ชำระหนี้แล้วได้ กรุณายกเลิกรายการรับชำระหนี้ก่อน');
+      }
+      final paymentMethod =
+          order['paymentMethod']?.toString().toUpperCase() ?? '';
+      grandTotal = double.tryParse(order['grandTotal'].toString()) ?? 0.0;
+      await _loyaltyAwardService.reverseAwardWithinTransaction(
+        orderId: orderId,
+        reason: 'Mark order as unpaid',
+        source: 'MARK_UNPAID',
+      );
+
       // 2. ถ้าเป็นเครดิตที่ลงบัญชีไปแล้ว ต้องคืนยอดหนี้
       if (paymentMethod == 'CREDIT') {
-        final debtTrans = await _dbService.query(
-          "SELECT amount, customerId FROM debtor_transaction WHERE orderId = :oid AND transactionType = 'CREDIT_SALE' AND (isDeleted = 0 OR isDeleted IS NULL) FOR UPDATE",
-          {'oid': orderId}
-        );
-        for (var t in debtTrans) {
-          final double amount = double.tryParse(t['amount'].toString()) ?? 0.0;
-          final int cid = int.tryParse(t['customerId'].toString()) ?? 0;
-          if (cid > 0) {
-            await _dbService.execute(
-              'UPDATE customer SET currentDebt = currentDebt - :amt WHERE id = :id',
-              {'amt': amount, 'id': cid}
-            );
-          }
-        }
         await _dbService.execute(
-          "UPDATE debtor_transaction SET isDeleted = 1, deletedAt = NOW(), deleteReason = 'เปลี่ยนเป็นยังไม่ได้จ่าย' WHERE orderId = :oid AND transactionType = 'CREDIT_SALE'",
-          {'oid': orderId}
-        );
+            "UPDATE debtor_transaction SET isDeleted = 1, deletedAt = NOW(), deleteReason = 'เปลี่ยนเป็นยังไม่ได้จ่าย' WHERE orderId = :oid AND transactionType = 'CREDIT_SALE' AND (isDeleted = 0 OR isDeleted IS NULL)",
+            {'oid': orderId});
         try {
-          await _dbService.execute('DELETE FROM customer_ledger WHERE orderId = :oid AND action = "CREDIT_SALE"', {'oid': orderId});
+          await _dbService.execute(
+              'DELETE FROM customer_ledger WHERE orderId = :oid AND action = "CREDIT_SALE"',
+              {'oid': orderId});
         } catch (_) {}
+
+        final cid = int.tryParse(order['customerId']?.toString() ?? '0') ?? 0;
+        if (cid > 0) {
+          final res = await _dbService.query('''
+            SELECT SUM(dt.amount) as total 
+            FROM debtor_transaction dt
+            LEFT JOIN `order` o ON dt.orderId = o.id
+            WHERE dt.customerId = :id 
+              AND (dt.isDeleted = 0 OR dt.isDeleted IS NULL)
+              AND (o.status IS NULL OR o.status != 'VOID')
+          ''', {'id': cid});
+          double totalDebt = 0.0;
+          if (res.isNotEmpty && res.first['total'] != null) {
+            totalDebt = double.tryParse(res.first['total'].toString()) ?? 0.0;
+          }
+          await _dbService.execute(
+            'UPDATE customer SET currentDebt = :debt WHERE id = :id',
+            {'debt': totalDebt, 'id': cid},
+          );
+        }
       }
 
       // 3. เปลี่ยนสถานะบิลและลดยอดรับเงิน
       await _dbService.execute(
-        "UPDATE `order` SET status = 'UNPAID', received = 0, paymentMethod = '' WHERE id = :id",
-        {'id': orderId}
-      );
-      
+          "UPDATE `order` SET status = 'UNPAID', received = 0, paymentMethod = '' WHERE id = :id",
+          {'id': orderId});
+
       // 4. บันทึกประวัติ
       await _activityRepo.log(
-        action: 'MARK_UNPAID',
-        details: 'เปลี่ยนสถานะบิล #$orderId กลับเป็นยังไม่ได้จ่าย'
-      );
-      
+          action: 'MARK_UNPAID',
+          details: 'เปลี่ยนสถานะบิล #$orderId กลับเป็นยังไม่ได้จ่าย');
+
       await _dbService.execute('COMMIT;');
-      
+
       // 5. แจ้งเตือน Telegram (ใช้คีย์ลบบิล/ยกเลิกบิลแทน)
-      if (await TelegramService().shouldNotify(TelegramService.keyNotifyDeleteBill)) {
-        TelegramService().sendMessage(
-          '🔄 *แจ้งเตือนแก้ไขบิล*\n'
-          '━━━━━━━━━━━━━━━━━━\n'
-          '🧾 *เลขที่บิล:* #$orderId\n'
-          '💰 *ยอดเงิน:* ${grandTotal.toStringAsFixed(2)} บาท\n'
-          '⚠️ *สถานะ:* ถูกเปลี่ยนเป็น "ยังไม่ได้จ่าย"'
-        );
+      if (await TelegramService()
+          .shouldNotify(TelegramService.keyNotifyDeleteBill)) {
+        TelegramService().sendMessage('🔄 *แจ้งเตือนแก้ไขบิล*\n'
+            '━━━━━━━━━━━━━━━━━━\n'
+            '🧾 *เลขที่บิล:* #$orderId\n'
+            '💰 *ยอดเงิน:* ${grandTotal.toStringAsFixed(2)} บาท\n'
+            '⚠️ *สถานะ:* ถูกเปลี่ยนเป็น "ยังไม่ได้จ่าย"');
       }
     } catch (e) {
       await _dbService.execute('ROLLBACK;');
-      LoggerService.error('SalesRepository', 'Error marking order as unpaid', e);
+      LoggerService.error(
+          'SalesRepository', 'Error marking order as unpaid', e);
       rethrow;
     }
   }
-
 }

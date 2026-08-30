@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'package:shelf/shelf.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
+import '../env_config.dart';
 
-/// Middleware สำหรับตรวจสอบ Firebase ID Token
-Middleware jwtMiddleware() {
+const _trustedIssuer = 'https://s-link-pos.com';
+
+/// Middleware for POS-issued S-Link access tokens.
+Middleware jwtMiddleware({String? accessSecret}) {
+  final secret = accessSecret ?? (EnvConfig()['JWT_ACCESS_SECRET'] ?? '');
   return (Handler innerHandler) {
     return (Request request) async {
       // ยกเว้น Path ที่ไม่ต้องการการตรวจสอบ (Public endpoints)
@@ -23,22 +27,29 @@ Middleware jwtMiddleware() {
 
       final token = authHeader.substring(7); // ตัดคำว่า "Bearer " ออก
 
-      // ตรวจสอบ JWT (Custom JWT by POS Desktop)
-      Map<String, dynamic>? payload;
+      Map<String, dynamic> payload;
       try {
-        final jwt = JWT.verify(token, SecretKey('s_link_pos_secret_key_2026'));
+        if (secret.isEmpty) throw const FormatException('Missing JWT secret');
+        final jwt = JWT.verify(
+          token,
+          SecretKey(secret),
+          issuer: _trustedIssuer,
+        );
         payload = jwt.payload as Map<String, dynamic>;
-      } catch (e) {
-        // ignore: avoid_print
-        print('⚠️ JWT Middleware: Token rejected. Error: $e');
+        if (payload['type'] != 'access') {
+          throw const FormatException('Invalid JWT type');
+        }
+      } catch (_) {
         return Response.unauthorized(
-          jsonEncode({'error': 'Token Rejected: $e'}),
+          jsonEncode({'error': 'Token rejected'}),
           headers: {'content-type': 'application/json'},
         );
       }
 
       // แนบข้อมูลผู้ใช้เข้าไปใน context เพื่อให้ Controller เอาไปใช้ได้
-      final updatedRequest = request.change(context: {'user': payload});
+      final updatedRequest = request.change(
+        context: {...request.context, 'user': payload},
+      );
 
       return innerHandler(updatedRequest);
     };

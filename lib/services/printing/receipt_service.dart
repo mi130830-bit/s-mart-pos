@@ -152,6 +152,7 @@ class ReceiptService {
     required Customer customer,
     Printer? printerOverride,
     bool isPreview = false,
+    String? remark,
   }) async {
     return TaxInvoiceHandler.printTaxInvoice(
       orderId: orderId,
@@ -162,6 +163,7 @@ class ReceiptService {
       customer: customer,
       printerOverride: printerOverride,
       isPreview: isPreview,
+      remark: remark,
     );
   }
 

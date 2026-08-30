@@ -13,13 +13,37 @@ mixin CouponControllerMixin<T extends StatefulWidget> on State<T> {
     couponCtrl.dispose();
   }
 
-  void clearCoupon(PosStateNotifier posState) {
+  void initializeCouponFromPosState(PosStateNotifier posState) {
+    final code = posState.appliedCouponCode;
+    if (code == null || code.isEmpty || posState.couponDiscountAmount <= 0) {
+      return;
+    }
+    couponCtrl.text = code;
+    couponApplied = true;
+    couponResult = CouponValidationResult.valid(
+      couponCode: code,
+      discountValue: posState.couponDiscountAmount,
+      rewardName: null,
+      customerName: posState.currentCustomer?.name,
+      expiresAt: null,
+      status: posState.isSourceCouponLocked ? 'RESERVED' : 'ACTIVE',
+      reservedOnlineOrderId: posState.sourceOnlineOrderId,
+    );
+  }
+
+  bool clearCoupon(PosStateNotifier posState) {
+    if (posState.isSourceCouponLocked) {
+      SnackbarUtils.showLeft(context,
+          'คูปองนี้ถูกสำรองมากับออเดอร์ออนไลน์ ต้องยกเลิกหรือปฏิเสธออเดอร์เพื่อคืนคูปอง');
+      return false;
+    }
     setState(() {
       couponApplied = false;
       couponResult = null;
       couponCtrl.clear();
       posState.applyCouponDiscount(0, null);
     });
+    return true;
   }
 
   Future<void> validateAndApplyCoupon(
@@ -39,7 +63,11 @@ mixin CouponControllerMixin<T extends StatefulWidget> on State<T> {
     });
 
     final repo = RewardRepository();
-    final result = await repo.validateCoupon(code, customerId: customer.id);
+    final result = await repo.validateCoupon(
+      code,
+      customerId: customer.id,
+      sourceOnlineOrderId: posState.sourceOnlineOrderId,
+    );
 
     if (!mounted) return;
 

@@ -7,6 +7,7 @@ import 'stock_ops_view.dart';
 import 'product_import_screen.dart';
 import 'barcode_printing_screen.dart';
 import '../stock/stock_alert_screen.dart'; // ✅ Added import
+import 'dead_stock_screen.dart'; // ✅ Dead Stock Report Screen
 
 class ProductManagementScreen extends ConsumerStatefulWidget {
   const ProductManagementScreen({super.key});
@@ -32,6 +33,8 @@ class _ProductManagementScreenState extends ConsumerState<ProductManagementScree
         return 'รับคืนสินค้า (Return In)';
       case 'CARD':
         return 'รายงาน Stock Card';
+      case 'DEAD_STOCK': // ✅ สินค้าไม่เคลื่อนไหว
+        return 'รายงานสินค้าไม่เคลื่อนไหว (Dead Stock)';
       case 'IMPORT': // ✅ 2. เพิ่มชื่อหัวข้อ
         return 'นำเข้าสินค้าจากไฟล์ (Import)';
       case 'BARCODE':
@@ -67,7 +70,10 @@ class _ProductManagementScreenState extends ConsumerState<ProductManagementScree
       ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
-        child: _buildBody(),
+        child: KeyedSubtree(
+          key: ValueKey(_currentView),
+          child: _buildBody(),
+        ),
       ),
     );
   }
@@ -85,6 +91,8 @@ class _ProductManagementScreenState extends ConsumerState<ProductManagementScree
         return const StockOperationTab(operationType: 'RETURN');
       case 'CARD':
         return const StockOperationTab(operationType: 'CARD');
+      case 'DEAD_STOCK': // ✅ แสดงหน้าจอ Dead Stock
+        return const DeadStockScreen();
       case 'IMPORT': // ✅ 3. เรียกหน้าจอ Import
         return const ProductImportScreen();
       case 'BARCODE':
@@ -142,6 +150,13 @@ class _ProductManagementScreenState extends ConsumerState<ProductManagementScree
           icon: Icons.history,
           color: Colors.brown,
           onTap: () => _navigateTo('CARD'),
+        ),
+      if (auth.hasPermission('view_stock_card') || auth.hasPermission('manage_product'))
+        _buildMenuCard(
+          label: 'สินค้าไม่เคลื่อนไหว\n(Dead Stock)',
+          icon: Icons.pause_circle_filled,
+          color: Colors.blueGrey,
+          onTap: () => _navigateTo('DEAD_STOCK'),
         ),
       if (auth.hasPermission('import_product'))
         _buildMenuCard(

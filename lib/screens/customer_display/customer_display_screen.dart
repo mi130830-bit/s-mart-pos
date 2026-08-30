@@ -44,6 +44,10 @@ class _CustomerDisplayScreenState extends State<CustomerDisplayScreen> {
   String? _bankAccount;
   String? _bankAccountName;
   double _fontSize = 14.0;
+  bool _showLineOa = true;
+  String? _lineOaQrBase64;
+  String? _lineOaUrl;
+  String? _lineOaId;
 
   StreamSubscription<Map<String, dynamic>>? _subscription;
 
@@ -132,6 +136,10 @@ class _CustomerDisplayScreenState extends State<CustomerDisplayScreen> {
       _bankName = prefs.getString('bank_name');
       _bankAccountName = prefs.getString('bank_account_name');
       _bankAccount = prefs.getString('bank_account');
+      _showLineOa = prefs.getBool('show_line_oa_on_display') ?? true;
+      _lineOaQrBase64 = prefs.getString('line_oa_qr_image_base64');
+      _lineOaUrl = prefs.getString('line_oa_url');
+      _lineOaId = prefs.getString('line_oa_id');
       final sizeStr = prefs.getString('customer_display_font_size');
       if (sizeStr != null) {
         _fontSize = double.tryParse(sizeStr) ?? 14.0;
@@ -213,6 +221,10 @@ class _CustomerDisplayScreenState extends State<CustomerDisplayScreen> {
                       bankName: _bankName,
                       bankAccount: _bankAccount,
                       bankAccountName: _bankAccountName,
+                      showLineOa: _showLineOa,
+                      lineOaQrBase64: _lineOaQrBase64,
+                      lineOaUrl: _lineOaUrl,
+                      lineOaId: _lineOaId,
                     ),
                   ),
                 ],

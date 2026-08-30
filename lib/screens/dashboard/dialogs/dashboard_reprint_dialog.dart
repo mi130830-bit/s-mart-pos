@@ -62,6 +62,9 @@ class DashboardReprintDialog {
       'address': order['address'] ?? '',
     });
 
+    final String? orderNote =
+        order['notes']?.toString() ?? order['note']?.toString();
+
     switch (choice) {
       case 'SLIP':
         await ReceiptService().printReceipt(
@@ -74,6 +77,7 @@ class DashboardReprintDialog {
           customer: customer,
           isPreview: false,
           useCashBillSettings: false,
+          remark: orderNote,
         );
       case 'RECEIPT_A4' || 'RECEIPT_A5':
         await ReceiptService().printReceipt(
@@ -88,6 +92,7 @@ class DashboardReprintDialog {
           useCashBillSettings: true,
           pageFormatOverride:
               choice == 'RECEIPT_A4' ? PdfPageFormat.a4 : null,
+          remark: orderNote,
         );
       case 'DELIVERY_A4' || 'DELIVERY_A5':
         await ReceiptService().printDeliveryNote(
@@ -98,6 +103,7 @@ class DashboardReprintDialog {
           isPreview: false,
           pageFormatOverride:
               choice == 'DELIVERY_A4' ? PdfPageFormat.a4 : null,
+          remark: orderNote,
         );
       case 'SAVE_RECEIPT_PDF':
         await ReceiptService().printReceipt(
@@ -110,6 +116,7 @@ class DashboardReprintDialog {
           customer: customer,
           isPreview: true,
           useCashBillSettings: true,
+          remark: orderNote,
         );
       case 'SAVE_DELIVERY_PDF':
         await ReceiptService().printDeliveryNote(
@@ -118,6 +125,7 @@ class DashboardReprintDialog {
           customer: customer,
           discount: double.tryParse(order['discount'].toString()) ?? 0.0,
           isPreview: true,
+          remark: orderNote,
         );
     }
   }

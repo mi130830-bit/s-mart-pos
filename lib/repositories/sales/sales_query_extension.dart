@@ -13,6 +13,8 @@ extension SalesQueryExtension on SalesRepository {
       final sql = '''
         (SELECT 
           o.id, 
+          o.orderNumber,
+          o.sales_channel,
           o.grandTotal as amount, 
           o.received, 
           o.paymentMethod, 
@@ -22,7 +24,7 @@ extension SalesQueryExtension on SalesRepository {
           (SELECT COUNT(*) FROM orderitem WHERE orderId = o.id) as itemCount,
           (SELECT COALESCE(SUM(p.costPrice * oi.quantity), 0) FROM orderitem oi LEFT JOIN product p ON oi.productId = p.id WHERE oi.orderId = o.id) as totalCost,
           o.id as refId,
-          '' as note,
+          o.note,
           'ORDER' as type
         FROM `order` o
         LEFT JOIN customer c ON o.customerId = c.id
@@ -33,6 +35,8 @@ extension SalesQueryExtension on SalesRepository {
 
         (SELECT 
           dt.id, 
+          NULL as orderNumber,
+          'POS' as sales_channel,
           ABS(dt.amount) as amount, 
           ABS(dt.amount) as received,
           'Cash/Transfer' as paymentMethod, 

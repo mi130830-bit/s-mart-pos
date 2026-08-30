@@ -41,6 +41,7 @@ extension PosDeliveryExtension on PosStateNotifier {
       discount: double.tryParse(orderData['discount']?.toString() ?? '0') ?? 0,
       vatAmount: double.tryParse(orderData['vatAmount']?.toString() ?? '0') ?? 0.0,
       grandTotalOverride: gTotal,
+      remark: orderData['notes']?.toString() ?? orderData['note']?.toString(),
     );
 
     Customer effectiveCustomer = customer;
@@ -86,6 +87,7 @@ extension PosDeliveryExtension on PosStateNotifier {
         orderId: orderId, items: currentItems, customer: effectiveCustomer,
         discount: discountAmount, vatAmount: vatAmount,
         grandTotalOverride: grandTotal,
+        remark: manualNote,
         pageFormatOverride: PdfPageFormat(
             22.86 * PdfPageFormat.cm, 13.97 * PdfPageFormat.cm, marginAll: 0),
       );

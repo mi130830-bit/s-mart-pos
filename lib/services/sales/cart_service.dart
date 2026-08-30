@@ -169,21 +169,28 @@ class CartNotifier extends AutoDisposeNotifier<CartState> {
       final existing = currentCart[index];
       final newQty = existing.quantity + quantity;
 
-      // Re-calculate price if tiered (based on new Qty)
+      // Re-calculate price if tiered (based on new Qty), but NOT if price was overridden by user
       final productToUse =
           existing.product?.copyWith(priceTiers: tiers) ?? productWithTiers;
-      final newPrice = overridePrice ??
-          _priceService.calculateUnitPrice(
-              product: productToUse,
-              quantity: newQty,
-              customer: customer,
-              customerTier: tier);
+
+      final bool shouldOverride = overridePrice != null;
+      final bool keepOverriddenPrice = !shouldOverride && existing.isPriceOverridden;
+
+      final Decimal newPrice = shouldOverride
+          ? overridePrice
+          : (keepOverriddenPrice
+              ? existing.price
+              : _priceService.calculateUnitPrice(
+                  product: productToUse,
+                  quantity: newQty,
+                  customer: customer,
+                  customerTier: tier));
 
       currentCart[index] = existing.copyWith(
         quantity: newQty,
         price: newPrice,
+        isPriceOverridden: shouldOverride || keepOverriddenPrice,
         product: productToUse,
-        // Total will be recalc by service logic implicitly? No, need to set total logic.
       );
       // Update line total
       currentCart[index] = _priceService.recalculateItemTotal(currentCart[index]);

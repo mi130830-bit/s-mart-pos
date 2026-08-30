@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'mysql_service.dart';
+import 'settings_service.dart';
 
 import '../repositories/sales_repository.dart';
 import 'printing/receipt_service.dart';
@@ -73,9 +74,9 @@ class CommandService {
               AND created_at >= NOW() - INTERVAL 5 MINUTE
             LIMIT 10
           ''';
-          
+
           final pendingCmds = await mysql.query(query, {'devId': devId});
-          
+
           for (var cmdData in pendingCmds) {
             debugPrint(
                 '⚡ [POS] Received Local Command: ${cmdData['command']} (ID: ${cmdData['id']})');
@@ -243,6 +244,8 @@ class CommandService {
     final receiptService = ReceiptService();
 
     // Print!
+    final String? orderNote =
+        order['notes']?.toString() ?? order['note']?.toString();
     await receiptService.printReceipt(
       orderId: orderId,
       items: items,
@@ -252,6 +255,7 @@ class CommandService {
       received: 0,
       change: 0,
       customer: customer,
+      remark: orderNote,
     );
 
     // ---------------------------------------------------------
@@ -272,13 +276,13 @@ class CommandService {
 
         if (imageBytes != null) {
           final base64Image = base64Encode(imageBytes);
-          final url =
-              Uri.parse('http://localhost:8080/api/v1/line/push-receipt-image');
+          final url = Uri.parse(
+              'http://localhost:8080/api/v1/line-internal/push-receipt-image');
 
           debugPrint('[SEND] Sending Receipt Image to Backend...');
           final response = await http.post(
             url,
-            headers: {'Content-Type': 'application/json'},
+            headers: SettingsService().internalApiHeaders,
             body: jsonEncode({
               'lineUserId': customer.lineUserId,
               'orderId': orderId.toString(),
@@ -323,18 +327,11 @@ class CommandService {
     try {
       if (defaultTargetPlatform == TargetPlatform.windows) {
         final mysql = MySQLService();
-        await mysql.execute(
-          '''
+        await mysql.execute('''
           UPDATE pos_commands 
           SET status = :status, result_message = :msg, executed_at = NOW() 
           WHERE id = :id
-          ''',
-          {
-            'status': status, 
-            'msg': message, 
-            'id': docId
-          }
-        );
+          ''', {'status': status, 'msg': message, 'id': docId});
       } else {
         await _firestore.collection('commands').doc(docId).update({
           'status': status,
@@ -364,17 +361,15 @@ class CommandService {
     // Claim Lock via Local MySQL (Atomic UPDATE)
     try {
       final mysql = MySQLService();
-      final result = await mysql.execute(
-        '''
+      final result = await mysql.execute('''
         UPDATE pos_commands 
         SET status = 'PROCESSING', claimed_at = NOW() 
         WHERE id = :id AND status = 'PENDING'
-        ''',
-        {'id': docId}
-      );
-      
+        ''', {'id': docId});
+
       if (result.affectedRows == BigInt.zero) {
-        debugPrint('[WARN] Could not claim local command $docId (already claimed)');
+        debugPrint(
+            '[WARN] Could not claim local command $docId (already claimed)');
         return;
       }
     } catch (e) {

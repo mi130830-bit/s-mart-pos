@@ -34,33 +34,9 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
                   color: Colors.grey[300],
                   border: Border.all(color: Colors.grey[400]!),
                   borderRadius: BorderRadius.circular(8),
-                  image: _pickedImage != null
-                      ? DecorationImage(
-                          image: FileImage(File(_pickedImage!.path)),
-                          fit: BoxFit.cover,
-                        )
-                      : (widget.product?.imageUrl != null &&
-                              widget.product!.imageUrl!.isNotEmpty)
-                          ? DecorationImage(
-                              image: FileImage(File(widget.product!.imageUrl!)),
-                              fit: BoxFit.cover,
-                            ) // Assuming local path for Desktop
-                          : null,
                 ),
-                child: (_pickedImage == null &&
-                        (widget.product?.imageUrl == null ||
-                            widget.product!.imageUrl!.isEmpty))
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.add_a_photo, size: 32, color: Colors.grey),
-                          SizedBox(height: 4),
-                          Text('เลือกรูป',
-                              style:
-                                  TextStyle(fontSize: 12, color: Colors.grey)),
-                        ],
-                      )
-                    : null,
+                clipBehavior: Clip.antiAlias,
+                child: _buildProductImagePreview(),
               ),
             ),
             const SizedBox(width: 16),
@@ -421,4 +397,53 @@ extension ProductFormLeftColumnExtension on _ProductFormDialogState {
       ],
     );
   }
+
+  Widget _buildProductImagePreview() {
+    if (_pickedImage != null) {
+      return Image.file(
+        File(_pickedImage!.path),
+        width: 120,
+        height: 120,
+        fit: BoxFit.cover,
+      );
+    }
+    final rawUrl = widget.product?.imageUrl;
+    if (rawUrl != null && rawUrl.trim().isNotEmpty) {
+      final provider = ProductImageHelper.getImageProvider(rawUrl);
+      if (provider != null) {
+        return Image(
+          image: provider,
+          width: 120,
+          height: 120,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return _buildEmptyImagePlaceholder();
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+        );
+      }
+    }
+    return _buildEmptyImagePlaceholder();
+  }
+
+  Widget _buildEmptyImagePlaceholder() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: const [
+        Icon(Icons.add_a_photo, size: 32, color: Colors.grey),
+        SizedBox(height: 4),
+        Text('เลือกรูป', style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
 }
+

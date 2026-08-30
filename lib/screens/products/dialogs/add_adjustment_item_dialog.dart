@@ -15,7 +15,8 @@ class AddAdjustmentItemDialog extends ConsumerStatefulWidget {
       _AddAdjustmentItemDialogState();
 }
 
-class _AddAdjustmentItemDialogState extends ConsumerState<AddAdjustmentItemDialog> {
+class _AddAdjustmentItemDialogState
+    extends ConsumerState<AddAdjustmentItemDialog> {
   final _dialogFormKey = GlobalKey<FormState>();
   final TextEditingController _dialogCountedQtyCtrl = TextEditingController();
   final TextEditingController _dialogNoteCtrl = TextEditingController();
@@ -60,12 +61,13 @@ class _AddAdjustmentItemDialogState extends ConsumerState<AddAdjustmentItemDialo
                 InkWell(
                   onTap: () async {
                     if (!context.mounted) return;
-                    final controller = ref.read(stockAdjustmentProvider.notifier);
-                    
+                    final controller =
+                        ref.read(stockAdjustmentProvider.notifier);
+
                     final picked = await showDialog<Product>(
                       context: context,
-                      builder: (c) => ProductSelectionDialog(
-                          repo: controller.productRepo),
+                      builder: (c) =>
+                          ProductSelectionDialog(repo: controller.productRepo),
                     );
                     if (picked != null) {
                       setState(() {
@@ -88,6 +90,28 @@ class _AddAdjustmentItemDialogState extends ConsumerState<AddAdjustmentItemDialo
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await showDialog<Product>(
+                        context: context,
+                        builder: (c) => ProductSelectionDialog(
+                          repo: ref
+                              .read(stockAdjustmentProvider.notifier)
+                              .productRepo,
+                          enableScanner: false,
+                        ),
+                      );
+                      if (picked != null && mounted) {
+                        setState(() => _dialogSelectedProduct = picked);
+                      }
+                    },
+                    icon: const Icon(Icons.search),
+                    label: const Text('ค้นหาชื่อสินค้า'),
                   ),
                 ),
                 if (_dialogSelectedProduct != null) ...[

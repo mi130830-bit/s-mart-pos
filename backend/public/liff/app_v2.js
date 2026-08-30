@@ -1,5 +1,7 @@
 const LIFF_ID = "2009815377-VjmykeWs";
-const API_BASE_URL = "/api/v1/rewards";
+const REWARD_CATALOG_API = "/api/v1/rewards";
+const MEMBER_API = "/api/v1/rewards-member";
+const MEMBERSHIP_API = "/api/v1/membership-member";
 
 // State
 let currentUser = null;
@@ -26,7 +28,8 @@ async function initializeLiff() {
             liff.login();
             return;
         }
-        loadData();
+        await consumePairingFromUrl();
+        await loadData();
     } catch (err) {
         console.error("LIFF Initialization failed", err);
         showError("ไม่สามารถเชื่อมต่อกับ LINE ได้: " + err.message);
@@ -37,13 +40,14 @@ async function loadData() {
     showLoading();
     try {
         const profile = await liff.getProfile();
-        const customerRes = await fetch(`${API_BASE_URL}/customer/${profile.userId}`);
+        const customerRes = await fetch(`${MEMBER_API}/me`, {
+            headers: liffAuthHeaders()
+        });
         if (!customerRes.ok) {
             showRegistrationForm(profile.displayName);
             return;
         }
         currentUser = await customerRes.json();
-        currentUser.lineUserId = profile.userId;
 
         document.getElementById('profile-img').src = profile.pictureUrl || 'https://via.placeholder.com/150';
         document.getElementById('profile-name').textContent = currentUser.name;
@@ -67,7 +71,7 @@ async function loadData() {
 
 
 async function loadCatalog() {
-    const rewardsRes = await fetch(API_BASE_URL);
+    const rewardsRes = await fetch(REWARD_CATALOG_API);
     if (!rewardsRes.ok) throw new Error("ไม่สามารถโหลดรายการของรางวัลได้");
     currentRewards = await rewardsRes.json();
     renderRewards();
@@ -79,7 +83,7 @@ async function loadCoupons() {
     grid.innerHTML = '<div class="loading-inline"><div class="spinner-sm"></div></div>';
     grid.classList.remove('hidden');
     try {
-        const res = await fetch(`${API_BASE_URL}/my-coupons/${currentUser.lineUserId}`);
+        const res = await fetch(`${MEMBER_API}/my-coupons`, { headers: liffAuthHeaders() });
         const coupons = await res.json();
         renderCoupons(coupons);
     } catch (e) {
@@ -93,7 +97,7 @@ async function loadHistory() {
     grid.innerHTML = '<div class="loading-inline"><div class="spinner-sm"></div></div>';
     grid.classList.remove('hidden');
     try {
-        const res = await fetch(`${API_BASE_URL}/my-history/${currentUser.lineUserId}`);
+        const res = await fetch(`${MEMBER_API}/my-history`, { headers: liffAuthHeaders() });
         const history = await res.json();
         renderHistory(history);
     } catch (e) {
@@ -270,10 +274,10 @@ function confirmRedeem(rewardId, rewardName, pointPrice, rewardType, discountVal
 async function processRedemption(rewardId, rewardType) {
     Swal.fire({ title: 'กำลังดำเนินการ...', allowOutsideClick: false, background: '#1e293b', color: '#f8fafc', didOpen: () => Swal.showLoading() });
     try {
-        const response = await fetch(`${API_BASE_URL}/redeem`, {
+        const response = await fetch(`${MEMBER_API}/redeem`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lineUserId: currentUser.lineUserId, rewardId })
+            headers: liffAuthHeaders(true),
+            body: JSON.stringify({ rewardId })
         });
         const data = await response.json();
         if (response.ok && data.success) {
@@ -326,20 +330,32 @@ function showRegistrationForm(displayName) {
 async function submitRegistration() {
     const phone = document.getElementById('reg-phone').value.trim();
     const name = document.getElementById('reg-name').value.trim();
+    const address = document.getElementById('reg-address')?.value.trim() || '';
+    const shippingAddress = document.getElementById('reg-shipping-address')?.value.trim() || '';
     if (!phone || phone.length < 10) {
         Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ครบ', text: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก', background: '#1e293b', color: '#f8fafc' });
         return;
     }
     Swal.fire({ title: 'กำลังเชื่อมต่อ...', allowOutsideClick: false, background: '#1e293b', color: '#f8fafc', didOpen: () => Swal.showLoading() });
     try {
-        const profile = await liff.getProfile();
-        const response = await fetch(`${API_BASE_URL}/link-phone`, {
+        const requestUuid = membershipRequestUuid();
+        const response = await fetch(`${MEMBERSHIP_API}/signup`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, name, lineUserId: profile.userId, lineDisplayName: profile.displayName, linePictureUrl: profile.pictureUrl })
+            headers: liffAuthHeaders(true),
+            body: JSON.stringify({ phone, name, address, shippingAddress, requestUuid })
         });
         const result = await response.json();
-        if (response.ok && result.success) {
+        if (response.status === 202 && result.success) {
+            localStorage.removeItem('membership_signup_request_uuid');
+            Swal.fire({
+                icon: 'info',
+                title: 'ส่งคำขอแล้ว',
+                text: result.message || 'พนักงานจะตรวจสอบสมาชิกเดิมให้ครับ',
+                background: '#1e293b',
+                color: '#f8fafc'
+            });
+        } else if (response.ok && result.success) {
+            localStorage.removeItem('membership_signup_request_uuid');
             Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: result.message, background: '#1e293b', color: '#f8fafc' }).then(() => {
                 document.getElementById('registration-form').classList.add('hidden');
                 loadData();
@@ -350,6 +366,75 @@ async function submitRegistration() {
     } catch (err) {
         Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: err.message, background: '#1e293b', color: '#f8fafc' });
     }
+}
+
+function membershipRequestUuid() {
+    let value = localStorage.getItem('membership_signup_request_uuid');
+    const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!value || !validUuid.test(value)) {
+        value = (window.crypto && window.crypto.randomUUID)
+            ? window.crypto.randomUUID()
+            : fallbackUuidV4();
+        localStorage.setItem('membership_signup_request_uuid', value);
+    }
+    return value;
+}
+
+function fallbackUuidV4() {
+    const bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) {
+        window.crypto.getRandomValues(bytes);
+    } else {
+        for (let index = 0; index < bytes.length; index += 1) {
+            bytes[index] = Math.floor(Math.random() * 256);
+        }
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function consumePairingFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('pair');
+    if (!token) return;
+    try {
+        const response = await fetch(`${MEMBERSHIP_API}/pairing/consume`, {
+            method: 'POST',
+            headers: liffAuthHeaders(true),
+            body: JSON.stringify({ token })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'QR นี้ไม่สามารถใช้งานได้');
+        }
+        params.delete('pair');
+        const query = params.toString();
+        history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+        await Swal.fire({
+            icon: 'success',
+            title: 'ผูกสมาชิกสำเร็จ',
+            text: 'บัญชี LINE นี้เชื่อมกับสมาชิกเรียบร้อยแล้ว',
+            background: '#1e293b',
+            color: '#f8fafc'
+        });
+    } catch (err) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'ไม่สามารถใช้ QR ได้',
+            text: err.message,
+            background: '#1e293b',
+            color: '#f8fafc'
+        });
+    }
+}
+
+function liffAuthHeaders(includeJson = false) {
+    const token = liff.getIDToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    if (includeJson) headers['Content-Type'] = 'application/json';
+    return headers;
 }
 
 function showLoading() {

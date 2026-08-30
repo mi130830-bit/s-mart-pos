@@ -1,0 +1,508 @@
+/* ==========================================================================
+   METAL SHEET STUDIO STYLES (White & Emerald Green Theme Harmonized)
+   ========================================================================== */
+
+/* Full-width Banner at top (Emerald Green & White) */
+.metal-studio-banner {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    border-radius: var(--radius-lg, 16px);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.25);
+    margin-bottom: 16px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.metal-banner-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.metal-banner-badge {
+    font-size: 28px;
+    background: rgba(255, 255, 255, 0.2);
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.metal-banner-text h3 {
+    font-size: 15px;
+    font-weight: 800;
+    margin: 0 0 2px 0;
+    color: #ffffff !important;
+}
+
+.metal-banner-text p {
+    font-size: 12px;
+    margin: 0;
+    color: #d1fae5 !important;
+    opacity: 0.95;
+}
+
+.metal-open-btn {
+    background: #ffffff;
+    color: #047857;
+    border: none;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 10px 18px;
+    border-radius: 9999px;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.metal-open-btn:hover {
+    background: #ecfdf5;
+    transform: translateY(-1px);
+}
+
+/* Metal Modal Header */
+.metal-modal-card {
+    max-width: 520px;
+}
+
+.metal-modal-header {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    color: #ffffff;
+}
+
+.metal-modal-header h3 {
+    color: #ffffff !important;
+}
+
+.metal-modal-header p {
+    color: #d1fae5 !important;
+}
+
+/* 1. Type & Thickness Selector Grid */
+.metal-type-selector {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.metal-type-option {
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: #ffffff;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.metal-type-option:hover {
+    border-color: #059669;
+    background: #f0fdf4;
+}
+
+.metal-type-option.active {
+    border-color: #059669;
+    background: #ecfdf5;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
+
+.metal-type-option strong {
+    font-size: 13px;
+    color: #0f172a;
+}
+
+.metal-type-option.active strong {
+    color: #065f46;
+}
+
+.metal-price-tag {
+    font-size: 12px;
+    font-weight: 800;
+    color: #059669;
+}
+
+/* 2. Color Selector */
+.metal-color-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.metal-color-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 9999px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+    background: #ffffff;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.metal-color-option:hover {
+    border-color: #059669;
+    background: #f0fdf4;
+}
+
+.metal-color-option.active {
+    border-color: #059669;
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.color-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+/* 3. Insulation Selector */
+.metal-insulation-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.metal-insulation-option {
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: #ffffff;
+    transition: all 0.15s;
+    text-align: center;
+    user-select: none;
+}
+
+.metal-insulation-option:hover {
+    border-color: #059669;
+    background: #f0fdf4;
+}
+
+.metal-insulation-option.active {
+    border-color: #059669;
+    background: #ecfdf5;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
+
+.metal-insulation-option strong {
+    font-size: 12px;
+    color: #0f172a;
+}
+
+.metal-insulation-option.active strong {
+    color: #065f46;
+}
+
+.metal-insulation-option small {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.metal-insulation-option.active small {
+    color: #059669;
+    font-weight: 700;
+}
+
+/* 4. Multi-Length Cut List Box */
+.metal-calc-box {
+    background: #f8faf9;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.cut-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.add-cut-row-btn {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1.5px dashed #059669;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.add-cut-row-btn:hover {
+    background: #059669;
+    color: #ffffff;
+    border-style: solid;
+}
+
+.metal-cut-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.metal-cut-row {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.15s;
+}
+
+.metal-cut-row:hover {
+    border-color: #059669;
+}
+
+.cut-row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.cut-row-badge {
+    background: #ecfdf5;
+    color: #065f46;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.cut-length-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 105px;
+    flex-shrink: 0;
+}
+
+.cut-length-input-wrap input {
+    width: 100%;
+    padding: 8px 28px 8px 10px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    background: #ffffff;
+}
+
+.cut-length-input-wrap input:focus {
+    outline: none;
+    border-color: #059669;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
+
+.cut-length-input-wrap .unit-text {
+    position: absolute;
+    right: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    pointer-events: none;
+}
+
+.cut-multiply {
+    font-weight: 800;
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.cut-qty-stepper {
+    display: flex;
+    align-items: center;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+    height: 36px;
+    width: 100px;
+    flex-shrink: 0;
+}
+
+.cut-qty-btn {
+    width: 30px;
+    height: 36px;
+    border: none;
+    background: #f1f5f9;
+    font-size: 16px;
+    font-weight: 800;
+    color: #1e293b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.cut-qty-btn:hover {
+    background: #e2e8f0;
+}
+
+.cut-qty-stepper input {
+    flex: 1;
+    border: none;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    padding: 0;
+    width: 40px;
+}
+
+.cut-qty-stepper input:focus {
+    outline: none;
+}
+
+.cut-subtotal-meters {
+    font-size: 12px;
+    font-weight: 800;
+    color: #059669;
+    min-width: 65px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.cut-remove-row-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.cut-remove-row-btn:hover {
+    color: #ef4444;
+    background: #fee2e2;
+}
+
+.cut-row-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-left: 36px;
+}
+
+.preset-btn {
+    padding: 2px 7px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    background: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.preset-btn:hover {
+    border-color: #059669;
+    color: #059669;
+}
+
+.preset-btn.active {
+    border-color: #059669;
+    background: #059669;
+    color: #ffffff;
+}
+
+/* 5. Summary Badge */
+.metal-summary-badge {
+    background: #ffffff;
+    border: 1.5px solid #a7f3d0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.summary-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #334155;
+}
+
+.summary-line strong {
+    font-weight: 800;
+    font-size: 14px;
+    color: #0f172a;
+}
+
+.total-price-line {
+    border-top: 1px dashed #a7f3d0;
+    padding-top: 6px;
+    margin-top: 2px;
+}
+
+.price-highlight {
+    font-size: 18px !important;
+    color: #047857 !important;
+}
+
+.summary-subtext {
+    font-size: 11px;
+    color: #64748b;
+    text-align: right;
+}
+
+/* 6. Disclaimer */
+.metal-disclaimer {
+    background: #fffbeb !important;
+    border-color: #fde68a !important;
+}
+
+.metal-disclaimer .disclaimer-header {
+    color: #92400e !important;
+}
+
+.metal-disclaimer .disclaimer-list li {
+    color: #78350f !important;
+}
+
+/* Submit Button */
+.metal-submit-btn {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3) !important;
+}
+
+.metal-submit-btn:hover {
+    background: #047857 !important;
+    transform: translateY(-1px);
+}

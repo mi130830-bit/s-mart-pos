@@ -60,7 +60,7 @@ extension CustomerRepositoryPoints on CustomerRepository {
         FROM point_ledger
         WHERE customer_id = :cid
           AND (expires_at IS NULL OR expires_at > NOW())
-        ORDER BY expires_at ASC
+        ORDER BY (expires_at IS NULL), expires_at, earned_at, id
         FOR UPDATE
       ''', {'cid': customerId});
 

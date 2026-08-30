@@ -214,8 +214,13 @@ class StockRepository {
             (int.tryParse(product['trackStock'].toString()) ?? 0) == 1;
 
         // 1. แจ้งเตือนการปรับสต็อก (Stock Adjustment)
-        if (['ADJUST_ADD', 'ADJUST_SUB', 'ADJUST_FIX', 'UPDATE_PRODUCT']
-            .contains(type)) {
+        if ([
+          'ADJUST_ADD',
+          'ADJUST_SUB',
+          'ADJUST_FIX',
+          'ADJUST_FIX_APP',
+          'UPDATE_PRODUCT'
+        ].contains(type)) {
           if (await telegram
               .shouldNotify(TelegramService.keyNotifyStockAdjust)) {
             final msg = '📦 *ปรับสต็อกสินค้า* (Stock Adjust)\n'

@@ -1,8 +1,8 @@
 # 🚀 S-Mart Server Migration Playbook & Guide
 # คู่มือและขั้นตอนการย้ายระบบเซิร์ฟเวอร์สู่ Mini PC (Proxmox VE)
 
-> **Document Version / เวอร์ชันเอกสาร:** 1.0.0 (August 2026)  
-> **Target Hardware / ฮาร์ดแวร์เป้าหมาย:** Beelink Mini S12 Pro (Intel 12th Gen N100, 32GB RAM, 500GB NVMe SSD)  
+> **Document Version / เวอร์ชันเอกสาร:** 1.1.0 (August 2026)  
+> **Target Hardware / ฮาร์ดแวร์เป้าหมาย:** GMKtec M5 Ultra (AMD Ryzen 7 7730U 8C/16T, 32GB DDR4 3200, 1TB NVMe SSD, Dual 2.5G LAN)  
 > **Base Operating System / ระบบปฏิบัติการหลัก:** Proxmox VE 9.x (x86_64)  
 > **Source of Truth / ข้อมูลหลัก:** Local MySQL Database on LXC + POS Desktop Shelf Backend API
 
@@ -15,9 +15,10 @@
 4. [Phase 2: LXC 100 - MySQL Database Setup / ขั้นตอนสร้างตู้ฐานข้อมูล](#4-phase-2-lxc-100---mysql-database-setup)
 5. [Phase 3: LXC 101 - Backend API Setup / ขั้นตอนสร้างตู้ Backend API](#5-phase-3-lxc-101---backend-api-setup)
 6. [Phase 4: LXC 102 - Cloudflare Tunnel / ขั้นตอนเชื่อมต่อ Cloudflare Tunnel](#6-phase-4-lxc-102---cloudflare-tunnel)
-7. [Phase 5: UPS Auto-Shutdown Setup / ติดตั้งระบบป้องกันไฟดับอัตโนมัติ](#7-phase-5-ups-auto-shutdown-setup)
-8. [Phase 6: Client Switching & Verification / การสลับเครื่องลูกและทดสอบระบบ](#8-phase-6-client-switching--verification)
-9. [Disaster Recovery & Rollback Plan / แผนกู้คืนฉุกเฉินและย้อนกลับ](#9-disaster-recovery--rollback-plan)
+7. [Phase 5: LXC 104 - Local AI & BI Intelligence Engine / ขั้นตอนสร้างตู้ Local AI & ระบบวิเคราะห์ข้อมูล](#7-phase-5-lxc-104---local-ai--bi-intelligence-engine-ollama--python)
+8. [Phase 6: UPS Auto-Shutdown Setup / ติดตั้งระบบป้องกันไฟดับอัตโนมัติ](#8-phase-6-ups-auto-shutdown-setup)
+9. [Phase 7: Client Switching & Verification / การสลับเครื่องลูกและทดสอบระบบ](#9-phase-7-client-switching--verification)
+10. [Disaster Recovery & Rollback Plan / แผนกู้คืนฉุกเฉินและย้อนกลับ](#10-disaster-recovery--rollback-plan)
 
 ---
 
@@ -25,16 +26,17 @@
 ### สถาปัตยกรรมระบบและการจัดสรรทรัพยากร
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   BEELINK MINI S12 PRO (32GB RAM / 500GB SSD)          │
-│                      Proxmox VE 9.x Host (IP: 192.168.1.200)           │
-├───────────────────┬───────────────────┬───────────────────┬────────────┤
-│ 📦 LXC 100        │ 📦 LXC 101        │ 📦 LXC 102        │ 📦 LXC 103 │
-│ MySQL Database    │ Backend API       │ Cloudflare Tunnel │ Test/Clone │
-│ IP: 192.168.1.201 │ IP: 192.168.1.202 │ IP: 192.168.1.203 │ (Sandbox)  │
-│ RAM: 8 GB         │ RAM: 4 GB         │ RAM: 1 GB         │ RAM: 4 GB  │
-│ Disk: 40 GB       │ Disk: 20 GB       │ Disk: 10 GB       │ Disk: 20 GB│
-└───────────────────┴───────────────────┴───────────────────┴────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                    GMKTEC M5 ULTRA (Ryzen 7 7730U 8C/16T / 32GB RAM / 1TB SSD)        │
+│                     Proxmox VE 9.x Host (LAN 1: 192.168.1.200 / LAN 2: 2.5G)          │
+├───────────────────┬───────────────────┬───────────────────┬─────────────┬─────────────┤
+│ 📦 LXC 100        │ 📦 LXC 101        │ 📦 LXC 102        │ 🧠 LXC 104  │ 🧪 LXC 103  │
+│ MySQL Database    │ Backend API & Web │ Cloudflare Tunnel │ Local AI/BI │ Test/Clone  │
+│ IP: 192.168.1.201 │ IP: 192.168.1.202 │ IP: 192.168.1.203 │ (Ollama+Py) │ (Sandbox)   │
+│ RAM: 8 GB         │ RAM: 4 GB         │ RAM: 2 GB         │ RAM: 10 GB  │ RAM: 4 GB   │
+│ CPU: 4 Cores      │ CPU: 4 Cores      │ CPU: 2 Cores      │ CPU: 4 Cores│ CPU: 2 Cores│
+│ Disk: 150 GB      │ Disk: 50 GB       │ Disk: 20 GB       │ Disk: 100 GB│ Disk: 50 GB │
+└───────────────────┴───────────────────┴───────────────────┴─────────────┴─────────────┘
 ```
 
 ---
@@ -42,12 +44,16 @@
 ## 2. Pre-Migration Checklist
 ### สิ่งที่ต้องเตรียมก่อนเริ่มย้ายระบบ
 
-- [ ] **Flash Drive:** 1x USB Flash Drive (8GB+) flashed with **Proxmox VE 9.x ISO (x86_64)** via Rufus (DD mode) or Ventoy.
-- [ ] **UPS Battery:** Replace old UPS battery with new 12V 7Ah–9Ah SLA battery and connect USB Data cable to Mini PC.
-- [ ] **Current Database Backup / สำรองฐานข้อมูลเดิม:** Dump current MySQL from POS Desktop:
+- [x] **Flash Drive:** 1x USB Flash Drive (8GB+) flashed with **Proxmox VE 9.x ISO (x86_64)** via Rufus (DD mode) or Ventoy.
+- [ ] **UPS (เครื่องสำรองไฟ):** เลือกซื้อ UPS ขนาด 600VA–1000VA (360W–600W) **ที่มีพอร์ต USB Communication (USB Type-B)** ด้านหลังเครื่อง (เช่น APC Back-UPS, Cleanline, หรือ Syndome) เพื่อเสียบสาย USB Data เข้ากับ Mini PC สำหรับระบบสั่ง Shutdown อัตโนมัติ (`apcupsd`).
+- [ ] **Current Database Backup / สำรองฐานข้อมูลเดิม:** Dump current MySQL from POS Desktop (`sorborikan` database):
   ```bash
-  mysqldump -u root -p smartpos > current_pos_backup.sql
+  # บนเครื่องเดิม (Laragon MySQL 8)
+  "C:\laragon\bin\mysql\mysql-8.0.30-winx64\bin\mysqldump.exe" -u admin -p1234 sorborikan > current_pos_backup.sql
   ```
+- [ ] **Data Hygiene & Cleansing Notes / ข้อควรระวังความสะอาดข้อมูล:**
+  - ระบบ POS ปัจจุบันใช้ตาราง **`product_type` (22 หมวดหมู่แท้)**
+  - ตารางเดิม **`category` (82 หมวดตกค้าง)** เป็นข้อมูลเก่าจากระบบเดิม ไม่จำเป็นต้องนำมาใช้ใน Shop Admin
 - [ ] **Network IP Planning / แผนผังไอพี:**
   - Router Gateway: `192.168.1.1`
   - Proxmox Host: `192.168.1.200`
@@ -206,10 +212,31 @@
 
 ---
 
-## 7. Phase 5: UPS Auto-Shutdown Setup
+## 7. Phase 5: LXC 104 - Local AI & BI Intelligence Engine (Ollama + Python)
+### ขั้นตอนสร้างตู้ Local AI & ระบบวิเคราะห์ข้อมูลอัจฉริยะในร้าน
+
+1. **Create LXC Container (ID: 104):**
+   - Name: `local-ai-analytics` | OS: `Ubuntu 24.04` | Disks: `100GB` | RAM: `10,240 MB (10GB)` | Cores: `4`
+   - Network: Static IPv4 `192.168.1.204/24`, Gateway `192.168.1.1`
+2. **Install Ollama & High-Performance Thai/Bilingual Models:**
+   ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   # Download Local AI Models for On-Premise Analytics:
+   ollama pull qwen2.5:7b       # Powerful 7B bilingual reasoning model
+   ollama pull llama3.2:3b      # Ultra-fast 3B model for quick daily reports
+   ```
+3. **Local AI Capabilities / สิ่งที่ Local AI ช่วยร้านในระยะยาว 5-10 ปี:**
+   - **Privacy 100% On-Premise:** ข้อมูลยอดขาย กำไร ต้นทุน และลูกค้า อยู่ในร้าน 100% ไม่ส่งออกคลาวด์ภายนอก
+   - **Nightly BI Analytics Cron:** รันคำนวณวิเคราะห์สต็อกสินค้าค้างนาน (Dead Stock), พฤติกรรมการซื้อของช่าง/ผู้รับเหมา, สินค้าขายดีตามฤดูกาล (หน้าฝน/หน้าแล้ง) อัตโนมัติทุกเที่ยงคืน
+   - **Automated Reordering Suggestion:** แนะนำจำนวนสินค้าที่ควรสั่งเติมก่อนของจะขาดมือ โดยคำนวณจากประวัติการขายย้อนหลัง
+   - **Natural Language POS Query:** รองรับการถามยอดขายหรือสต็อกผ่านภาษาธรรมชาติ (เช่น *"สรุปยอดขายปูนสัปดาห์นี้เทียบกับเดือนก่อนให้หน่อย"*)
+
+---
+
+## 8. Phase 6: UPS Auto-Shutdown Setup
 ### ติดตั้งระบบป้องกันไฟดับอัตโนมัติ
 
-1. Connect UPS USB Data Cable to Beelink Mini PC USB Port.
+1. Connect UPS USB Data Cable to GMKtec Mini PC USB Port.
 2. Inside Proxmox Host Shell (`192.168.1.200`):
    - Configure `/etc/apcupsd/apcupsd.conf`:
      ```ini
@@ -225,7 +252,7 @@
 
 ---
 
-## 8. Phase 6: Client Switching & Verification
+## 9. Phase 7: Client Switching & Verification
 ### การสลับเครื่องลูกและทดสอบระบบ
 
 1. **POS Desktop (Cashier PC หน้าร้าน):**
@@ -239,7 +266,7 @@
 
 ---
 
-## 9. Disaster Recovery & Rollback Plan
+## 10. Disaster Recovery & Rollback Plan
 ### แผนกู้คืนฉุกเฉินและย้อนกลับ
 
 - **Proxmox Backup / สำรองทั้งระบบ:**

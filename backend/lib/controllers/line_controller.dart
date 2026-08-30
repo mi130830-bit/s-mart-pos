@@ -5,19 +5,23 @@ import 'dart:io';
 import '../db_config.dart';
 import '../env_config.dart';
 import '../services/line_service.dart';
+import '../services/line_webhook_signature_verifier.dart';
 import 'customer_tracking_controller.dart';
 
 class LineController {
   final LineService _lineService = LineService();
+  final LineWebhookSignatureVerifier _webhookSignatureVerifier =
+      const LineWebhookSignatureVerifier();
 
-  // State Map: UserId -> State (WAIT_NAME, WAIT_PHONE, etc.)
-  // Value format: "STATE|DATA" e.g., "WAIT_PHONE|John Doe"
-  static final Map<String, String> _userState = {};
-
-  Router get router {
-    stdout.writeln('✅ Registering LineController Routes - VERSION 2');
+  Router get publicRouter {
     final router = Router();
     router.post('/webhook', _handleWebhook);
+    return router;
+  }
+
+  Router get internalRouter {
+    stdout.writeln('✅ Registering protected LINE internal routes');
+    final router = Router();
     router.post('/push-receipt', _handlePushReceipt);
     router.post('/push-receipt-image', _handlePushReceiptImage); // ✅ New
     router.post('/push-message', _handlePushMessage);
@@ -52,7 +56,8 @@ class LineController {
           double.tryParse(body['received']?.toString() ?? '0') ?? 0.0;
       final double totalDebt =
           double.tryParse(body['totalDebt']?.toString() ?? '0') ?? 0.0;
-      final int points = int.tryParse(body['pointsEarned']?.toString() ?? '0') ?? 0;
+      final int points =
+          int.tryParse(body['pointsEarned']?.toString() ?? '0') ?? 0;
       final int frontStoreCount =
           int.tryParse(body['frontStoreItemsCount']?.toString() ?? '0') ??
           0; // ✅ Feature Front Store Item
@@ -221,6 +226,17 @@ class LineController {
           body: 'Missing lineUserId, orderId, or image',
         );
       }
+      final safeOrderId = int.tryParse(orderId);
+      if (safeOrderId == null || safeOrderId <= 0) {
+        return Response.badRequest(body: 'Invalid orderId');
+      }
+      if (lineUserId.length > 100 || lineUserId.trim() != lineUserId) {
+        return Response.badRequest(body: 'Invalid LINE recipient');
+      }
+      // Base64 expands binary data by roughly 4/3. Bound it before decoding.
+      if (base64Image.length > 8 * 1024 * 1024) {
+        return Response(413, body: 'Receipt image is too large');
+      }
 
       // 1. Decode Image
       final bytes = base64Decode(base64Image);
@@ -232,7 +248,7 @@ class LineController {
       if (!directory.existsSync()) {
         directory.createSync(recursive: true);
       }
-      final filename = 'bill-$orderId.png';
+      final filename = 'bill-$safeOrderId.png';
       final file = File('${directory.path}/$filename');
       await file.writeAsBytes(bytes);
 
@@ -257,9 +273,7 @@ class LineController {
     } catch (e, stack) {
       stderr.writeln('Push Receipt Image Error: $e');
       stderr.writeln(stack);
-      return Response.internalServerError(
-        body: 'Failed to push receipt image: $e',
-      );
+      return Response.internalServerError(body: 'Failed to push receipt image');
     }
   }
 
@@ -447,7 +461,8 @@ class LineController {
       try {
         final body = await request.readAsString();
         if (body.isNotEmpty) {
-          vehicleKey = (jsonDecode(body) as Map<String, dynamic>)['vehicle']
+          vehicleKey =
+              (jsonDecode(body) as Map<String, dynamic>)['vehicle']
                   ?.toString()
                   .trim() ??
               '';
@@ -479,7 +494,8 @@ class LineController {
         return Response(400, body: 'Customer has no Line account');
       }
 
-      final trackingToken = !CustomerTrackingController.canTrackVehicle(vehicleKey)
+      final trackingToken =
+          !CustomerTrackingController.canTrackVehicle(vehicleKey)
           ? null
           : await CustomerTrackingController.issue(
               orderId: int.tryParse(orderId) ?? 0,
@@ -572,11 +588,7 @@ class LineController {
                   },
                 ],
               },
-              {
-                'type': 'separator',
-                'margin': 'md',
-                'color': '#e2e8f0',
-              },
+              {'type': 'separator', 'margin': 'md', 'color': '#e2e8f0'},
               {
                 'type': 'text',
                 'text': 'แตะปุ่มด้านล่างเพื่อดูตำแหน่งรถสดบนแผนที่ 📍',
@@ -719,6 +731,17 @@ class LineController {
   Future<Response> _handleWebhook(Request request) async {
     try {
       final payload = await request.readAsString();
+      final signature = request.headers['x-line-signature'];
+      final secret = EnvConfig().lineChannelSecret;
+      if (secret.isNotEmpty &&
+          !_webhookSignatureVerifier.verify(
+            rawBody: payload,
+            signature: signature,
+            channelSecret: secret,
+          )) {
+        stderr.writeln('❌ Invalid LINE webhook signature');
+        return Response.forbidden('Invalid LINE webhook signature');
+      }
       final body = jsonDecode(payload);
 
       final events = body['events'] as List<dynamic>;
@@ -738,7 +761,7 @@ class LineController {
         if (type == 'follow') {
           await _lineService.replyMessage(
             replyToken,
-            'สวัสดีครับ! ยินดีต้อนรับสู่ระบบสมาชิก ร้านส.บริการ ท่าข้าม\n\n🔹 พิมพ์ "Register" เพื่อสมัครสมาชิก\n🔹 พิมพ์ "REF-ID: xxxx" เพื่อผูกบัญชีเดิม',
+            'สวัสดีครับ! ยินดีต้อนรับสู่ระบบสมาชิก ร้านส.บริการ ท่าข้าม\n\nแตะเมนูสมาชิกใน LINE เพื่อสมัครหรือเชื่อมบัญชีอย่างปลอดภัยครับ',
           );
           continue;
         }
@@ -764,17 +787,14 @@ class LineController {
           // 2. Check Member Status First (ALWAYS AVAILABLE 24/7)
           var linkedData = await _getLinkedMemberData(userId);
 
-          // 🟢 SMART FALLBACK (SQL Check): If not found by ID, check if they typed a phone number
+          // Phone-only linking is deliberately disabled. A phone number is an
+          // unverified contact, never proof that the LINE user owns a member.
           if (linkedData == null && RegExp(r'^[0-9]{10}$').hasMatch(cmd)) {
-            stdout.writeln('🔍 Smart Fallback: Searching by Phone "$cmd"');
-            final autoLinkData = await _tryAutoLinkByPhone(userId, cmd);
-            if (autoLinkData != null) {
-              linkedData = autoLinkData;
-              await _lineService.replyMessage(
-                replyToken,
-                '✅ ระบบพบข้อมูลสมาชิกเดิมของคุณแล้วครับ! ทำการผูกบัญชีเข้ากับ Line นี้เรียบร้อยครับ',
-              );
-            }
+            await _lineService.replyMessage(
+              replyToken,
+              'เพื่อความปลอดภัย ระบบไม่ผูกสมาชิกด้วยเบอร์โทรอย่างเดียวครับ กรุณาแตะเมนูสมาชิกเพื่อส่งคำขอ หรือสแกน QR จากพนักงานที่ร้าน',
+            );
+            continue;
           }
 
           // 3. Main Commands (Register/Member/Catalog)
@@ -782,9 +802,6 @@ class LineController {
               cmd.contains('สมัคร') ||
               cmd.contains('สมาชิก') ||
               cmd.contains('QR')) {
-            // ✅ FIX: Clear any stale state to avoid "Thank you Mr. Member" loop
-            _userState.remove(userId);
-
             if (linkedData != null) {
               final liffId = '2009815377-VjmykeWs'; // ✅ Corrected LIFF ID
               final memberCode = linkedData['memberCode'];
@@ -896,32 +913,20 @@ class LineController {
 
               await _lineService.reply(replyToken, [flexMessage]);
             } else {
-              // 🔴 New User Attempting to Register (ไม่จำกัดเวลา - สมัครได้ตลอด 24 ชม.)
-              _userState[userId] = 'WAIT_NAME';
               await _lineService.replyMessage(
                 replyToken,
-                'ยินดีต้อนรับเข้าชู่ระบบสมาชิก ร้านส.บริการ ท่าข้าม ครับ 📝\nกรุณาพิมพ์ "ชื่อ" ของคุณเพื่อเริ่มสมัครครับ',
+                'กรุณาแตะเมนูสมาชิกใน LINE เพื่อสมัครด้วยบัญชี LINE ที่ยืนยันแล้วครับ หากมีเบอร์เดิม ระบบจะส่งคำขอให้พนักงานตรวจสอบโดยไม่เขียนทับบัญชีเดิม',
               );
             }
             continue;
           }
 
-          // 4. Handle Active Registration Flows (Continuing)
-          final currentState = _userState[userId];
-          if (currentState != null) {
-            stdout.writeln('🔄 Continuing Flow: $currentState');
-            await _handleRegistrationFlow(
-              userId,
-              replyToken,
-              cmd,
-              currentState,
-            );
-            continue;
-          }
-
           // 7. Other Command Logic
           if (cmd.toUpperCase().startsWith('REF-ID:')) {
-            await _handleRefIdLinking(userId, replyToken, cmd);
+            await _lineService.replyMessage(
+              replyToken,
+              'ยกเลิกการผูกด้วย REF-ID แล้วเพื่อความปลอดภัยครับ กรุณาใช้คำขอในหน้า สมาชิก หรือสแกน QR ครั้งเดียวจากพนักงานที่ร้าน',
+            );
           } else if (cmd == 'คะแนน' || cmd == 'แต้ม' || cmd == 'Point') {
             await _handlePointCheck(userId, replyToken);
           } else if (cmd == 'ประวัติ' ||
@@ -998,62 +1003,6 @@ class LineController {
     }
   }
 
-  Future<void> _handleRegistrationFlow(
-    String userId,
-    String replyToken,
-    String text,
-    String currentState,
-  ) async {
-    final parts = currentState.split('|');
-    final state = parts[0];
-    final date = parts.length > 1 ? parts[1] : '';
-
-    if (state == 'WAIT_NAME') {
-      if (text.length < 2) {
-        await _lineService.replyMessage(
-          replyToken,
-          'ชื่อสั้นเกินไปครับ กรุณาพิมพ์ใหม่',
-        );
-        return;
-      }
-      // Save Name and Move to Phone
-      _userState[userId] = 'WAIT_PHONE|$text';
-      await _lineService.replyMessage(
-        replyToken,
-        'ขอบคุณครับคุณ $text\nกรุณาพิมพ์ "เบอร์โทรศัพท์" (เช่น 0812345678)',
-      );
-    } else if (state == 'WAIT_PHONE') {
-      // Validate Phone (Basic)
-      if (!RegExp(r'^[0-9]{9,10}$').hasMatch(text)) {
-        await _lineService.replyMessage(
-          replyToken,
-          'เบอร์โทรไม่ถูกต้อง กรุณาพิมพ์เฉพาะตัวเลข 9-10 หลัก',
-        );
-        return;
-      }
-
-      final name = date;
-      final phone = text;
-
-      // Execute Registration
-      final success = await _registerCustomer(userId, name, phone);
-      if (success) {
-        _userState.remove(userId);
-        await _lineService.replyMessage(
-          replyToken,
-          'สมัครสมาชิกเรียบร้อย! 🎉\nยินดีต้อนรับคุณ $name เข้าสู่ระบบครับ',
-        );
-        // Push welcome coupon?
-      } else {
-        await _lineService.replyMessage(
-          replyToken,
-          'เบอร์โทรนี้มีในระบบแล้ว หรือเกิดข้อผิดพลาด\nกรุณาติดต่อเจ้าหน้าที่',
-        );
-        _userState.remove(userId);
-      }
-    }
-  }
-
   Future<Map<String, dynamic>?> _getLinkedMemberData(String userId) async {
     try {
       final conn = await DbConfig().connection;
@@ -1089,87 +1038,6 @@ class LineController {
     } catch (e, stack) {
       stdout.writeln('❌ Get Member Data Error: $e\n$stack');
       return null;
-    }
-  }
-
-  Future<bool> _registerCustomer(
-    String lineUserId,
-    String name,
-    String phone,
-  ) async {
-    try {
-      final conn = await DbConfig().connection;
-      // 1. Check if phone exists
-      final checkRes = await conn.execute(
-        'SELECT id, line_user_id FROM customer WHERE phone = :p',
-        {'p': phone},
-      );
-
-      if (checkRes.numOfRows > 0) {
-        // Phone exists
-        final row = checkRes.rows.first;
-        // ✅ FIX: Allow re-linking if phone exists (overwrite line_user_id)
-        await conn.execute(
-          'UPDATE customer SET line_user_id = :uid, line_display_name = :lname WHERE id = :id',
-          {'uid': lineUserId, 'lname': name, 'id': row.colAt(0)},
-        );
-        return true;
-      } else {
-        // 2. Create New
-        await conn.execute(
-          '''
-          INSERT INTO customer (firstName, phone, line_user_id, line_display_name, currentPoints, memberCode)
-          VALUES (:fname, :phone, :uid, :lname, 0, :code)
-        ''',
-          {
-            'fname': name,
-            'phone': phone,
-            'uid': lineUserId,
-            'lname': name,
-            'code': phone, // Use Phone as MemberCode initially
-          },
-        );
-        return true;
-      }
-    } catch (e, stack) {
-      stdout.writeln('❌ Registration Error: $e\n$stack');
-      return false;
-    }
-  }
-
-  // Refactored Helper
-  Future<void> _handleRefIdLinking(
-    String userId,
-    String replyToken,
-    String text,
-  ) async {
-    final refIdStr = text.split(':')[1].trim();
-    final customerId = int.tryParse(refIdStr);
-
-    if (customerId != null) {
-      try {
-        final conn = await DbConfig().connection;
-        final result = await conn.execute(
-          'UPDATE customer SET line_user_id = :uid WHERE id = :id',
-          {'uid': userId, 'id': customerId},
-        );
-        if (result.affectedRows > BigInt.zero) {
-          await _lineService.replyMessage(
-            replyToken,
-            '✅ เชื่อมต่อบัญชีสำเร็จ!',
-          );
-        } else {
-          await _lineService.replyMessage(
-            replyToken,
-            '❌ ไม่พบรหัสลูกค้า $refIdStr',
-          );
-        }
-      } catch (dbError) {
-        await _lineService.replyMessage(
-          replyToken,
-          'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล',
-        );
-      }
     }
   }
 
@@ -1233,43 +1101,6 @@ class LineController {
         replyToken,
         'เกิดข้อผิดพลาดในการยกเลิกสมาชิก',
       );
-    }
-  }
-
-  Future<Map<String, dynamic>?> _tryAutoLinkByPhone(
-    String userId,
-    String phone,
-  ) async {
-    try {
-      final conn = await DbConfig().connection;
-      // 🟢 SQL Check: Search by Phone
-      final res = await conn.execute(
-        'SELECT id, firstName FROM customer WHERE phone = :p AND (isDeleted = 0 OR isDeleted IS NULL) LIMIT 1',
-        {'p': phone},
-      );
-
-      if (res.numOfRows > 0) {
-        final row = res.rows.first;
-        final customerId = row.colAt(0);
-        final name = row.colAt(1) ?? 'สมาชิก';
-
-        stdout.writeln(
-          '🔗 Smart Link (SQL): Linking Phone $phone to Line ID $userId',
-        );
-
-        // Update the Line ID in SQL immediately
-        await conn.execute(
-          'UPDATE customer SET line_user_id = :uid, line_display_name = :name WHERE id = :id',
-          {'uid': userId, 'name': name, 'id': customerId},
-        );
-
-        // Fetch the fresh data with calculated points
-        return await _getLinkedMemberData(userId);
-      }
-      return null;
-    } catch (e) {
-      stdout.writeln('❌ Smart Link (SQL) Error: $e');
-      return null;
     }
   }
 }

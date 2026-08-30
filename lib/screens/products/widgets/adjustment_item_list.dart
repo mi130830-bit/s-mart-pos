@@ -1,10 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../controllers/stock_adjustment_controller.dart';
 
 class AdjustmentItemList extends ConsumerWidget {
   const AdjustmentItemList({super.key});
+
+  Future<void> _pickImage(
+      BuildContext context, WidgetRef ref, int index) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined),
+            title: const Text('ถ่ายรูปสินค้า'),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('เลือกรูปจากเครื่อง'),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (source == null) return;
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1600,
+    );
+    if (picked != null) {
+      ref
+          .read(stockAdjustmentProvider.notifier)
+          .setItemImage(index, picked.path);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,8 +72,8 @@ class AdjustmentItemList extends ConsumerWidget {
         return Card(
           color: cardColor,
           elevation: 2,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -59,6 +92,15 @@ class AdjustmentItemList extends ConsumerWidget {
                       if (item.note.isNotEmpty)
                         Text('Note: ${item.note}',
                             style: TextStyle(color: Colors.grey.shade700)),
+                      TextButton.icon(
+                        onPressed: () => _pickImage(context, ref, index),
+                        icon: Icon(item.imagePath == null
+                            ? Icons.add_a_photo_outlined
+                            : Icons.photo_camera_back_outlined),
+                        label: Text(item.imagePath == null
+                            ? 'เพิ่มรูปสินค้า (ไม่บังคับ)'
+                            : 'เปลี่ยนรูปสินค้า'),
+                      ),
                     ],
                   ),
                 ),

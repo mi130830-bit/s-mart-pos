@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 import 'mysql_service.dart';
 import 'local_settings_service.dart';
 
@@ -52,16 +53,19 @@ class SettingsService {
       final localApiUrl = prefs.getString('local_api_url');
       if (localApiUrl != null && localApiUrl.isNotEmpty) {
         _memoryCache['__local_api_url'] = localApiUrl;
-        debugPrint('⚡ [SettingsService] Local API URL override loaded: $localApiUrl');
+        debugPrint(
+            '⚡ [SettingsService] Local API URL override loaded: $localApiUrl');
       }
 
       final localBillsPath = prefs.getString('local_bills_base_path');
       if (localBillsPath != null && localBillsPath.isNotEmpty) {
         _memoryCache['__local_bills_base_path'] = localBillsPath;
-        debugPrint('⚡ [SettingsService] Local bills path override loaded: $localBillsPath');
+        debugPrint(
+            '⚡ [SettingsService] Local bills path override loaded: $localBillsPath');
       }
 
-      debugPrint('⚡ [SettingsService] Pre-loaded ${_memoryCache.length} critical settings from Prefs.');
+      debugPrint(
+          '⚡ [SettingsService] Pre-loaded ${_memoryCache.length} critical settings from Prefs.');
     } catch (e) {
       debugPrint('⚠️ [SettingsService] Pre-load failed: $e');
     } finally {
@@ -295,6 +299,15 @@ class SettingsService {
     // Fallback: ค่าจาก MySQL (Global default)
     return _normalizeApiUrl(
         _memoryCache['api_url'] ?? 'https://api.namecheap.work/api/v1');
+  }
+
+  /// Service credential is process-only; never persist it in MySQL or prefs.
+  Map<String, String> get internalApiHeaders {
+    final secret = Platform.environment['INTERNAL_API_SECRET']?.trim() ?? '';
+    return {
+      'Content-Type': 'application/json',
+      if (secret.isNotEmpty) 'X-Internal-Secret': secret,
+    };
   }
 
   String _normalizeApiUrl(String url) {

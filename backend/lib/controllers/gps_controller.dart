@@ -35,7 +35,7 @@ class GpsController {
   static Timer? _purgeTimer;
 
   static const String telegramToken =
-      '8410912861:AAEQ0npuTRFYkl4z5StarMY5Vjvxlx0T82c';
+      '8410912861:AAF70xuj0NglZcXo55E3tuLIJBRSdj0Uu-8';
   static const String telegramChatId = '-5507041706';
 
   GpsController() {
@@ -121,9 +121,9 @@ class GpsController {
   static String normalizeVehicleKey(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return trimmed;
-    if (trimmed.contains('เครน')) return 'รถเครน';
-    if (trimmed.contains('ดั้มเล็ก')) return 'ดั้มเล็ก';
-    if (trimmed.contains('ดั้มใหญ่')) return 'ดั้มใหญ่';
+    if (trimmed.contains('เครน') || trimmed.contains('82-0686')) return 'รถเครน';
+    if (trimmed.contains('ดั้มเล็ก') || trimmed.contains('81-2812')) return 'ดั้มเล็ก';
+    if (trimmed.contains('ดั้มใหญ่') || trimmed.contains('81-3250')) return 'ดั้มใหญ่';
     return trimmed;
   }
 
@@ -170,7 +170,7 @@ class GpsController {
             'กำลังเตรียมของ';
         if (currentJob == 'กำลังกลับร้าน') {
           final distKm = _haversineDistance(lat, lng, 16.160136, 100.802407);
-          if (distKm <= 0.200) {
+          if (distKm <= 0.100) {
             _vehicleJobs.remove(vehicleName);
             _vehicleJobs.remove(rawVehicleName);
             currentJob = 'กำลังเตรียมของ';

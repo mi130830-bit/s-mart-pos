@@ -1,20 +1,25 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import '../../services/integration/delivery_integration_service.dart';
 import '../../services/alert_service.dart';
+import '../../state/navigation_provider.dart';
+import '../pos/pos_state_manager.dart';
 
-class ActiveDeliveriesScreen extends StatefulWidget {
+class ActiveDeliveriesScreen extends ConsumerStatefulWidget {
   final DeliveryIntegrationService? deliveryService;
   const ActiveDeliveriesScreen({super.key, this.deliveryService});
 
   @override
-  State<ActiveDeliveriesScreen> createState() => _ActiveDeliveriesScreenState();
+  ConsumerState<ActiveDeliveriesScreen> createState() =>
+      _ActiveDeliveriesScreenState();
 }
 
-class _ActiveDeliveriesScreenState extends State<ActiveDeliveriesScreen> {
+class _ActiveDeliveriesScreenState
+    extends ConsumerState<ActiveDeliveriesScreen> {
   bool _isLoading = false;
   List<Map<String, dynamic>> _jobs = [];
   final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
@@ -314,6 +319,65 @@ class _ActiveDeliveriesScreenState extends State<ActiveDeliveriesScreen> {
                 ),
               ),
             ],
+
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+
+            // Action Buttons Footer
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (status == 'pending' || status == 'preparing' || status == 'accepted')
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.edit_note, size: 18),
+                    label: const Text('แก้ไขรายการบิลใน POS'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange.shade800,
+                      side: BorderSide(color: Colors.orange.shade400),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: () async {
+                      final int oid = int.tryParse(orderId.toString()) ?? 0;
+                      if (oid > 0) {
+                        final success = await ref
+                            .read(posProvider.notifier)
+                            .loadOrderForEditing(oid);
+                        if (success) {
+                          ref.read(mainNavigationProvider.notifier).state = 0;
+                        } else {
+                          if (mounted) {
+                            AlertService.show(
+                              context: context,
+                              message: 'ไม่สามารถโหลดบิล #$oid เพื่อแก้ไขได้',
+                              type: 'error',
+                            );
+                          }
+                        }
+                      }
+                    },
+                  ),
+                if (status == 'shipping' || status == 'enroute' || status == 'en_route') ...[
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.navigation_outlined, size: 18),
+                    label: const Text('ติดตามรถขนส่ง (Live GPS)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: () async {
+                      if (locationUrl.isNotEmpty) {
+                        final url = Uri.parse(locationUrl);
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),

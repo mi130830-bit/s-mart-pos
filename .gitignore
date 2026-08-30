@@ -72,12 +72,20 @@ Output_Installer/
 windows/flutter/ephemeral/
 
 # Utility scripts / scratch directories
-scripts/
 scratch/
 test.txt
 trigger_dump.txt
 tunnel_list*.txt
 drawer_log.txt
+
+# Voice & Face AI Caches
+voice_cache/
+registered_faces/
+*.mp3
+
+# Server Backups & Tools
+server-backups/
+tools/
 
 # Keys / Secrets
 *.key

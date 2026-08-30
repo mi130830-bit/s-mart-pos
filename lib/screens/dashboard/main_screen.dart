@@ -14,6 +14,7 @@ import '../suppliers/supplier_list_view.dart';
 import '../reports/logistics_menu_screen.dart';
 import '../settings/settings_screen.dart';
 import '../hr/hr_screen.dart'; // ✅ HR Module
+import '../online_orders/online_order_floating_banner.dart';
 
 import 'package:window_manager/window_manager.dart'; // ✅ For WindowListener
 import '../../services/customer_display_service.dart';
@@ -335,7 +336,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
     final bool isMonthlyPayday = today.day == 1;
     final bool hasPaydayAlert = isWeeklyPayday || isMonthlyPayday;
 
-    // ✅ 1. เรียงลำดับหน้าจอ (Screens) ใหม่ตามคำขอ
+    // ✅ 1. เรียงลำดับหน้าจอ (Screens)
     final List<Widget> screens = [
       const PosCheckoutScreen(), // 1. จุดขาย
       if (showProductStock) const ProductManagementScreen(), // 2. สินค้า/คลัง
@@ -345,8 +346,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
       if (canViewDeliveryReport)
         LogisticsMenuScreen(
             deliveryService: _deliveryService), // 6. ขนส่ง (Logistics)
-      if (canAccessHR) const HrScreen(), // 8. บุคคล (HR)
-      if (canAccessSettings) const SettingsScreen(), // 9. ตั้งค่า
+      if (canAccessHR) const HrScreen(), // 7. บุคคล (HR)
+      if (canAccessSettings) const SettingsScreen(), // 8. ตั้งค่า
     ];
 
     // ✅ 2. เรียงลำดับเมนู (Destinations) ให้ตรงกับ Screens
@@ -458,10 +459,22 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: KeyedSubtree(
-              key: _refreshKey, // ✅ Force Rebuild Here
-              child:
-                  screens[selectedIndex < screens.length ? selectedIndex : 0],
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: KeyedSubtree(
+                    key: _refreshKey, // ✅ Force Rebuild Here
+                    child: screens[
+                        selectedIndex < screens.length ? selectedIndex : 0],
+                  ),
+                ),
+                // 🔔 Global Floating Online Order Notification Banner (Bottom-Right)
+                const Positioned(
+                  right: 24,
+                  bottom: 24,
+                  child: OnlineOrderFloatingBanner(),
+                ),
+              ],
             ),
           ),
         ],

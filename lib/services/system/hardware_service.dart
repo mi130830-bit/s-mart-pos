@@ -34,21 +34,17 @@ class HardwareService {
     double change = 0.0,
   }) {
     if (_suppressDisplayUpdate) return;
-    if (_displayService.isOpen) {
-      _displayService.updateCart(
-        total: grandTotal,
-        items: items,
-        received: received,
-        change: change,
-      );
-    }
+    _displayService.updateCart(
+      total: grandTotal,
+      items: items,
+      received: received,
+      change: change,
+    );
   }
 
   void showIdle() {
     if (_suppressDisplayUpdate) return;
-    if (_displayService.isOpen) {
-      _displayService.showIdle();
-    }
+    _displayService.showIdle();
   }
 
   Future<void> showSuccess({
@@ -57,15 +53,12 @@ class HardwareService {
     required double total,
     required List<OrderItem> items,
   }) async {
-    // We allow success screen even if suppressed (usually we suppress TO show success)
-    if (_displayService.isOpen) {
-      await _displayService.showSuccess(
-        received: received,
-        change: change,
-        total: total,
-        items: items,
-      );
-    }
+    await _displayService.showSuccess(
+      received: received,
+      change: change,
+      total: total,
+      items: items,
+    );
   }
 
   Future<void> showQrCode({
@@ -74,16 +67,15 @@ class HardwareService {
     required double total,
     required List<OrderItem> items,
   }) async {
-    if (_displayService.isOpen) {
-      await _displayService.showQrCode(
-        qrData: qrData,
-        amount: amount,
-        total: total,
-        items: items,
-        received: amount,
-        change: 0.0,
-      );
-    }
+    _suppressDisplayUpdate = false;
+    await _displayService.showQrCode(
+      qrData: qrData,
+      amount: amount,
+      total: total,
+      items: items,
+      received: amount,
+      change: 0.0,
+    );
   }
 
   // --- Cash Drawer ---

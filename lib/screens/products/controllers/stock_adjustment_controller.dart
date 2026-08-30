@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +7,7 @@ import '../../../models/product.dart';
 import '../../../repositories/product_repository.dart';
 import '../../../repositories/stock_repository.dart';
 import '../../../services/alert_service.dart';
+import '../../../services/api_service.dart';
 import '../../../services/logger_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/telegram_service.dart';
@@ -20,6 +23,7 @@ class AdjustmentItem {
   final Set<String> sourceWorkLogIds;
   final int sourceWorkLogItemCount;
   final int completedSourceWorkLogItemCount;
+  final String? imagePath;
 
   AdjustmentItem({
     required this.product,
@@ -29,6 +33,7 @@ class AdjustmentItem {
     this.sourceWorkLogIds = const {},
     this.sourceWorkLogItemCount = 0,
     this.completedSourceWorkLogItemCount = 0,
+    this.imagePath,
   });
 
   double get diff => countedQty - systemQty;
@@ -39,7 +44,10 @@ class AdjustmentItem {
     return 'MATCH';
   }
 
-  AdjustmentItem copyWith({int? completedSourceWorkLogItemCount}) =>
+  AdjustmentItem copyWith({
+    int? completedSourceWorkLogItemCount,
+    String? imagePath,
+  }) =>
       AdjustmentItem(
         product: product,
         systemQty: systemQty,
@@ -49,6 +57,7 @@ class AdjustmentItem {
         sourceWorkLogItemCount: sourceWorkLogItemCount,
         completedSourceWorkLogItemCount: completedSourceWorkLogItemCount ??
             this.completedSourceWorkLogItemCount,
+        imagePath: imagePath ?? this.imagePath,
       );
 }
 
@@ -98,6 +107,13 @@ class StockAdjustmentController
       newItems.removeAt(index);
       state = state.copyWith(pendingItems: newItems);
     }
+  }
+
+  void setItemImage(int index, String path) {
+    if (!_mounted || index < 0 || index >= state.pendingItems.length) return;
+    final items = List<AdjustmentItem>.from(state.pendingItems);
+    items[index] = items[index].copyWith(imagePath: path);
+    state = state.copyWith(pendingItems: items);
   }
 
   Future<void> openCloudImportDialog(BuildContext context) async {
@@ -266,6 +282,20 @@ class StockAdjustmentController
         );
 
         if (success) {
+          if (item.imagePath != null) {
+            try {
+              await ApiService().uploadProductImage(
+                item.product.id,
+                File(item.imagePath!),
+              );
+            } catch (e, stackTrace) {
+              LoggerService.error(
+                  'StockAdjust',
+                  'Product image upload failed for ${item.product.name}',
+                  e,
+                  stackTrace);
+            }
+          }
           successCount++;
           successfulItems.add(item);
         } else {

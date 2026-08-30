@@ -61,6 +61,9 @@ Future<void> showReprintOrderDialog({
     'address': order['address'] ?? '',
   });
 
+  final String? orderNote =
+      order['notes']?.toString() ?? order['note']?.toString();
+
   if (choice == 'SLIP') {
     await ReceiptService().printReceipt(
       orderId: orderId,
@@ -72,6 +75,7 @@ Future<void> showReprintOrderDialog({
       customer: customer,
       isPreview: false,
       useCashBillSettings: false,
+      remark: orderNote,
     );
   } else if (choice == 'RECEIPT_A4' || choice == 'RECEIPT_A5') {
     await ReceiptService().printReceipt(
@@ -86,6 +90,7 @@ Future<void> showReprintOrderDialog({
       useCashBillSettings: true,
       pageFormatOverride:
           choice == 'RECEIPT_A4' ? PdfPageFormat.a4 : null,
+      remark: orderNote,
     );
   } else if (choice == 'DELIVERY_A4' || choice == 'DELIVERY_A5') {
     await ReceiptService().printDeliveryNote(
@@ -95,6 +100,7 @@ Future<void> showReprintOrderDialog({
       discount: double.tryParse(order['discount'].toString()) ?? 0.0,
       isPreview: false,
       pageFormatOverride: choice == 'DELIVERY_A4' ? PdfPageFormat.a4 : null,
+      remark: orderNote,
     );
   } else if (choice == 'SAVE_RECEIPT_PDF') {
     await ReceiptService().printReceipt(
@@ -107,6 +113,7 @@ Future<void> showReprintOrderDialog({
       customer: customer,
       isPreview: true,
       useCashBillSettings: true,
+      remark: orderNote,
     );
   } else if (choice == 'SAVE_DELIVERY_PDF') {
     await ReceiptService().printDeliveryNote(
@@ -115,6 +122,7 @@ Future<void> showReprintOrderDialog({
       customer: customer,
       discount: double.tryParse(order['discount'].toString()) ?? 0.0,
       isPreview: true,
+      remark: orderNote,
     );
   }
 }

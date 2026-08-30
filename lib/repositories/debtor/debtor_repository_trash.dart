@@ -18,7 +18,9 @@ extension DebtorRepositoryTrash on DebtorRepository {
       }
 
       final t = transRes.first;
-      if (t['isDeleted'] == 1 || t['isDeleted'] == true) {
+      if (t['isDeleted'] == 1 ||
+          t['isDeleted'] == true ||
+          t['isDeleted']?.toString() == '1') {
         // Already deleted
         await _dbService.execute('ROLLBACK;');
         return true;
@@ -28,6 +30,25 @@ extension DebtorRepositoryTrash on DebtorRepository {
       final int customerId = int.tryParse(t['customerId'].toString()) ?? 0;
       final int? orderId = int.tryParse(t['orderId']?.toString() ?? '');
       final String type = t['transactionType'].toString();
+      Map<String, dynamic>? linkedOrder;
+
+      if (type == 'DEBT_PAYMENT' && orderId != null && orderId > 0) {
+        final orderRes = await _dbService.query(
+          '''SELECT received, grandTotal, status FROM `order`
+             WHERE id = :id LIMIT 1 FOR UPDATE''',
+          {'id': orderId},
+        );
+        if (orderRes.isNotEmpty) {
+          linkedOrder = orderRes.first;
+          if (linkedOrder['status']?.toString() == 'COMPLETED') {
+            await _loyaltyAwardService.reverseAwardWithinTransaction(
+              orderId: orderId,
+              reason: 'Delete debt payment transaction #$transactionId',
+              source: 'DEBT_PAYMENT_DELETE',
+            );
+          }
+        }
+      }
 
       // ✅ 3.1.5 ตรวจสอบสถานะบิลต้นทาง (ห้ามลบถ้าบิลยังอยู่)
       // ต้องตรวจเฉพาะ CREDIT_SALE เท่านั้น (เพราะถ้าบิลยังไม่ยกเลิก ห้ามลบหนี้)
@@ -47,54 +68,59 @@ extension DebtorRepositoryTrash on DebtorRepository {
         }
       }
 
-      // 3.2 ดึงหนี้ปัจจุบันของลูกค้า
-      final custRes = await _dbService.query(
-        'SELECT currentDebt FROM customer WHERE id = :id FOR UPDATE',
-        {'id': customerId},
+      // 3.1 Soft-delete Transaction Record
+      await _dbService.execute(
+        '''UPDATE debtor_transaction 
+           SET isDeleted = 1, deletedAt = NOW(), deleteReason = :reason 
+           WHERE id = :id''',
+        {'id': transactionId, 'reason': 'User Deleted'},
       );
 
-      Decimal currentDebt = Decimal.zero;
-      if (custRes.isNotEmpty) {
-        currentDebt = Decimal.parse(custRes.first['currentDebt'].toString());
+      // 3.2 คำนวณยอดหนี้ใหม่จาก Ledger ที่ถูกต้อง
+      final res = await _dbService.query('''
+        SELECT SUM(dt.amount) as total 
+        FROM debtor_transaction dt
+        LEFT JOIN `order` o ON dt.orderId = o.id
+        WHERE dt.customerId = :id 
+          AND (dt.isDeleted = 0 OR dt.isDeleted IS NULL)
+          AND (o.status IS NULL OR o.status != 'VOID')
+      ''', {'id': customerId});
+
+      double totalDebt = 0.0;
+      if (res.isNotEmpty && res.first['total'] != null) {
+        totalDebt = double.tryParse(res.first['total'].toString()) ?? 0.0;
       }
 
-      // 3.3 คำนวณยอดหนี้ใหม่ (ย้อนกลับการกระทำ)
-      final Decimal newDebt = currentDebt - amount;
-
-      // 3.4 อัปเดตยอดหนี้ลูกค้า
       await _dbService.execute(
         'UPDATE customer SET currentDebt = :bal WHERE id = :id',
-        {'bal': newDebt.toDouble(), 'id': customerId},
+        {'bal': totalDebt, 'id': customerId},
       );
 
-      // 3.5 หากเป็นการชำระหนี้ระบุบิล ต้องไปคืนค่ายอดเงินรับให้บิลนั้น
-      if (type == 'DEBT_PAYMENT' && orderId != null && orderId > 0) {
-        final orderRes = await _dbService.query(
-          'SELECT received, status FROM `order` WHERE id = :id FOR UPDATE',
-          {'id': orderId},
-        );
-        if (orderRes.isNotEmpty) {
-          final oData = orderRes.first;
-          final double currentReceived =
-              double.tryParse(oData['received'].toString()) ?? 0.0;
-          final double paymentAmount =
-              amount.abs().toDouble(); // DEBT_PAYMENT is negative amount
-          final double newReceived = currentReceived - paymentAmount;
+      // 3.3 หากเป็นการชำระหนี้ระบุบิล ต้องไปคืนค่ายอดเงินรับให้บิลนั้น
+      if (type == 'DEBT_PAYMENT' &&
+          orderId != null &&
+          orderId > 0 &&
+          linkedOrder != null) {
+        final oData = linkedOrder;
+        final double currentReceived =
+            double.tryParse(oData['received'].toString()) ?? 0.0;
+        final double paymentAmount =
+            amount.abs().toDouble(); // DEBT_PAYMENT is negative amount
+        final double newReceived = currentReceived - paymentAmount;
 
-          String newStatus = oData['status']?.toString() ?? '';
-          if (newStatus == 'COMPLETED') {
-            newStatus = 'UNPAID';
-          }
-
-          await _dbService.execute(
-            'UPDATE `order` SET received = :recv, status = :status WHERE id = :id',
-            {
-              'recv': newReceived < 0 ? 0 : newReceived,
-              'status': newStatus,
-              'id': orderId
-            },
-          );
+        String newStatus = oData['status']?.toString() ?? '';
+        if (newStatus == 'COMPLETED') {
+          newStatus = 'UNPAID';
         }
+
+        await _dbService.execute(
+          'UPDATE `order` SET received = :recv, status = :status WHERE id = :id',
+          {
+            'recv': newReceived < 0 ? 0 : newReceived,
+            'status': newStatus,
+            'id': orderId
+          },
+        );
       }
 
       // 3.5 Soft Delete (ย้ายลงถังขยะ)
@@ -109,6 +135,9 @@ extension DebtorRepositoryTrash on DebtorRepository {
 
       await _dbService.execute('COMMIT;');
       return true;
+    } on LoyaltyReversalException {
+      await _dbService.execute('ROLLBACK;');
+      rethrow;
     } catch (e) {
       await _dbService.execute('ROLLBACK;');
       debugPrint('Error deleting transaction: $e');
@@ -150,38 +179,83 @@ extension DebtorRepositoryTrash on DebtorRepository {
       if (transRes.isEmpty) throw Exception('Transaction not found');
 
       final t = transRes.first;
+      final isDeleted = t['isDeleted'] == true ||
+          t['isDeleted'] == 1 ||
+          t['isDeleted']?.toString() == '1';
+      if (!isDeleted) {
+        await _dbService.execute('COMMIT;');
+        return true;
+      }
       final Decimal amount =
           Decimal.parse(t['amount'].toString()); // Amount of the Transaction
       final int customerId = int.tryParse(t['customerId'].toString()) ?? 0;
-
-      // 2. Get Current Debt
-      final custRes = await _dbService.query(
-        'SELECT currentDebt FROM customer WHERE id = :id FOR UPDATE',
-        {'id': customerId},
-      );
-
-      Decimal currentDebt = Decimal.zero;
-      if (custRes.isNotEmpty) {
-        currentDebt = Decimal.parse(custRes.first['currentDebt'].toString());
+      final int? orderId = int.tryParse(t['orderId']?.toString() ?? '');
+      final type = t['transactionType']?.toString() ?? '';
+      Map<String, dynamic>? linkedOrder;
+      if (type == 'DEBT_PAYMENT' && orderId != null && orderId > 0) {
+        final orderRows = await _dbService.query(
+          '''SELECT received, grandTotal, status FROM `order`
+             WHERE id = :id LIMIT 1 FOR UPDATE''',
+          {'id': orderId},
+        );
+        if (orderRows.isNotEmpty) linkedOrder = orderRows.first;
       }
 
-      // 3. Re-Apply the Transaction
-      // ลบรายการ = หนี้เพิ่ม/ลด (Reverse)
-      // กู้คืน = กลับไปเป็นเหมือนเดิม (Apply)
-      // สูตร: หนี้ใหม่ = หนี้ปัจจุบัน + ยอดTransaction
-      final Decimal newDebt = currentDebt + amount;
-
-      // 4. Update Customer Debt
+      // 2. Update Transaction Status (Restore)
       await _dbService.execute(
-        'UPDATE customer SET currentDebt = :bal WHERE id = :id',
-        {'bal': newDebt.toDouble(), 'id': customerId},
-      );
-
-      // 5. Update Transaction Status
-      await _dbService.execute(
-        'UPDATE debtor_transaction SET isDeleted = 0, deletedAt = NULL, deleteReason = NULL WHERE id = :id',
+        '''UPDATE debtor_transaction
+           SET isDeleted = 0, deletedAt = NULL, deleteReason = NULL
+           WHERE id = :id AND isDeleted = 1''',
         {'id': transactionId},
       );
+
+      // 3. Recompute Customer Debt from true active Ledger
+      final res = await _dbService.query('''
+        SELECT SUM(dt.amount) as total 
+        FROM debtor_transaction dt
+        LEFT JOIN `order` o ON dt.orderId = o.id
+        WHERE dt.customerId = :id 
+          AND (dt.isDeleted = 0 OR dt.isDeleted IS NULL)
+          AND (o.status IS NULL OR o.status != 'VOID')
+      ''', {'id': customerId});
+
+      double totalDebt = 0.0;
+      if (res.isNotEmpty && res.first['total'] != null) {
+        totalDebt = double.tryParse(res.first['total'].toString()) ?? 0.0;
+      }
+
+      await _dbService.execute(
+        'UPDATE customer SET currentDebt = :bal WHERE id = :id',
+        {'bal': totalDebt, 'id': customerId},
+      );
+
+      if (type == 'DEBT_PAYMENT' &&
+          orderId != null &&
+          orderId > 0 &&
+          linkedOrder != null) {
+        final currentReceived =
+            double.tryParse(linkedOrder['received']?.toString() ?? '0') ?? 0;
+        final grandTotal =
+            double.tryParse(linkedOrder['grandTotal']?.toString() ?? '0') ?? 0;
+        final restoredReceived = currentReceived + amount.abs().toDouble();
+        final fullyPaid =
+            grandTotal > 0 && restoredReceived + 0.01 >= grandTotal;
+        await _dbService.execute(
+          '''UPDATE `order` SET received = :received, status = :status
+             WHERE id = :id''',
+          {
+            'received': restoredReceived,
+            'status': fullyPaid ? 'COMPLETED' : 'UNPAID',
+            'id': orderId,
+          },
+        );
+        if (fullyPaid) {
+          await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+            orderId: orderId,
+            source: 'DEBT_PAYMENT_RESTORE',
+          );
+        }
+      }
 
       await _dbService.execute('COMMIT;');
       return true;

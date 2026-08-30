@@ -37,6 +37,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
   @override
   void initState() {
     super.initState();
+    initializeCouponFromPosState(ref.read(posProvider.notifier));
     amountFocusNode.onKeyEvent = (node, event) {
       if (event is KeyDownEvent) {
         if (event.logicalKey == LogicalKeyboardKey.space) {
@@ -173,7 +174,7 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                           pointDiscountAmount: posState.pointDiscountAmount,
                           onOpenRedemptionDialog: () {
                             if (couponApplied) {
-                              clearCoupon(posState);
+                              if (!clearCoupon(posState)) return;
                               SnackbarUtils.showLeft(context,
                                   'ล้างคูปองแล้ว เพราะใช้ร่วมกับการแลกแต้มไม่ได้');
                             }
@@ -184,9 +185,12 @@ class _PaymentModalState extends ConsumerState<PaymentModal>
                         PaymentCouponSection(
                           couponCtrl: couponCtrl,
                           couponApplied: couponApplied,
+                          couponLocked: posState.isSourceCouponLocked,
                           isValidatingCoupon: isValidatingCoupon,
                           couponResult: couponResult,
-                          onClearCoupon: () => clearCoupon(posState),
+                          onClearCoupon: () {
+                            clearCoupon(posState);
+                          },
                           onValidateCoupon: () =>
                               validateAndApplyCoupon(posState, () {
                             final gt =

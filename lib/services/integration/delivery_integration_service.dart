@@ -187,7 +187,7 @@ class DeliveryIntegrationService {
               customer.lineUserId != null &&
               customer.lineUserId!.isNotEmpty) {
             final urlStr = SettingsService().apiUrl;
-            final url = Uri.parse('$urlStr/line/push-scenario');
+            final url = Uri.parse('$urlStr/line-internal/push-scenario');
 
             // scenario: 21 (cash) or 41 (credit)
             final int lineScenario =
@@ -204,7 +204,7 @@ class DeliveryIntegrationService {
             await http
                 .post(
                   url,
-                  headers: {'Content-Type': 'application/json'},
+                  headers: SettingsService().internalApiHeaders,
                   body: jsonEncode(payload),
                 )
                 .timeout(const Duration(seconds: 5));
@@ -248,8 +248,10 @@ class DeliveryIntegrationService {
       final existsRes = await _dbService.query(
           'SELECT firebaseJobId FROM delivery_jobs WHERE orderId = :oid',
           {'oid': orderId});
-      
-      if (existsRes.isEmpty) return; // ไม่ใช่งานจัดส่ง หรือยังไม่เคยส่งขึ้น cloud
+
+      if (existsRes.isEmpty) {
+        return; // ไม่ใช่งานจัดส่ง หรือยังไม่เคยส่งขึ้น cloud
+      }
 
       final jobId = existsRes.first['firebaseJobId']?.toString();
       if (jobId == null || jobId.isEmpty) return;
@@ -276,11 +278,14 @@ class DeliveryIntegrationService {
               .toSet();
         }
 
-        final warehouseItems = items.where((i) => warehouseProductIds.contains(i.productId)).toList();
+        final warehouseItems = items
+            .where((i) => warehouseProductIds.contains(i.productId))
+            .toList();
         if (warehouseItems.isNotEmpty) {
           jobItems = warehouseItems.map((i) {
             if (i.product != null) {
-              return i.copyWith(product: i.product!.copyWith(isWarehouseItem: true));
+              return i.copyWith(
+                  product: i.product!.copyWith(isWarehouseItem: true));
             }
             return i;
           }).toList();
@@ -288,15 +293,18 @@ class DeliveryIntegrationService {
       }
 
       String details = jobItems.map((i) {
-        String txt = '${i.productName} x${i.quantity}${i.comment.isNotEmpty ? " (${i.comment})" : ""}';
-        if (i.product?.shelfLocation != null && i.product!.shelfLocation!.isNotEmpty) {
+        String txt =
+            '${i.productName} x${i.quantity}${i.comment.isNotEmpty ? " (${i.comment})" : ""}';
+        if (i.product?.shelfLocation != null &&
+            i.product!.shelfLocation!.isNotEmpty) {
           txt += ' [เก็บ: ${i.product!.shelfLocation}]';
         }
         return txt.trim();
       }).join('\n');
 
       if (filterEnabled && jobItems.length < items.length) {
-        details += '\n📦 มีของหน้าร้าน ${items.length - jobItems.length} จำนวนรายการ';
+        details +=
+            '\n📦 มีของหน้าร้าน ${items.length - jobItems.length} จำนวนรายการ';
       }
 
       // ตรวจสอบกรณีหนี้เพิ่ม (แก้ไขบิลเงินสด แล้วมียอดต้องเก็บปลายทาง)
@@ -304,32 +312,40 @@ class DeliveryIntegrationService {
       final bool isPaidToUnpaid = wasFullyPaid && (newOutstanding ?? 0) > 0.001;
 
       if (isPaidToUnpaid) {
-        details = '⚠️ จ่ายแล้วบางส่วน! เก็บเงินปลายทางเพิ่มเฉพาะส่วนต่าง: ฿${newOutstanding!.toStringAsFixed(2)}\n━━━━━━━━━━━━━━━━━━\n$details';
+        details =
+            '⚠️ จ่ายแล้วบางส่วน! เก็บเงินปลายทางเพิ่มเฉพาะส่วนต่าง: ฿${newOutstanding!.toStringAsFixed(2)}\n━━━━━━━━━━━━━━━━━━\n$details';
       } else {
         details = '⚠️ มีการแก้ไขรายการสินค้า!\n━━━━━━━━━━━━━━━━━━\n$details';
       }
 
       final updates = {
         'details': details,
-        'price': isPaidToUnpaid ? newOutstanding : grandTotal, // ถ้าเดิมจ่ายแล้ว ให้แอปคนขับเก็บเฉพาะส่วนต่าง!
-        if (isPaidToUnpaid) 'payment_method': 'credit', // บังคับให้เป็น COD เพื่อเก็บส่วนต่าง
-        'items': jobItems.map((item) => {
+        'price': isPaidToUnpaid
+            ? newOutstanding
+            : grandTotal, // ถ้าเดิมจ่ายแล้ว ให้แอปคนขับเก็บเฉพาะส่วนต่าง!
+        if (isPaidToUnpaid)
+          'payment_method': 'credit', // บังคับให้เป็น COD เพื่อเก็บส่วนต่าง
+        'items': jobItems
+            .map((item) => {
                   'name': item.productName,
                   'qty': item.quantity.toDouble(),
                   'price': item.price.toDouble(),
                   'total': item.total.toDouble(),
                   'location': item.product?.shelfLocation ?? '',
                   'is_warehouse': item.product?.isWarehouseItem ?? false,
-                }).toList(),
+                })
+            .toList(),
       };
 
       // 3. อัปเดตขึ้น Firebase
       await _firebaseService.updateJob(jobId, updates);
-      LoggerService.info('DeliveryIntegration', '✅ Updated Cloud Job $jobId with new items for Order #$orderId');
+      LoggerService.info('DeliveryIntegration',
+          '✅ Updated Cloud Job $jobId with new items for Order #$orderId');
 
       // 4. ส่งแจ้งเตือน Telegram (Option)
       try {
-        if (await _telegramService.shouldNotify(TelegramService.keyNotifyDelivery)) {
+        if (await _telegramService
+            .shouldNotify(TelegramService.keyNotifyDelivery)) {
           String msg = '⚠️ *มีการแก้ไขรายการบิลจัดส่ง*\n'
               '━━━━━━━━━━━━━━━━━━\n'
               '🧾 *เลขที่บิล:* #$orderId\n'
@@ -339,11 +355,12 @@ class DeliveryIntegrationService {
           _telegramService.sendMessage(msg);
         }
       } catch (e) {
-        LoggerService.error('DeliveryIntegration', 'Telegram Notify Edit Error', e);
+        LoggerService.error(
+            'DeliveryIntegration', 'Telegram Notify Edit Error', e);
       }
-
     } catch (e) {
-      LoggerService.error('DeliveryIntegration', 'Error updating delivery job items', e);
+      LoggerService.error(
+          'DeliveryIntegration', 'Error updating delivery job items', e);
     }
   }
 

@@ -100,6 +100,18 @@ class ApiService {
     throw Exception('Network Error: $lastError');
   }
 
+  Future<String?> uploadProductImage(int productId, File imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+    final response = await post('/products/$productId/image', {
+      'image': base64Encode(bytes),
+    });
+    if (response is Map && response['url'] != null) {
+      final base = _baseUrl.replaceFirst(RegExp(r'/api/v1$'), '');
+      return '$base${response['url']}';
+    }
+    return null;
+  }
+
   // Generic GET (with mDNS Fallback)
   Future<dynamic> get(String endpoint) async {
     final token = await getToken();

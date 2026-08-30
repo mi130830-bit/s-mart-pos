@@ -55,6 +55,28 @@ class _CartItemTileState extends State<CartItemTile> {
         text: NumberFormat('#.##').format(widget.item.price.toDouble()));
     _discountCtrl = TextEditingController(
         text: NumberFormat('#.##').format(_getDisplayDiscount(widget.item)));
+
+    _qtyFocus.addListener(_onQtyFocusChange);
+    _priceFocus.addListener(_onPriceFocusChange);
+    _discountFocus.addListener(_onDiscountFocusChange);
+  }
+
+  void _onQtyFocusChange() {
+    if (!_qtyFocus.hasFocus) {
+      _submitQty();
+    }
+  }
+
+  void _onPriceFocusChange() {
+    if (!_priceFocus.hasFocus) {
+      _submitPrice();
+    }
+  }
+
+  void _onDiscountFocusChange() {
+    if (!_discountFocus.hasFocus) {
+      _submitDiscount();
+    }
   }
 
   @override
@@ -77,6 +99,9 @@ class _CartItemTileState extends State<CartItemTile> {
 
   @override
   void dispose() {
+    _qtyFocus.removeListener(_onQtyFocusChange);
+    _priceFocus.removeListener(_onPriceFocusChange);
+    _discountFocus.removeListener(_onDiscountFocusChange);
     _qtyCtrl.dispose();
     _priceCtrl.dispose();
     _discountCtrl.dispose();
@@ -87,20 +112,24 @@ class _CartItemTileState extends State<CartItemTile> {
   }
 
   void _submitQty() {
-    final val = Decimal.tryParse(_qtyCtrl.text);
-    if (val != null) {
-      widget.onUpdateQuantity(widget.index, val);
+    final val = Decimal.tryParse(_qtyCtrl.text.trim());
+    if (val != null && val > Decimal.zero) {
+      if (val != widget.item.quantity) {
+        widget.onUpdateQuantity(widget.index, val);
+      }
     } else {
-      // Revert
+      // Revert if invalid or <= 0
       _qtyCtrl.text =
           NumberFormat('#.##').format(widget.item.quantity.toDouble());
     }
   }
 
   void _submitPrice() {
-    final val = Decimal.tryParse(_priceCtrl.text);
-    if (val != null) {
-      widget.onUpdatePrice(widget.index, val);
+    final val = Decimal.tryParse(_priceCtrl.text.trim());
+    if (val != null && val >= Decimal.zero) {
+      if (val != widget.item.price) {
+        widget.onUpdatePrice(widget.index, val);
+      }
     } else {
       // Revert
       _priceCtrl.text =
@@ -109,9 +138,12 @@ class _CartItemTileState extends State<CartItemTile> {
   }
 
   void _submitDiscount() {
-    final val = Decimal.tryParse(_discountCtrl.text);
-    if (val != null) {
-      widget.onUpdateDiscount?.call(widget.index, val);
+    final val = Decimal.tryParse(_discountCtrl.text.trim());
+    if (val != null && val >= Decimal.zero) {
+      final currentDiscount = Decimal.parse(_getDisplayDiscount(widget.item).toString());
+      if (val != currentDiscount) {
+        widget.onUpdateDiscount?.call(widget.index, val);
+      }
     } else {
       _discountCtrl.text =
           NumberFormat('#.##').format(_getDisplayDiscount(widget.item));
@@ -119,14 +151,14 @@ class _CartItemTileState extends State<CartItemTile> {
   }
 
   void _incrementQty() {
-    final current = Decimal.tryParse(_qtyCtrl.text) ?? widget.item.quantity;
+    final current = Decimal.tryParse(_qtyCtrl.text.trim()) ?? widget.item.quantity;
     widget.onUpdateQuantity(widget.index, current + Decimal.fromInt(1));
   }
 
   void _decrementQty() {
-    final current = Decimal.tryParse(_qtyCtrl.text) ?? widget.item.quantity;
+    final current = Decimal.tryParse(_qtyCtrl.text.trim()) ?? widget.item.quantity;
     final newQty = current - Decimal.fromInt(1);
-    if (newQty >= Decimal.fromInt(1)) {
+    if (newQty > Decimal.zero) {
       widget.onUpdateQuantity(widget.index, newQty);
     }
   }
@@ -232,12 +264,7 @@ class _CartItemTileState extends State<CartItemTile> {
                               extentOffset: _qtyCtrl.text.length);
                         },
                         onSubmitted: (_) => _submitQty(),
-                        onTapOutside: (_) {
-                          if (_qtyFocus.hasFocus) {
-                            _qtyFocus.unfocus();
-                            _submitQty();
-                          }
-                        },
+                        onTapOutside: (_) => _qtyFocus.unfocus(),
                       ),
                     ),
                   ),
@@ -284,12 +311,7 @@ class _CartItemTileState extends State<CartItemTile> {
                           baseOffset: 0, extentOffset: _priceCtrl.text.length);
                     },
                     onSubmitted: (_) => _submitPrice(),
-                    onTapOutside: (_) {
-                      if (_priceFocus.hasFocus) {
-                        _priceFocus.unfocus();
-                        _submitPrice();
-                      }
-                    },
+                    onTapOutside: (_) => _priceFocus.unfocus(),
                   ),
                 ),
               ),
@@ -319,12 +341,7 @@ class _CartItemTileState extends State<CartItemTile> {
                           baseOffset: 0, extentOffset: _discountCtrl.text.length);
                     },
                     onSubmitted: (_) => _submitDiscount(),
-                    onTapOutside: (_) {
-                      if (_discountFocus.hasFocus) {
-                        _discountFocus.unfocus();
-                        _submitDiscount();
-                      }
-                    },
+                    onTapOutside: (_) => _discountFocus.unfocus(),
                   ),
                 ),
               ),

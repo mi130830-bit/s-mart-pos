@@ -15,6 +15,7 @@ dependencies:
   dbcrypt: ^2.0.0
   dart_jsonwebtoken: ^2.12.0
   http: ^1.6.0
+  crypto: ^3.0.6
   shelf_static: ^1.1.3
   firedart: ^0.9.8  # Firestore SDK for Dart Server
 

@@ -6,11 +6,14 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 
 import '../db_config.dart';
+import '../services/loyalty_award_service.dart';
 
 /// Server-authoritative checkout for S-Link.  It intentionally accepts only
 /// product IDs and quantities; price, discounts, VAT and loyalty balances are
 /// read and calculated on the POS server inside one MySQL transaction.
 class MobileCheckoutController {
+  final LoyaltyAwardService _loyaltyAwardService = LoyaltyAwardService();
+
   Router get router {
     final router = Router();
     router.post('/', _checkout);
@@ -266,6 +269,11 @@ class MobileCheckoutController {
             'amount': totals['grandTotal'],
           },
         );
+        await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+          conn,
+          orderId: orderId,
+          source: 'MOBILE_CHECKOUT',
+        );
         await conn.execute('COMMIT');
         return Response.ok(
           jsonEncode({
@@ -461,7 +469,7 @@ class MobileCheckoutController {
     final rows = await conn.execute(
       '''SELECT id, points_earned - points_used AS available FROM point_ledger
       WHERE customer_id = :id AND points_earned > points_used AND (expires_at IS NULL OR expires_at > NOW())
-      ORDER BY expires_at ASC FOR UPDATE''',
+      ORDER BY (expires_at IS NULL), expires_at, earned_at, id FOR UPDATE''',
       {'id': customerId},
     );
     var remaining = amount;

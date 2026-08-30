@@ -44,6 +44,7 @@ extension PosPricingExtension on PosStateNotifier {
   double get promoDiscount => _promoDiscount.toDouble();
 
   void applyPointDiscount(int points) {
+    if (isSourceCouponLocked) return;
     // Points and a LINE OA coupon are mutually exclusive.
     _couponDiscountAmount = 0.0;
     _appliedCouponCode = null;
@@ -68,6 +69,7 @@ extension PosPricingExtension on PosStateNotifier {
   }
 
   void clearCouponDiscount() {
+    if (isSourceCouponLocked) return;
     _couponDiscountAmount = 0.0;
     _appliedCouponCode = null;
     _invalidateCalcCache();

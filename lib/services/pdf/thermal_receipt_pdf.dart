@@ -23,7 +23,12 @@ class ThermalReceiptPdf {
     required PdfPageFormat pageFormat,
     required ShopInfo shopInfo,
     String? cashierName, // ✅ รับข้อมูลพนักงานเก็บเงิน
+    String? remark, // ✅ หมายเหตุเพิ่มเติม
     Uint8List? shopLogoBytes,
+    bool showLineOa = false,
+    String? lineOaUrl,
+    String? lineOaId,
+    Uint8List? lineOaQrBytes,
   }) async {
     // 1. เตรียม Font และ Logo
     final font = await PdfHelper.getFontRegular();
@@ -349,6 +354,23 @@ class ThermalReceiptPdf {
                   _buildTotalRow(
                       'เงินทอน', moneyFmt.format(change), fontBold, bodySize),
 
+                  // --- REMARK / หมายเหตุ ---
+                  if (remark != null && remark.trim().isNotEmpty) ...[
+                    pw.SizedBox(height: 4),
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.grey100,
+                      ),
+                      child: pw.Text('หมายเหตุ: ${remark.trim()}',
+                          style: pw.TextStyle(
+                              font: fontBold,
+                              fontSize: bodySize,
+                              color: PdfColors.black)),
+                    ),
+                  ],
+
                   // 8. ส่วนท้าย
                   if (footer.isNotEmpty) ...[
                     pw.SizedBox(height: 5),
@@ -360,8 +382,62 @@ class ThermalReceiptPdf {
                         textAlign: pw.TextAlign.center),
                   ],
 
+                  // --- LINE OA Membership Invitation ---
+                  if (showLineOa &&
+                      (lineOaQrBytes != null ||
+                          (lineOaUrl != null && lineOaUrl.isNotEmpty))) ...[
+                    pw.SizedBox(height: 6),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: pw.BoxDecoration(
+                        border:
+                            pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                        borderRadius:
+                            const pw.BorderRadius.all(pw.Radius.circular(4)),
+                      ),
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            "📲 สมัครสมาชิกกับเรา",
+                            style: pw.TextStyle(
+                                font: fontBold,
+                                fontSize: bodySize,
+                                color: PdfColors.black),
+                          ),
+                          pw.Text(
+                            "รับแต้มสะสม & สิทธิพิเศษมากมาย",
+                            style: pw.TextStyle(
+                                font: font,
+                                fontSize: bodySize - 1,
+                                color: PdfColors.grey700),
+                          ),
+                          pw.SizedBox(height: 4),
+                          if (lineOaQrBytes != null)
+                            pw.Image(pw.MemoryImage(lineOaQrBytes),
+                                width: 55, height: 55)
+                          else if (lineOaUrl != null && lineOaUrl.isNotEmpty)
+                            pw.BarcodeWidget(
+                              barcode: pw.Barcode.qrCode(),
+                              data: lineOaUrl,
+                              width: 55,
+                              height: 55,
+                            ),
+                          if (lineOaId != null && lineOaId.isNotEmpty) ...[
+                            pw.SizedBox(height: 2),
+                            pw.Text("LINE: $lineOaId",
+                                style: pw.TextStyle(
+                                    font: fontBold,
+                                    fontSize: 7.5,
+                                    color: PdfColors.grey800)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+
                   // จบเอกสาร
-                  pw.SizedBox(height: 10),
+                  pw.SizedBox(height: 8),
                   pw.Text("RD:${orderId.toString().padLeft(6, '0')}",
                       style: pw.TextStyle(
                           font: font, fontSize: 8, color: PdfColors.grey500)),

@@ -65,7 +65,7 @@ class NotificationService {
 
       // 2. ดึง baseUrl ของ API
       final urlStr = SettingsService().apiUrl;
-      final url = Uri.parse('$urlStr/line/push-scenario');
+      final url = Uri.parse('$urlStr/line-internal/push-scenario');
       debugPrint('📤 [LineOA] POST → $url');
 
       try {
@@ -102,7 +102,7 @@ class NotificationService {
         final response = await http
             .post(
               url,
-              headers: {'Content-Type': 'application/json'},
+              headers: SettingsService().internalApiHeaders,
               body: jsonEncode(payload),
             )
             .timeout(const Duration(seconds: 10));
@@ -263,16 +263,18 @@ class NotificationService {
   }) async {
     try {
       final urlStr = SettingsService().apiUrl;
-      final url = Uri.parse('$urlStr/line/push-message');
-      
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "lineUserId": lineUserId,
-          "message": message,
-        }),
-      ).timeout(const Duration(seconds: 10));
+      final url = Uri.parse('$urlStr/line-internal/push-message');
+
+      final response = await http
+          .post(
+            url,
+            headers: SettingsService().internalApiHeaders,
+            body: jsonEncode({
+              "lineUserId": lineUserId,
+              "message": message,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       return response.statusCode == 200;
     } catch (e) {

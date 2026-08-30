@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 import '../models/schema/order_collection.dart';
 import '../services/local_db_service.dart';
 import '../services/sync_service.dart';
+import '../services/sales/loyalty_award_service.dart';
 
 part 'sales/sales_command_extension.dart';
 part 'sales/sales_query_extension.dart';
@@ -26,6 +27,8 @@ class SalesRepository {
   final MySQLService _dbService;
   final ActivityRepository _activityRepo;
   final DebtorRepository _debtorRepo;
+  late final LoyaltyAwardService _loyaltyAwardService =
+      LoyaltyAwardService(db: _dbService);
 
   SalesRepository({
     MySQLService? dbService,
@@ -34,7 +37,6 @@ class SalesRepository {
   })  : _dbService = dbService ?? MySQLService(),
         _activityRepo = activityRepo ?? ActivityRepository(),
         _debtorRepo = debtorRepo ?? DebtorRepository();
-
 
   // --- Helpers ---
   // --- 9. Helpers ---
@@ -54,12 +56,12 @@ class SalesRepository {
 
         if (lineUserId != null && lineUserId.toString().isNotEmpty) {
           // 2. Call Backend API (Fire & Forget)
-          final url =
-              Uri.parse('http://127.0.0.1:8080/api/v1/line/push-receipt');
+          final url = Uri.parse(
+              'http://127.0.0.1:8080/api/v1/line-internal/push-receipt');
           http
               .post(
             url,
-            headers: {'Content-Type': 'application/json'},
+            headers: SettingsService().internalApiHeaders,
             body: jsonEncode({
               'lineUserId': lineUserId.toString(),
               'orderId': orderId.toString(),
@@ -71,12 +73,15 @@ class SalesRepository {
             return http.Response('Timeout', 408);
           }).then((response) {
             if (response.statusCode != 200) {
-              LoggerService.warning('SalesRepository', 'Line Receipt Push Failed: ${response.body}');
+              LoggerService.warning('SalesRepository',
+                  'Line Receipt Push Failed: ${response.body}');
             } else {
-              LoggerService.info('SalesRepository', 'Line Receipt Triggered for Order #$orderId');
+              LoggerService.info('SalesRepository',
+                  'Line Receipt Triggered for Order #$orderId');
             }
           }).catchError((e) {
-            LoggerService.error('SalesRepository', 'Line Receipt Connection Error', e);
+            LoggerService.error(
+                'SalesRepository', 'Line Receipt Connection Error', e);
           });
         }
       }
@@ -88,7 +93,8 @@ class SalesRepository {
   // ✅ Helper for Telegram Notification
   Future<void> _notifyTelegram(
       int orderId, double amount, String method, List<OrderItem> items) async {
-    LoggerService.info('SalesRepository', 'Triggering Telegram Notify for Order #$orderId...');
+    LoggerService.info(
+        'SalesRepository', 'Triggering Telegram Notify for Order #$orderId...');
     try {
       if (await TelegramService()
           .shouldNotify(TelegramService.keyNotifyPayment)) {

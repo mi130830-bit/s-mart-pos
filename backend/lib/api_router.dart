@@ -21,14 +21,29 @@ import 'controllers/employee_controller.dart';
 import 'controllers/work_log_controller.dart';
 import 'controllers/attendance_controller.dart';
 import 'controllers/hr_controller.dart';
+import 'controllers/shop_controller.dart';
+import 'controllers/membership_controller.dart';
+import 'controllers/tier_settings_controller.dart';
 import 'package:shelf/shelf.dart';
 import 'middlewares/jwt_middleware.dart';
+import 'middlewares/liff_auth_middleware.dart';
+import 'middlewares/role_middleware.dart';
+import 'middlewares/internal_service_auth_middleware.dart';
 
 class ApiRouter {
   Router get router {
     final router = Router();
 
     final securedPipeline = Pipeline().addMiddleware(jwtMiddleware());
+    final shopStaffPipeline = Pipeline()
+        .addMiddleware(jwtMiddleware())
+        .addMiddleware(requireRoles({'admin', 'manager', 'owner', 'cashier'}));
+    final rewardStaffPipeline = Pipeline()
+        .addMiddleware(jwtMiddleware())
+        .addMiddleware(requireRoles({'admin', 'manager', 'owner', 'cashier'}));
+    final membershipStaffPipeline = Pipeline()
+        .addMiddleware(jwtMiddleware())
+        .addMiddleware(requireRoles({'admin', 'manager', 'owner', 'cashier'}));
 
     // Mount AuthController at /auth (Public)
     router.mount('/auth', AuthController().router.call);
@@ -36,9 +51,32 @@ class ApiRouter {
     // Mount HealthController at /health (Public)
     router.mount('/health', HealthController().router.call);
 
-    // Public Routes for Webhooks and Desktop POS (No Firebase JWT)
-    router.mount('/line', LineController().router.call);
+    // Public Routes for Webhooks, Web Shop, and Desktop POS (No Firebase JWT)
+    final lineController = LineController();
+    router.mount('/line', lineController.publicRouter.call);
+    router.mount(
+      '/line-internal',
+      Pipeline()
+          .addMiddleware(internalServiceAuthMiddleware())
+          .addHandler(lineController.internalRouter.call),
+    );
     router.mount('/payment', PaymentController().router.call);
+    final shopController = ShopController();
+    router.mount('/shop', shopController.publicRouter.call);
+    router.mount(
+      '/shop-member',
+      Pipeline()
+          .addMiddleware(liffAuthMiddleware())
+          .addHandler(shopController.memberRouter.call),
+    );
+    router.mount(
+      '/shop-admin',
+      shopStaffPipeline.addHandler(shopController.adminRouter.call),
+    );
+    router.mount(
+      '/tier-settings',
+      shopStaffPipeline.addHandler(TierSettingsController().router.call),
+    );
 
     // Secured Routes (Requires Custom JWT from S-Link)
     router.mount(
@@ -84,9 +122,28 @@ class ApiRouter {
       '/jobs',
       securedPipeline.addHandler(JobController().router.call),
     );
+    final rewardController = RewardController();
+    router.mount('/rewards', rewardController.publicRouter.call);
     router.mount(
-      '/rewards',
-      securedPipeline.addHandler(RewardController().router.call),
+      '/rewards-member',
+      Pipeline()
+          .addMiddleware(liffAuthMiddleware())
+          .addHandler(rewardController.memberRouter.call),
+    );
+    router.mount(
+      '/rewards-admin',
+      rewardStaffPipeline.addHandler(rewardController.staffRouter.call),
+    );
+    final membershipController = MembershipController();
+    router.mount(
+      '/membership-member',
+      Pipeline()
+          .addMiddleware(liffAuthMiddleware())
+          .addHandler(membershipController.memberRouter.call),
+    );
+    router.mount(
+      '/membership-admin',
+      membershipStaffPipeline.addHandler(membershipController.staffRouter.call),
     );
     router.mount(
       '/employees',

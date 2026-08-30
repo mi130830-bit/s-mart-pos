@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import '../db_config.dart';
+import '../services/loyalty_award_service.dart';
 import 'dart:io';
 import 'package:decimal/decimal.dart';
 
 class DebtController {
+  final LoyaltyAwardService _loyaltyAwardService = LoyaltyAwardService();
+
   Router get router {
     final router = Router();
     router.post('/cod-payment', _handleCodPayment);
@@ -68,16 +71,22 @@ class DebtController {
           // before its response reached the device. Treat the job id as the
           // idempotency key so COD is never deducted twice.
           if (jobId.isNotEmpty) {
-            final duplicate = await conn.execute('''
+            final duplicate = await conn.execute(
+              '''
               SELECT id FROM debtor_transaction
               WHERE transactionType = 'DEBT_PAYMENT'
                 AND note LIKE :jobMarker
               LIMIT 1
-            ''', {'jobMarker': '%(Job: $jobId)%'});
+            ''',
+              {'jobMarker': '%(Job: $jobId)%'},
+            );
             if (duplicate.rows.isNotEmpty) {
               await conn.execute('COMMIT;');
               return Response.ok(
-                jsonEncode({'success': true, 'message': 'COD already recorded'}),
+                jsonEncode({
+                  'success': true,
+                  'message': 'COD already recorded',
+                }),
                 headers: {'content-type': 'application/json'},
               );
             }
@@ -112,6 +121,7 @@ class DebtController {
             {'bal': balanceAfter.toDouble(), 'id': customerId},
           );
 
+          var closedOrder = false;
           if (orderId > 0) {
             final orderRes = await conn.execute(
               'SELECT grandTotal, received FROM `order` WHERE id = :id FOR UPDATE',
@@ -143,6 +153,7 @@ class DebtController {
                 );
                 note =
                     'รับชำระปิดบิล #$orderId ปลายทาง${driverId.isNotEmpty ? " (คนขับ: $driverId)" : ""} (Job: $jobId)';
+                closedOrder = true;
               } else {
                 note =
                     'ชำระบางส่วน #$orderId ปลายทาง (เหลือ ${(grandTotal - newReceived).toStringAsFixed(2)})${driverId.isNotEmpty ? " (คนขับ: $driverId)" : ""} (Job: $jobId)';
@@ -167,6 +178,14 @@ class DebtController {
             'note': note,
           });
 
+          if (closedOrder) {
+            await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+              conn,
+              orderId: orderId,
+              source: 'BACKEND_COD',
+            );
+          }
+
           await conn.execute('COMMIT;');
           stdout.writeln(
             '✅ API: Processed COD Payment $amount for Job $jobId (Customer: $customerId, Order: $orderId)',
@@ -189,7 +208,8 @@ class DebtController {
       stdout.writeln('❌ API Error (COD Payment Endpoint): $e');
       stdout.writeln(stack);
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Server Error: $e'}),
+        body: jsonEncode({'error': 'COD payment failed'}),
+        headers: {'content-type': 'application/json'},
       );
     }
   }

@@ -132,6 +132,10 @@ extension DebtorRepositoryMutations on DebtorRepository {
         await _dbService.execute(
             "UPDATE `order` SET status = 'COMPLETED', paymentMethod = 'credit' WHERE id = :id",
             {'id': orderId});
+        await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+          orderId: orderId,
+          source: 'DEBT_SPECIFIC',
+        );
       }
 
       await _dbService.execute('COMMIT;');
@@ -204,6 +208,10 @@ extension DebtorRepositoryMutations on DebtorRepository {
           await _dbService.execute(
               "UPDATE `order` SET status = 'COMPLETED', paymentMethod = 'credit' WHERE id = :id",
               {'id': orderId});
+          await _loyaltyAwardService.awardClosedOrderWithinTransaction(
+            orderId: orderId,
+            source: 'DEBT_BATCH',
+          );
         }
 
         // ✅ สร้าง Transaction แยกลงแต่ละบิล (เพื่อให้สามารถกดยกเลิก/Revert การจ่ายเงินรายบิลได้)

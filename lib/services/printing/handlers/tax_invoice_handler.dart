@@ -23,6 +23,7 @@ class TaxInvoiceHandler {
     required Customer customer,
     Printer? printerOverride,
     bool isPreview = false,
+    String? remark,
   }) async {
     try {
       final pageFormat = PdfPageFormat.a4;
@@ -40,6 +41,7 @@ class TaxInvoiceHandler {
         shopInfo: shopInfo,
         shopLogoBytes: shopLogoBytes,
         pageFormat: pageFormat,
+        remark: remark,
       );
 
       final printer = printerOverride ?? await PrintSettingsHelper.getPrinterBySettingKey(PrintSettingsHelper.keyTaxPrinter);
