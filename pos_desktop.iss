@@ -66,12 +66,9 @@ Source: "{#ProjectPath}\backend\public\*"; DestDir: "{app}\backend\public"; Flag
 Name: "{app}\backend\public\bills"
 
 [Icons]
-; Shortcut เปิดเข้า POS โดยตรง (Client Only)
+; Shortcut เปิดเข้า POS โดยตรง (Client / Dedicated POS Terminal)
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldCreateDesktopIcon
-
-; Shortcut เปิดระบบเต็มรูปแบบ (แนะนำสำหรับเครื่องแม่) - ใช้ไอคอนจาก exe หลัก
-Name: "{autodesktop}\Start S-Mart System (Server+POS)"; Filename: "{app}\start_system.bat"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Code]
 function ShouldCreateDesktopIcon: Boolean;
@@ -95,10 +92,8 @@ Filename: "{app}\vc_redist.x64.exe"; Parameters: "/quiet /norestart"; \
     StatusMsg: "Installing Visual C++ 2015-2022 Redistributable..."; \
     Check: not IsVCInstalled; Flags: runhidden
 
-; 2. ตัวเลือกหลังติดตั้งเสร็จ
-Filename: "{app}\start_system.bat"; Description: "Launch S-Mart POS System (Server Mode)"; Flags: nowait postinstall skipifsilent unchecked
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch POS Only (Client Mode)"; Flags: nowait postinstall skipifsilent
+; 2. เปิดโปรแกรมหลังติดตั้งเสร็จ
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch S-Mart POS"; Flags: nowait postinstall skipifsilent
 
 [Messages]
-; ปรับแต่งข้อความตอนจบ
-ClickFinish=Click Finish to exit Setup. Remember to keep the black command windows open for the Server to function.
+ClickFinish=Click Finish to exit Setup.
