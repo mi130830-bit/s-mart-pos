@@ -246,6 +246,7 @@ class FirebaseMessagingService {
             final body = jsonEncode({
               'lineUserId': lineUserId,
               'orderId': orderId.toString(),
+              'image': base64Image,
               'imageBase64': base64Image,
               'amount': grandTotal.toStringAsFixed(2)
             });

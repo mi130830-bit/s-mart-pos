@@ -45,6 +45,12 @@
 12. **รีเซ็ตคะแนนสะสมสมาชิกทั้งหมดเริ่มต้นที่ 0 คะแนน (Loyalty Points System Initial Reset):**
    - สำรองข้อมูลตาราง `customer` และ `point_ledger` ก่อนการปรับเปลี่ยน (`pre_points_reset_20260830.sql`)
    - ดำเนินการรีเซ็ตคะแนนสะสมของลูกค้าสมาชิกทุกคนในร้าน (1,248 ราย) เริ่มต้นที่ 0 คะแนน เพื่อเตรียมพร้อมเปิดตัวระบบสะสมแต้มและสิทธิประโยชน์สมาชิกใหม่ในวันพรุ่งนี้ (31 ส.ค. 2026) พร้อมบันทึก `activity_log` สำเร็จ 100%
+13. **ปรับปรุงความเข้ากันได้ของระบบคิวแจ้งเตือนรูปบิล LINE OA (LINE OA Notification Queue Compatibility):**
+   - ปรับปรุง Endpoint `/api/v1/line-internal/push-receipt-image` บน Backend ให้รองรับ Payload ทั้ง `image` และ `imageBase64` เพื่อป้องกันปัญหา `400 Bad Request` ขณะส่งรูปบิลเข้าคิวอัตโนมัติ
+   - Recompile และ Restart Backend Service บน LXC 101 เรียบร้อย 100%
+14. **อัปเกรดทรัพยากรฮาร์ดแวร์ให้ตู้ AI "น้องเจนนี่" (LXC 104 Hardware Expansion):**
+   - ขยายพื้นที่จัดเก็บข้อมูล NVMe SSD เพิ่มขึ้นเป็น **`250 GB`** (จากเดิม 100 GB) รองรับการดาวน์โหลดโมเดล LLM ขนาดใหญ่และการขยายตัวของฐานข้อมูล
+   - เพิ่มขนาดหน่วยความจำ RAM เป็น **`20 GB`** (จากเดิม 16 GB) พร้อม CPU **`8 Cores`** และ Swap 4 GB เพื่อประสิทธิภาพการประมวลผล Text-to-SQL และสรุปข่าวระดับสูงสุด
 
 **English:**
 1. **Bare-Metal Proxmox Host Deployment:** Verified hardware and deployed Proxmox VE 9.x onto GMKtec M5 Ultra Mini PC (AMD Ryzen 7 7730U 8C/16T, 32GB SK Hynix Dual Channel RAM, 1TB NVMe SSD, Dual 2.5GbE LAN). Configured official no-subscription repository and downloaded Ubuntu 24.04 template.

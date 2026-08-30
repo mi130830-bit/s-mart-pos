@@ -219,7 +219,7 @@ class LineController {
 
       final String? lineUserId = body['lineUserId'];
       final String? orderId = body['orderId'];
-      final String? base64Image = body['image'];
+      final String? base64Image = body['image'] ?? body['imageBase64'];
 
       if (lineUserId == null || orderId == null || base64Image == null) {
         return Response.badRequest(
