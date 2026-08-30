@@ -41,6 +41,9 @@
    - พัฒนา `FaceReceptionistService` และสคริปต์ `scripts/face_watcher.py` รองรับโหมด Headless (เบื้องหลัง)
    - ผูกวงจรชีวิตของระบบกล้องเข้ากับ POS Desktop: เปิดโปรแกรม POS กล้องจะเริ่มทำงานอัตโนมัติ และเมื่อปิดหน้าต่างโปรแกรม POS ระบบจะตัดการทำงานของกล้องและคืนทรัพยากรทันที 100%
    - ป้องกันข้อผิดพลาด (Fail-Safe): หากไม่มีกล้อง Webcam เชื่อมต่ออยู่ ระบบจะข้ามการทำงานอย่างเงียบๆ ไม่ส่งผลกระทบต่อโปรแกรมขายหน้าร้าน
+12. **รีเซ็ตคะแนนสะสมสมาชิกทั้งหมดเริ่มต้นที่ 0 คะแนน (Loyalty Points System Initial Reset):**
+   - สำรองข้อมูลตาราง `customer` และ `point_ledger` ก่อนการปรับเปลี่ยน (`pre_points_reset_20260830.sql`)
+   - ดำเนินการรีเซ็ตคะแนนสะสมของลูกค้าสมาชิกทุกคนในร้าน (1,248 ราย) เริ่มต้นที่ 0 คะแนน เพื่อเตรียมพร้อมเปิดตัวระบบสะสมแต้มและสิทธิประโยชน์สมาชิกใหม่ในวันพรุ่งนี้ (31 ส.ค. 2026) พร้อมบันทึก `activity_log` สำเร็จ 100%
 
 **English:**
 1. **Bare-Metal Proxmox Host Deployment:** Verified hardware and deployed Proxmox VE 9.x onto GMKtec M5 Ultra Mini PC (AMD Ryzen 7 7730U 8C/16T, 32GB SK Hynix Dual Channel RAM, 1TB NVMe SSD, Dual 2.5GbE LAN). Configured official no-subscription repository and downloaded Ubuntu 24.04 template.
