@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../models/product.dart';
 import '../../../models/customer.dart';
 import '../../../repositories/product_repository.dart';
+import '../../../repositories/customer_repository.dart';
 import '../../../state/auth_provider.dart';
 import '../../../services/alert_service.dart';
 import '../../../services/logger_service.dart';
@@ -204,6 +205,35 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
 
   Future<void> _executeScan(String value, PosStateNotifier posState) async {
     try {
+      final trimmedVal = value.trim();
+
+      // ✅ 7-Eleven / Punthai Style Member Scan: Check if scanned value is explicitly a Member Pass or Phone
+      final isExplicitMemberCode = trimmedVal.toUpperCase().startsWith('MEM-') ||
+          trimmedVal.toUpperCase().startsWith('MEMBER:') ||
+          trimmedVal.toUpperCase().startsWith('CUST:');
+      final isPhonePattern = (trimmedVal.length == 10 &&
+          (trimmedVal.startsWith('08') || trimmedVal.startsWith('09') || trimmedVal.startsWith('06')) &&
+          int.tryParse(trimmedVal) != null);
+
+      if (isExplicitMemberCode || isPhonePattern) {
+        final customerRepo = CustomerRepository();
+        final matchedCust = await customerRepo.getCustomerByBarcodeOrCode(trimmedVal);
+        if (matchedCust != null) {
+          posState.selectCustomer(matchedCust);
+          barcodeCtrl.clear();
+          setState(() => qtyCtrl.text = '1');
+          if (mounted) {
+            AlertService.show(
+              context: context,
+              message: '👤 สแกนพบบัตรสมาชิก: ${matchedCust.name} (💎 ${matchedCust.currentPoints} แต้ม)',
+              type: 'success',
+              duration: const Duration(seconds: 2),
+            );
+          }
+          return;
+        }
+      }
+
       double quantity = double.tryParse(qtyCtrl.text) ?? 1.0;
       if (quantity <= 0) quantity = 1.0;
 
@@ -240,7 +270,26 @@ mixin PosBarcodeHandlerMixin<T extends StatefulWidget> on State<T> {
           }
 
         case ScanStatus.notFound:
+          // Fallback: Check if the barcode matches a customer in MySQL
+          final customerRepo = CustomerRepository();
+          final fallbackCust = await customerRepo.getCustomerByBarcodeOrCode(value);
+          if (fallbackCust != null) {
+            posState.selectCustomer(fallbackCust);
+            barcodeCtrl.clear();
+            setState(() => qtyCtrl.text = '1');
+            if (mounted) {
+              AlertService.show(
+                context: context,
+                message: '👤 สแกนพบบัตรสมาชิก: ${fallbackCust.name} (💎 ${fallbackCust.currentPoints} แต้ม)',
+                type: 'success',
+                duration: const Duration(seconds: 2),
+              );
+            }
+            return;
+          }
+
           barcodeCtrl.clear();
+          if (!mounted) return;
           await PosNotFoundDialog.show(context,
               barcode: value,
               posState: posState,

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/customer.dart';
 import '../../../models/shop_info.dart';
 import '../../../repositories/customer_repository.dart';
+import '../../settings_service.dart';
 import '../../shop_info_service.dart';
 
 class PrintDataHelper {
@@ -16,8 +17,16 @@ class PrintDataHelper {
   }
 
   static Future<Uint8List?> getShopLogoBytes() async {
-    final prefs = await SharedPreferences.getInstance();
     try {
+      // 1. Try global MySQL settings first
+      final settings = SettingsService();
+      final base64FromSettings = settings.getString(_keyShopLogo);
+      if (base64FromSettings != null && base64FromSettings.isNotEmpty) {
+        return base64Decode(base64FromSettings);
+      }
+
+      // 2. Fallback to local SharedPreferences or file path
+      final prefs = await SharedPreferences.getInstance();
       final logoPath = prefs.getString('shop_logo_path');
       if (logoPath != null && logoPath.isNotEmpty) {
         final file = File(logoPath);

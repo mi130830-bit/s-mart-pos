@@ -29,11 +29,29 @@
    - พัฒนาระบบ `face_watcher.py` กล้องสแกนใบหน้าหน้าร้านทักทายลูกค้าด้วยเสียงภาษาไทยธรรมชาติ (Neural TTS) และแจ้งเตือนผ่าน Telegram ทันที
 8. **จัดระเบียบและอัปเดต Telegram Bot Token แยกตามหน้าที่ชัดเจน:**
    - 🚚 **Bot 1 (GPS Fleet Tracking):** ใช้บอท `PosGPS` (`8410912861:AAF70xuj0NglZcXo55E3tuLIJBRSdj0Uu-8`) ส่งเข้ากลุ่ม `POS-GPS` (Chat ID: `-5507041706`) สำหรับงานติดตามพิกัดรถขนส่งและรถเครน
-   - 🔔 **Bot 2 (POS Notification):** ใช้บอท `POS notfy` (`7839145001:AAGYNOWwm1qCZBGpVxXpGza_RhF6pvBtdy8`) ส่งเข้ากลุ่ม `POS notify` (Chat ID: `-5576020223`) สำหรับงานแจ้งเตือนยอดบิลขาย, ลูกหนี้, ลบบิล, สต็อกต่ำ, และยอดขายรายชั่วโมงหน้าร้าน บันทึกเข้า `system_settings` สำเร็จ 100%
-9. **ระบบรายงานพยากรณ์อากาศและสรุปข่าวเศรษฐกิจโลกประจำวัน 05:00 น. (Daily 05:00 AM Executive Briefing):**
-   - พัฒนาโมดูล `morning_weather_alert.py` ดึงข้อมูลสภาพอากาศความละเอียดสูงตามพิกัดร้าน ส.บริการ ท่าข้าม จาก Open-Meteo API อัตโนมัติ (อุณหภูมิ, โอกาสฝนตก %, ปริมาณน้ำฝน, ความเร็วลม)
-   - ผสานระบบดึงข่าวเศรษฐกิจโลก การเงิน น้ำมัน และเหตุการณ์สำคัญระดับโลกแบบ Real-time (RSS Feeds) พร้อมใช้ Local AI สรุปสาระสำคัญและผลกระทบต่อธุรกิจ/ราคาน้ำมัน/สินค้าให้พี่ติฟังใน 1 นาที
-   - ส่งรายงานสรุปยามเช้าโดย "น้องเจนนี่" อัตโนมัติทุกเช้าเวลา 05:00 น. (เวลาประเทศไทย Asia/Bangkok GMT+7) ผ่าน Linux Cron บน LXC 104
+   - 🔔 **Bot 2 (POS Notification):** ใช้บอท `POS notfy` (`7839145001:AAGYNOWwm1qCZBGpVxXpGza_RhF6pvBtdy8`) ส่งเข้ากลุ่ม `POS notify` (Chat ID: `-5576020223`) สำหรับงานแจ้งเตือนยอด�53:     - เพิ่มขนาดหน่วยความจำ RAM เป็น **`20 GB`** (จากเดิม 16 GB) พร้อม CPU **`8 Cores`** และ Swap 4 GB เพื่อประสิทธิภาพการประมวลผล Text-to-SQL และสรุปข่าวระดับสูงสุด
+54: 15. **ระบบซิงก์ข้อมูลแบรนด์ดิ้งร้านค้า, โลโก้ และ QR Code LINE OA ท้ายสลิปใบเสร็จแบบรวมศูนย์ (Centralized Shop Branding, Logo & LINE OA Receipt QR Code Sync):**
+55:     - ปรับโครงสร้างตาราง `system_settings` บน MySQL ขยายฟิลด์ `setting_value` เป็น `MEDIUMTEXT` เพื่อรองรับข้อมูลภาพ Base64 ขนาดใหญ่
+56:     - ดึงค่าโลโก้ร้านค้า (`shop_logo_base64`), ลิงก์ LINE OA (`line_oa_url`), LINE ID (`line_oa_id`), รูปภาพ QR Code สมัครสมาชิก (`line_oa_qr_image_base64`), และสถานะการแสดงผลเข้าสู่ MySQL `system_settings`
+57:     - ปรับปรุง `PrintDataHelper`, `CashReceiptHandler`, `DisplaySettingsScreen` และ `CustomerDisplayScreen` ให้อ่านและบันทึกค่าผ่าน `SettingsService` แบบรวมศูนย์ (Global Sync) พร้อมระบบ Local Fallback
+58:     - ส่งผลให้การตั้งค่าโลโก้หรือ QR Code ท้ายบิลจากเครื่องใดเครื่องหนึ่ง จะซิงก์ไปยังทุกเครื่องในร้านอัตโนมัติ และพิมพ์สลิปออกมามีทั้งโลโก้ร้านและ QR Code สวยงามเหมือนกัน 100%
+59: 
+60: **English:**
+61: 1. **Bare-Metal Proxmox Host Deployment:** Verified hardware and deployed Proxmox VE 9.x onto GMKtec M5 Ultra Mini PC (AMD Ryzen 7 7730U 8C/16T, 32GB SK Hynix Dual Channel RAM, 1TB NVMe SSD, Dual 2.5GbE LAN). Configured official no-subscription repository and downloaded Ubuntu 24.04 template.
+62: 2. **Container Infrastructure (LXC 100, 101, 102):** Created and configured 3 isolated containers: LXC 100 (MySQL DB `192.168.1.201`), LXC 101 (Backend API `192.168.1.202`), and LXC 102 (Cloudflare Tunnel `192.168.1.203`).
+63: 3. **High-Performance MySQL 8.0 Migration:** Configured 4GB InnoDB buffer pool, utf8mb4 encoding, and native password authentication. Migrated 100% of production database rows (11,121 orders, 6,502 products, 1,248 customers) with exact row parity. Setup 6-hour cron automated backups with 14-day retention.
+64: 4. **Dart Shelf Backend Deployment:** Compiled native AOT server binary running under Systemd daemon on LXC 101 port 8080 with live MySQL and Firestore bridge integrations.
+65: 5. **Cloudflare Tunnel Production Cutover:** Transitioned named tunnel connection to LXC 102 via token, configured internal routing, and verified public HTTPS ingress at `https://api.namecheap.work/api/v1/health` (HTTP 200 OK).
+66: 6. **Radical Candor & Constructive Challenge Rule:** Added Rule 12 in `GEMINI.md` and Rule 9 in `AGENTS.md` empowering the AI team to proactively challenge flawed ideas and provide safe alternatives.
+67: 7. **Single Super Secretary AI Persona ("Nong Jennie" - LXC 104):** Consolidated all assistant duties into a single cheerful, polite female persona. Integrated full ConCal V19 construction calculation formulas, shop ratios, and smart reception.
+68: 8. **Dedicated Telegram Bot Routing:** Disambiguated tokens for GPS fleet tracking (`PosGPS`) versus store POS alerts (`POS notfy`), configured into `system_settings`.
+69: 9. **Daily 05:00 AM Executive Briefing:** Integrated Open-Meteo local weather with live global economic RSS feeds summarized via local AI.
+70: 10. **Full Database Text-to-SQL Agent:** Developed dynamic few-shot Text-to-SQL query capability covering all major shop tables with strict read-only limits.
+71: 11. **Embedded Face Receptionist Lifecycle:** Managed background webcam lifecycle bound to POS Desktop window open/close states.
+72: 12. **Loyalty Points Reset to 0:** Atomic zeroing of `currentPoints` for 1,248 customers in preparation for the fresh membership launch on Aug 31, 2026.
+73: 13. **LINE OA Receipt Queue Compatibility:** Updated `/api/v1/line-internal/push-receipt-image` backend controller to accept both `image` and `imageBase64` payload keys.
+74: 14. **LXC 104 Hardware Resource Expansion:** Resized AI container to 250 GB NVMe SSD, 20 GB RAM, and 8 CPU cores.
+75: 15. **Centralized Shop Branding & LINE OA Receipt QR Code Sync:** Upgraded `system_settings.setting_value` column to `MEDIUMTEXT` and synced shop logo Base64, LINE OA URL/ID, and membership QR code to MySQL. Updated `PrintDataHelper`, `CashReceiptHandler`, and UI settings screens to read from `SettingsService` globally, ensuring all cashier machines print identical receipts with logo and LINE QR codes.�ดย "น้องเจนนี่" อัตโนมัติทุกเช้าเวลา 05:00 น. (เวลาประเทศไทย Asia/Bangkok GMT+7) ผ่าน Linux Cron บน LXC 104
 10. **ระบบ AI Text-to-SQL เข้าถึงฐานข้อมูลร้านทั้งหมดแบบ Real-time (Full Database AI Agent):**
    - พัฒนาโมดูลแปลงคำถามภาษาธรรมชาติเป็น MySQL `SELECT` Query อัตโนมัติ (Text-to-SQL) ผ่าน Local Ollama LLM
    - ติดตั้งระบบความปลอดภัยเข้มงวด (Strict Read-Only Guardrail): ป้องกันคำสั่งทำลายข้อมูล (DROP/DELETE/UPDATE) รันเฉพาะคำสั่ง SELECT และคุม LIMIT ไม่เกิน 15-20 รายการ

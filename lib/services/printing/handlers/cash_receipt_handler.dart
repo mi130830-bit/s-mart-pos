@@ -13,11 +13,43 @@ import '../../alert_service.dart';
 import '../core/print_core_service.dart';
 import '../utils/print_settings_helper.dart';
 import '../utils/print_data_helper.dart';
-
 import '../../pdf/thermal_receipt_pdf.dart';
 import '../../pdf/delivery_note_pdf.dart';
+import '../../settings_service.dart';
 
 class CashReceiptHandler {
+  static Future<({bool showLineOa, String? lineOaUrl, String? lineOaId, Uint8List? lineOaQrBytes})> _getLineOaParams() async {
+    final settings = SettingsService();
+    final prefs = await SharedPreferences.getInstance();
+
+    final showLineOa = settings.getString('show_line_oa_on_receipt') != null
+        ? settings.getBool('show_line_oa_on_receipt', defaultValue: true)
+        : (prefs.getBool('show_line_oa_on_receipt') ?? true);
+    final lineOaUrl = (settings.getString('line_oa_url')?.isNotEmpty ?? false)
+        ? settings.getString('line_oa_url')
+        : prefs.getString('line_oa_url');
+    final lineOaId = (settings.getString('line_oa_id')?.isNotEmpty ?? false)
+        ? settings.getString('line_oa_id')
+        : prefs.getString('line_oa_id');
+    final lineOaQrBase64 = (settings.getString('line_oa_qr_image_base64')?.isNotEmpty ?? false)
+        ? settings.getString('line_oa_qr_image_base64')
+        : prefs.getString('line_oa_qr_image_base64');
+
+    Uint8List? lineOaQrBytes;
+    if (lineOaQrBase64 != null && lineOaQrBase64.isNotEmpty) {
+      try {
+        lineOaQrBytes = base64Decode(lineOaQrBase64);
+      } catch (_) {}
+    }
+
+    return (
+      showLineOa: showLineOa,
+      lineOaUrl: lineOaUrl,
+      lineOaId: lineOaId,
+      lineOaQrBytes: lineOaQrBytes,
+    );
+  }
+
   static Future<void> printReceipt({
     required int orderId,
     required List<OrderItem> items,
@@ -51,17 +83,7 @@ class CashReceiptHandler {
       Uint8List bytes;
 
       if (isThermal) {
-        final prefs = await SharedPreferences.getInstance();
-        final showLineOa = prefs.getBool('show_line_oa_on_receipt') ?? true;
-        final lineOaUrl = prefs.getString('line_oa_url');
-        final lineOaId = prefs.getString('line_oa_id');
-        final lineOaQrBase64 = prefs.getString('line_oa_qr_image_base64');
-        Uint8List? lineOaQrBytes;
-        if (lineOaQrBase64 != null && lineOaQrBase64.isNotEmpty) {
-          try {
-            lineOaQrBytes = base64Decode(lineOaQrBase64);
-          } catch (_) {}
-        }
+        final lineOa = await _getLineOaParams();
 
         bytes = await ThermalReceiptPdf.generate(
           orderId: orderId,
@@ -78,10 +100,10 @@ class CashReceiptHandler {
           cashierName: cashierName,
           remark: remark,
           shopLogoBytes: shopLogoBytes,
-          showLineOa: showLineOa,
-          lineOaUrl: lineOaUrl,
-          lineOaId: lineOaId,
-          lineOaQrBytes: lineOaQrBytes,
+          showLineOa: lineOa.showLineOa,
+          lineOaUrl: lineOa.lineOaUrl,
+          lineOaId: lineOa.lineOaId,
+          lineOaQrBytes: lineOa.lineOaQrBytes,
         );
       } else {
         final isContinuous = pageFormat.width > 200 * PdfPageFormat.mm;
@@ -150,6 +172,8 @@ class CashReceiptHandler {
       final validCustomer = await PrintDataHelper.refreshCustomer(customer);
       final pageFormat = await PrintSettingsHelper.getCashPageFormat();
       final shopInfo = await PrintDataHelper.getShopInfo();
+      final shopLogoBytes = await PrintDataHelper.getShopLogoBytes();
+      final lineOa = await _getLineOaParams();
 
       final bytes = await ThermalReceiptPdf.generate(
         orderId: orderId,
@@ -164,6 +188,11 @@ class CashReceiptHandler {
         pageFormat: pageFormat,
         shopInfo: shopInfo,
         cashierName: cashierName,
+        shopLogoBytes: shopLogoBytes,
+        showLineOa: lineOa.showLineOa,
+        lineOaUrl: lineOa.lineOaUrl,
+        lineOaId: lineOa.lineOaId,
+        lineOaQrBytes: lineOa.lineOaQrBytes,
       );
 
       await for (final page in Printing.raster(bytes, pages: [0], dpi: 120)) {
@@ -208,6 +237,7 @@ class CashReceiptHandler {
 
       Uint8List bytes;
       if (isThermal) {
+        final lineOa = await _getLineOaParams();
         bytes = await ThermalReceiptPdf.generate(
           orderId: transactionId,
           items: [dummyItem],
@@ -220,6 +250,10 @@ class CashReceiptHandler {
           shopInfo: shopInfo,
           cashierName: 'Admin',
           shopLogoBytes: shopLogoBytes,
+          showLineOa: lineOa.showLineOa,
+          lineOaUrl: lineOa.lineOaUrl,
+          lineOaId: lineOa.lineOaId,
+          lineOaQrBytes: lineOa.lineOaQrBytes,
         );
       } else {
         final isContinuous = format.width > 200 * PdfPageFormat.mm;
@@ -299,6 +333,7 @@ class CashReceiptHandler {
 
       Uint8List bytes;
       if (isThermal) {
+        final lineOa = await _getLineOaParams();
         bytes = await ThermalReceiptPdf.generate(
           orderId: orderId,
           items: items,
@@ -311,6 +346,10 @@ class CashReceiptHandler {
           shopInfo: shopInfo,
           cashierName: 'Admin',
           shopLogoBytes: shopLogoBytes,
+          showLineOa: lineOa.showLineOa,
+          lineOaUrl: lineOa.lineOaUrl,
+          lineOaId: lineOa.lineOaId,
+          lineOaQrBytes: lineOa.lineOaQrBytes,
         );
       } else {
         final isContinuous = format.width > 200 * PdfPageFormat.mm;
@@ -401,6 +440,8 @@ class CashReceiptHandler {
     final bool isThermal = format.width < 270;
 
     if (isThermal) {
+      final shopLogoBytes = await PrintDataHelper.getShopLogoBytes();
+      final lineOa = await _getLineOaParams();
       return ThermalReceiptPdf.generate(
         orderId: 99999,
         items: dummyItems,
@@ -411,6 +452,11 @@ class CashReceiptHandler {
         change: 0,
         pageFormat: format,
         shopInfo: shopInfo,
+        shopLogoBytes: shopLogoBytes,
+        showLineOa: lineOa.showLineOa,
+        lineOaUrl: lineOa.lineOaUrl,
+        lineOaId: lineOa.lineOaId,
+        lineOaQrBytes: lineOa.lineOaQrBytes,
       );
     } else {
       final customer = Customer(

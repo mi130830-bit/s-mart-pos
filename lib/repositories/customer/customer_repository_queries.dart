@@ -232,6 +232,63 @@ extension CustomerRepositoryQueries on CustomerRepository {
     }
   }
 
+  Future<Customer?> getCustomerByBarcodeOrCode(String input) async {
+    if (!_dbService.isConnected()) {
+      try {
+        await _dbService.connect();
+      } catch (e) {
+        return null;
+      }
+    }
+    final raw = input.trim();
+    if (raw.isEmpty) return null;
+
+    String cleanCode = raw;
+    if (cleanCode.toUpperCase().startsWith('MEM-')) {
+      cleanCode = cleanCode.substring(4).trim();
+    } else if (cleanCode.toUpperCase().startsWith('MEMBER:')) {
+      cleanCode = cleanCode.substring(7).trim();
+    } else if (cleanCode.toUpperCase().startsWith('CUST:')) {
+      cleanCode = cleanCode.substring(5).trim();
+    }
+
+    // 1. Try Phone match if looks like a Thai phone number (9-10 digits)
+    final phoneClean = cleanCode.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phoneClean.length >= 9 && phoneClean.startsWith('0')) {
+      final byPhone = await getCustomerByPhone(phoneClean);
+      if (byPhone != null) return byPhone;
+    }
+
+    // 2. Try ID match if integer
+    final parsedId = int.tryParse(cleanCode);
+    if (parsedId != null && parsedId > 0) {
+      final byId = await getCustomerById(parsedId);
+      if (byId != null) return byId;
+    }
+
+    // 3. Try memberCode, line_user_id or barcode field in customer table
+    try {
+      final results = await _dbService.query('''
+        SELECT c.*, t.name as tierName 
+        FROM customer c
+        LEFT JOIN member_tier t ON c.tierId = t.id
+        WHERE c.memberCode = :code 
+           OR c.memberCode = :rawCode
+           OR c.line_user_id = :rawCode
+           OR c.phone = :rawCode
+        LIMIT 1
+      ''', {
+        'code': cleanCode,
+        'rawCode': raw,
+      });
+      if (results.isNotEmpty) {
+        return Customer.fromJson(results.first);
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   Future<double> getCurrentDebt(int customerId) async {
     if (!_dbService.isConnected()) await _dbService.connect();
     try {

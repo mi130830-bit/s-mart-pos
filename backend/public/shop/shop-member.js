@@ -117,6 +117,15 @@ async function fetchCustomerProfile() {
         } else {
             const nameInp = document.getElementById("custNameInput");
             if (nameInp && !nameInp.value) nameInp.value = currentUser.lineDisplayName;
+
+            // ✅ Auto-Prompt Registration on first entry if not a member yet!
+            if (window.location.search.includes('tab=member') || (typeof currentTab !== 'undefined' && currentTab === 'member')) {
+                setTimeout(() => {
+                    if (!currentUser.phone && typeof promptNewMemberRegister === 'function') {
+                        promptNewMemberRegister();
+                    }
+                }, 500);
+            }
         }
     } catch (err) {
         console.error("Error fetching customer profile:", err);
@@ -1136,6 +1145,24 @@ function renderMemberProfileView() {
                     🎁 แลกของรางวัล
                 </button>
             </div>
+        </div>
+
+        <!-- Member Barcode & QR Pass (Scan at Counter like 7-Eleven / Punthai) -->
+        <div class="member-pass-panel" style="background:#fff;border:2px solid #10b981;border-radius:20px;padding:18px 14px;margin-bottom:14px;text-align:center;box-shadow:0 6px 20px rgba(5,150,105,0.08);">
+            <div style="font-size:13px;font-weight:800;color:#047857;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:6px;">
+                <span>⚡ บาร์โค้ดสมาชิกหน้าร้าน (Member Pass)</span>
+            </div>
+            <div style="background:#f8fafc;border:1.5px dashed #a7f3d0;border-radius:14px;padding:14px;display:inline-block;margin:0 auto 10px;box-shadow:inset 0 2px 6px rgba(0,0,0,0.03);">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(currentUser.phone || currentMember?.memberCode || currentUser.lineUserId)}" 
+                     alt="Member QR Pass" 
+                     style="width:160px;height:160px;display:block;margin:0 auto;border-radius:8px;">
+            </div>
+            <div style="font-family:'Outfit', monospace;font-size:20px;font-weight:800;letter-spacing:2px;color:#0f172a;margin-bottom:4px;">
+                ${escapeHtml(currentUser.phone || currentMember?.memberCode || 'MEM-ONLINE')}
+            </div>
+            <small style="font-size:11px;color:#64748b;display:block;line-height:1.4;">
+                📱 ยื่นหน้าจอนี้ให้พนักงานสแกนที่เคาน์เตอร์แคชเชียร์เพื่อสะสมแต้ม & รับสิทธิ์ราคาสมาชิกทันที
+            </small>
         </div>
 
         <!-- Tier Privileges Card -->

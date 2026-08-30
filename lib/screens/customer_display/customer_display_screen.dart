@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'customer_display_repository.dart';
 import 'customer_display_provider.dart';
+import '../../services/settings_service.dart';
 import 'widgets/item_list_section.dart';
 import 'widgets/summary_section.dart';
 import 'widgets/qr_section.dart';
@@ -125,22 +126,33 @@ class _CustomerDisplayScreenState extends State<CustomerDisplayScreen> {
   }
 
   Future<void> _loadSettings() async {
+    final settings = SettingsService();
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload(); // cross-process safe
 
     if (!mounted) return;
     setState(() {
-      _shopName = prefs.getString('shop_name') ?? 'S.Mart POS';
-      _staticQrBase64 = prefs.getString('payment_qr_image_base64');
-      _qrMode = prefs.getString('payment_qr_mode') ?? 'dynamic';
-      _bankName = prefs.getString('bank_name');
-      _bankAccountName = prefs.getString('bank_account_name');
-      _bankAccount = prefs.getString('bank_account');
-      _showLineOa = prefs.getBool('show_line_oa_on_display') ?? true;
-      _lineOaQrBase64 = prefs.getString('line_oa_qr_image_base64');
-      _lineOaUrl = prefs.getString('line_oa_url');
-      _lineOaId = prefs.getString('line_oa_id');
-      final sizeStr = prefs.getString('customer_display_font_size');
+      _shopName = (settings.shopName.isNotEmpty ? settings.shopName : prefs.getString('shop_name')) ?? 'S.Mart POS';
+      _staticQrBase64 = (settings.getString('payment_qr_image_base64')?.isNotEmpty ?? false)
+          ? settings.getString('payment_qr_image_base64')
+          : prefs.getString('payment_qr_image_base64');
+      _qrMode = settings.getString('payment_qr_mode') ?? prefs.getString('payment_qr_mode') ?? 'dynamic';
+      _bankName = settings.getString('bank_name') ?? prefs.getString('bank_name');
+      _bankAccountName = settings.getString('bank_account_name') ?? prefs.getString('bank_account_name');
+      _bankAccount = settings.getString('bank_account') ?? prefs.getString('bank_account');
+      _showLineOa = settings.getString('show_line_oa_on_display') != null
+          ? settings.getBool('show_line_oa_on_display', defaultValue: true)
+          : (prefs.getBool('show_line_oa_on_display') ?? true);
+      _lineOaQrBase64 = (settings.getString('line_oa_qr_image_base64')?.isNotEmpty ?? false)
+          ? settings.getString('line_oa_qr_image_base64')
+          : prefs.getString('line_oa_qr_image_base64');
+      _lineOaUrl = (settings.getString('line_oa_url')?.isNotEmpty ?? false)
+          ? settings.getString('line_oa_url')
+          : prefs.getString('line_oa_url');
+      _lineOaId = (settings.getString('line_oa_id')?.isNotEmpty ?? false)
+          ? settings.getString('line_oa_id')
+          : prefs.getString('line_oa_id');
+      final sizeStr = settings.getString('customer_display_font_size') ?? prefs.getString('customer_display_font_size');
       if (sizeStr != null) {
         _fontSize = double.tryParse(sizeStr) ?? 14.0;
       }

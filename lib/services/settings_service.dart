@@ -177,6 +177,29 @@ class SettingsService {
   String get shopLogoPath => getString('shop_logo_path') ?? '';
   set shopLogoPath(String value) => set('shop_logo_path', value);
 
+  String get shopLogoBase64 => getString('shop_logo_base64') ?? '';
+  set shopLogoBase64(String value) => set('shop_logo_base64', value);
+
+  // --- LINE OA Settings (Global) ---
+  String get lineOaUrl => getString('line_oa_url') ?? '';
+  set lineOaUrl(String value) => set('line_oa_url', value);
+
+  String get lineOaId => getString('line_oa_id') ?? '';
+  set lineOaId(String value) => set('line_oa_id', value);
+
+  String get lineOaQrBase64 => getString('line_oa_qr_image_base64') ?? '';
+  set lineOaQrBase64(String value) => set('line_oa_qr_image_base64', value);
+
+  bool get showLineOaOnDisplay =>
+      getBool('show_line_oa_on_display', defaultValue: true);
+  set showLineOaOnDisplay(bool value) =>
+      set('show_line_oa_on_display', value.toString());
+
+  bool get showLineOaOnReceipt =>
+      getBool('show_line_oa_on_receipt', defaultValue: true);
+  set showLineOaOnReceipt(bool value) =>
+      set('show_line_oa_on_receipt', value.toString());
+
   // --- Delivery / GPS Settings ---
   double get shopLatitude =>
       double.tryParse(getString('shop_latitude') ?? '0') ?? 0.0;

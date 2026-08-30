@@ -9,6 +9,7 @@ import '../../state/theme_provider.dart';
 import '../../screens/pos/pos_state_manager.dart'; // ✅ Added
 import '../../services/customer_display_service.dart';
 import '../../services/alert_service.dart';
+import '../../services/settings_service.dart';
 
 class DisplaySettingsScreen extends ConsumerStatefulWidget {
   const DisplaySettingsScreen({super.key});
@@ -43,22 +44,47 @@ class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
+    final settings = SettingsService();
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _darkMode = prefs.getBool('dark_mode') ?? false;
       _autoOpenDisplay = prefs.getBool('auto_open_customer_display') ?? false;
-      _lineOaUrlCtrl.text = prefs.getString('line_oa_url') ?? '';
-      _lineOaIdCtrl.text = prefs.getString('line_oa_id') ?? '';
-      _lineOaQrBase64 = prefs.getString('line_oa_qr_image_base64');
-      _showLineOaOnDisplay = prefs.getBool('show_line_oa_on_display') ?? true;
-      _showLineOaOnReceipt = prefs.getBool('show_line_oa_on_receipt') ?? true;
+      _lineOaUrlCtrl.text = (settings.getString('line_oa_url')?.isNotEmpty ?? false)
+          ? settings.getString('line_oa_url')!
+          : prefs.getString('line_oa_url') ?? '';
+      _lineOaIdCtrl.text = (settings.getString('line_oa_id')?.isNotEmpty ?? false)
+          ? settings.getString('line_oa_id')!
+          : prefs.getString('line_oa_id') ?? '';
+      _lineOaQrBase64 = (settings.getString('line_oa_qr_image_base64')?.isNotEmpty ?? false)
+          ? settings.getString('line_oa_qr_image_base64')
+          : prefs.getString('line_oa_qr_image_base64');
+      _showLineOaOnDisplay = settings.getString('show_line_oa_on_display') != null
+          ? settings.getBool('show_line_oa_on_display', defaultValue: true)
+          : (prefs.getBool('show_line_oa_on_display') ?? true);
+      _showLineOaOnReceipt = settings.getString('show_line_oa_on_receipt') != null
+          ? settings.getBool('show_line_oa_on_receipt', defaultValue: true)
+          : (prefs.getBool('show_line_oa_on_receipt') ?? true);
       _isLoading = false;
     });
   }
 
   Future<void> _saveSettings() async {
+    final settings = SettingsService();
     final prefs = await SharedPreferences.getInstance();
+
+    // 1. Save globally to MySQL system_settings
+    await settings.set('line_oa_url', _lineOaUrlCtrl.text.trim());
+    await settings.set('line_oa_id', _lineOaIdCtrl.text.trim());
+    await settings.set('show_line_oa_on_display', _showLineOaOnDisplay.toString());
+    await settings.set('show_line_oa_on_receipt', _showLineOaOnReceipt.toString());
+    if (_lineOaQrBase64 != null && _lineOaQrBase64!.isNotEmpty) {
+      await settings.set('line_oa_qr_image_base64', _lineOaQrBase64!);
+    } else {
+      await settings.remove('line_oa_qr_image_base64');
+    }
+
+    // 2. Mirror locally
     await prefs.setBool('dark_mode', _darkMode);
     await prefs.setBool('auto_open_customer_display', _autoOpenDisplay);
     await prefs.setString('line_oa_url', _lineOaUrlCtrl.text.trim());
@@ -79,7 +105,7 @@ class _DisplaySettingsScreenState extends ConsumerState<DisplaySettingsScreen> {
     if (!mounted) return;
     AlertService.show(
       context: context,
-      message: 'บันทึกการตั้งค่าเรียบร้อยแล้ว',
+      message: 'บันทึกการตั้งค่าเรียบร้อยแล้ว (Saved Globally)',
       type: 'success',
     );
   }
